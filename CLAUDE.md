@@ -44,7 +44,11 @@ Si encuentras una contradicción no cubierta aquí, **detente y pregunta** — n
 1. Todo cambio de esquema se escribe **primero** como archivo en `supabase/migrations/`.
    Nunca aplicar SQL suelto vía MCP sin dejar el archivo de migración correspondiente.
 2. Validar localmente con `supabase db reset` antes de aplicar al proyecto remoto.
-3. **Pedir confirmación humana** antes de aplicar al remoto y antes de hacer push a `main`.
+3. **Trabaja de forma autónoma.** No pidas confirmación entre pasos. Las únicas dos acciones que
+   requieren aprobación humana son `supabase db push` y `git push` — el sistema de permisos
+   (`.claude/settings.json`) las intercepta solo. Todo lo demás es local y reversible: avanza.
+   Si encuentras una duda que ningún documento resuelve, **no te detengas**: implementa la opción
+   más conservadora y anótala en `docs/99_DUDAS_PARA_EL_EQUIPO.md` para revisarla al final.
 4. Un commit por entidad o grupo lógico de entidades. No un commit gigante.
 5. RLS habilitado en **todas** las tablas. Ninguna tabla queda expuesta sin políticas.
 
