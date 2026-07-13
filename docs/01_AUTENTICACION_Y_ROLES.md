@@ -1,0 +1,213 @@
+# 01 — Autenticación y Roles
+
+> **Autoridad:** este documento manda sobre cualquier otro en materia de autenticación,
+> roles y credenciales. Reemplaza lo que `ADM_Login_Roles_Permisos.md` decía sobre
+> `password_hash` y sobre los roles "propuestos".
+
+---
+
+## 1. Los tres mecanismos de identidad del sistema
+
+El sistema tiene **tres** formas distintas de "identificarse", y confundirlas es el error
+más común. No son intercambiables:
+
+| # | Mecanismo | Quién lo usa | Qué protege | Implementación |
+|---|---|---|---|---|
+| 1 | **Login al sistema** (usuario + contraseña) | Personal con cuenta: admin, director, responsables de módulo, guardias | El acceso a la *aplicación* | Supabase Auth (`auth.users`) |
+| 2 | **Biometría facial** (rostro) | Cualquier persona que cruza un punto de control | El acceso *físico* al campus | Tabla `registro_biometrico` + Edge Function (mock) |
+| 3 | **Identidad de servicio** (service key) | Dispositivos: cámaras, torniquetes, lectores LPR | El registro *automático* de eventos | `service_role` key de Supabase |
+
+Una `persona` puede tener biometría sin tener cuenta de login (un estudiante), o cuenta de
+login sin ser relevante para el acceso físico. Son ejes independientes.
+
+---
+
+## 2. Login al sistema — decisión: `auth.users` nativo
+
+**Decidido:** se usa el sistema de autenticación nativo de Supabase.
+
+### Consecuencias sobre el modelo de datos
+
+- Se **elimina** la columna `password_hash` de `usuario_sistema`. Supabase Auth guarda y
+  verifica la contraseña; nunca la almacenamos nosotros.
+- `usuario_sistema.id_usuario` pasa a ser `uuid` con `REFERENCES auth.users(id) ON DELETE RESTRICT`.
+  Deja de generarse con `gen_random_uuid()`: **hereda el id de `auth.users`**.
+- `usuario_sistema` se convierte en una **tabla de perfil**: conserva `nombre_usuario`,
+  `estado_usuario`, `intentos_fallidos`, `requiere_cambio_password`, `fecha_ultimo_login`,
+  `id_persona` (FK a `persona`), `fecha_creacion`, `fecha_modificacion`.
+- `correo_electronico` se mantiene en `usuario_sistema` **espejado** desde `auth.users.email`
+  (sincronizado por trigger), para no romper las consultas del resto de módulos.
+- Un trigger `on auth.users AFTER INSERT` crea automáticamente la fila en `usuario_sistema`.
+- La tabla `sesion` **se conserva** (el modelo la exige y da trazabilidad propia), pero es
+  informativa/auditora: Supabase gestiona el JWT real. `token_hash` guarda un hash del token
+  de Supabase, nunca el token en claro.
+
+### Permisos efectivos y `allowed_modules`
+
+El cálculo se mantiene exactamente como lo define `ADM_Login_Roles_Permisos.md` §9:
+
+```
+auth.users → usuario_sistema → usuario_rol (activos)
+           → rol (activos) → rol_permiso (activos) → permiso (activos)
+           → permisos efectivos → allowed_modules
+```
+
+Un módulo entra en `allowed_modules` solo si el usuario tiene su permiso `*_MODULO_ACCEDER`.
+
+Implementación recomendada: una función SQL `auth.permisos_efectivos()` (SECURITY DEFINER)
+que devuelva el conjunto de `codigo_permiso` del usuario actual (`auth.uid()`), y que las
+políticas RLS invoquen. Los permisos **no** se copian a los claims del JWT: se leen en vivo,
+para que una revocación de rol surta efecto inmediato sin esperar un nuevo login
+(requisito explícito de `ADM_Login_Roles_Permisos.md` §10.3).
+
+---
+
+### Bootstrap: orden de creación (§D12, §D13, §D14)
+
+Tres detalles críticos que hay que respetar o el sistema no arranca:
+
+1. **`id_persona` viaja en `raw_user_meta_data`.** El trigger `on auth.users AFTER INSERT` no
+   puede adivinar a qué persona pertenece la cuenta, y `usuario_sistema.id_persona` es
+   `NOT NULL`. Al crear la cuenta se pasa `id_persona` (y `nombre_usuario`) en la metadata, y
+   el trigger los lee de ahí. **Orden obligatorio: primero la `persona`, después la cuenta.**
+
+2. **El primer administrador se crea en el seed.** El `ADMINISTRADOR_SISTEMA` no tiene INSERT
+   sobre `persona` (§D5), así que nadie podría crearlo desde la aplicación. `seed.sql` inserta
+   directamente su `persona` + `usuario_sistema` + `usuario_rol`, ejecutándose con
+   `service_role` (que opera fuera de RLS por definición). Patrón de bootstrap estándar.
+
+3. **`sesion.token_hash` es NULLABLE.** Supabase gestiona el JWT y este vive en el cliente:
+   nuestro backend nunca lo tiene para hashearlo. La fila de `sesion` se inserta con una función
+   RPC llamada tras el login exitoso (registra `fecha_inicio`, `ip_origen`, `estado_sesion`).
+   Es el **único cambio a una columna** del Modelo de Datos Consolidado.
+
+---
+
+## 3. Roles definitivos (tabla `rol`)
+
+Estos son los **7 roles humanos** del sistema. Son los únicos valores válidos de
+`rol.nombre_rol`. Los códigos ADM/GPI/GPE/PCO/CAC son **módulos**, no roles — nunca deben
+aparecer como filas en `rol`.
+
+| `nombre_rol` | Nombre legible | Módulo visible | Alcance |
+|---|---|---|---|
+| `ADMINISTRADOR_SISTEMA` | Administrador del Sistema | ADM | Seguridad lógica: usuarios, roles, permisos, parámetros, auditoría, catálogos maestros. |
+| `DIRECTOR_ADMINISTRATIVO` | Director Administrativo | ADM (solo lectura) | Consultas, reportes y auditoría. **No modifica ningún dato.** |
+| `RESPONSABLE_PERSONAL_INTERNO` | Responsable de Personal Interno | GPI | Personal interno, biometría, asociaciones vehiculares. |
+| `RESPONSABLE_PERSONAL_EXTERNO` | Responsable de Personal Externo | GPE | Personal externo, memorandos, autorizaciones, biometría de externos. |
+| `RESPONSABLE_PUNTOS_CONTROL` | Responsable de Puntos de Control | PCO | Zonas, puntos de control, dispositivos. |
+| `RESPONSABLE_CONTROL_ACCESOS` | Responsable de Control de Accesos | CAC | Reglas de acceso, supervisión de eventos, atención de alertas. |
+| `GUARDIA_SEGURIDAD` | Guardia de Seguridad | CAC (vista operativa) | Operación diaria: validaciones, entradas/salidas, visitas sin memorando. |
+
+**Roles acumulables:** una persona puede tener varios roles; sus permisos efectivos son la
+unión de las asignaciones activas.
+
+**"Cuenta propia únicamente":** todo usuario autenticado, sin importar su rol, puede cambiar
+su contraseña, cerrar sesión y consultar su propia sesión. Esto **no** le da acceso al módulo ADM.
+
+---
+
+## 4. Identidad de dispositivos — decisión: service key
+
+**Decidido:** los dispositivos (cámaras, torniquetes, lectores LPR) **no** usan la sesión de
+un guardia. Tienen identidad de servicio propia.
+
+- Los dispositivos llaman a una **Edge Function**, nunca a la API REST directamente.
+- La Edge Function se autentica contra la base de datos con la **`service_role` key**
+  (que hace bypass de RLS por diseño) y valida internamente el `codigo_mac` / `direccion_ip`
+  del dispositivo contra la tabla `dispositivo` antes de aceptar el evento.
+  Esto es lo que previene la suplantación de hardware que el modelo ya contempla.
+- Eventos generados así se insertan con `evento_acceso.origen_registro = 'AUTOMATICA'` y
+  `id_usuario` nulo donde aplique.
+- Eventos registrados manualmente por un guardia usan **su JWT** y se marcan con
+  `origen_registro = 'MANUAL'`.
+
+⚠️ La `service_role` key **nunca** debe llegar al frontend ni al repositorio. Vive solo como
+secreto de la Edge Function (`supabase secrets set`).
+
+---
+
+## 5. Duración y expiración de sesiones — decidido
+
+**Decidido.** La expiración de sesiones la gestiona **Supabase Auth de forma nativa**, no
+nuestra lógica. No se implementa a mano ni requiere triggers.
+
+### Configuración (en `supabase/config.toml`)
+
+```toml
+[auth.sessions]
+inactivity_timeout = "60m"   # cierra la sesión tras 60 min SIN actividad
+timebox            = "12h"   # tope absoluto desde el login, pase lo que pase
+```
+
+Adicionalmente, en la configuración de Auth del proyecto: **`recordar_sesion` deshabilitado**
+(no tiene sentido "recordarme" en un terminal compartido de garita).
+
+### Por qué estos valores
+
+| Mecanismo | Valor en el prototipo | Valor para producción |
+|---|---|---|
+| Inactividad | **60 min** | 10–15 min (garitas), 30 min (oficina) |
+| Time-box absoluto | **12 h** | 12 h (duración de un turno) |
+
+El mecanismo que realmente protege una garita es el **timeout por inactividad** (el riesgo es
+el terminal desatendido, no que el guardia lleve mucho rato logueado). El time-box absoluto es
+solo un tope de seguridad de fondo — un time-box corto expulsaría al guardia a mitad de turno
+con gente esperando, lo que empeora la seguridad en la práctica (contraseñas anotadas, cuentas
+compartidas).
+
+En el prototipo se usan **60 min de inactividad** en lugar de 10–15 para no interrumpir las
+pruebas y demostraciones. El mecanismo queda implementado y demostrable; solo cambia el número.
+
+**No se diferencia por rol.** Supabase configura estos timeouts a nivel de proyecto y
+diferenciarlos exigiría lógica propia en la aplicación, sin beneficio real en este alcance.
+
+### Consecuencias sobre el modelo de datos: ninguna
+
+- La tabla `sesion` **se mantiene sin cambios**, como tabla de **auditoría**: registra
+  `fecha_inicio`, `fecha_cierre`, `ip_origen`, `estado_sesion`. **Supabase es la fuente de
+  verdad de la expiración real**, no esta tabla.
+- `TIEMPO_SESION_MIN` **se mantiene como fila en `parametro_sistema`** (el modelo lo exige),
+  documentando la intención — aunque quien lo aplica efectivamente sea Supabase Auth.
+- **No** se añade `fecha_ultima_actividad`. **No** se toca ninguna tabla.
+
+⚠️ Nota para evitar una confusión frecuente: el JWT de acceso de Supabase caduca por defecto en
+1 hora, pero **eso no cierra la sesión** — el cliente lo renueva solo con el refresh token, de
+forma invisible. La expiración real de la sesión es la que configuran `inactivity_timeout` y
+`timebox` arriba.
+
+---
+
+## 6. Validación de acceso físico — las dos vías (§D20)
+
+⚠️ **El sistema NO valida a todo el mundo con biometría.** Hay dos vías, según el tipo de persona:
+
+| | **INTERNA** | **EXTERNA** |
+|---|---|---|
+| Identidad | Biometría facial | **Cédula**, tecleada por el guardia |
+| Autorización | `persona.estado = 'ACTIVO'` | Memorando vigente / autorización diaria |
+| Quién valida | El dispositivo | El guardia |
+| `origen_registro` | `AUTOMATICA` | `MANUAL` |
+| ¿Tiene biometría? | **Sí, siempre** | **No, nunca** |
+
+**Los externos nunca tienen `registro_biometrico`.** Un trigger debe impedir enrolar biometría
+de una persona con `tipo_persona = 'EXTERNA'`. `persona.cedula` necesita índice: es el campo por
+el que el guardia busca.
+
+### Biometría facial (solo interna) — mock para este prototipo
+
+Supabase **no hace reconocimiento facial**. En este prototipo académico se simula:
+
+- Edge Function `validar-biometria`, que recibe `{ id_persona, imagen_ref, id_dispositivo }`
+  y devuelve `{ match: boolean, confidence: number }` — **la misma forma de respuesta que
+  tendría un proveedor real** (AWS Rekognition, Azure Face API, etc.).
+- Comportamiento del mock: verificar que exista un `registro_biometrico` con `vigente = true`
+  para esa persona; si existe → `match: true, confidence: 0.95`. Si no existe → `match: false`.
+  Debe aceptar un parámetro de configuración para forzar fallos y poder probar el camino de
+  denegación y las alertas.
+- Dejar un comentario `// TODO: reemplazar por proveedor real antes de producción` bien visible.
+- Las imágenes viven en **Supabase Storage** (bucket privado), nunca en una columna de la
+  base de datos. `registro_biometrico.path_storage` guarda la referencia.
+
+El resto del flujo de CAC (evento → identidad → regla → resultado → alerta) debe funcionar
+de punta a punta contra este mock, para que reemplazarlo después no requiera tocar nada más.
