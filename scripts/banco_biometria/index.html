@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Banco de pruebas biométrico — Sistema de Seguridad EPN</title>
+  <!--
+    HERRAMIENTA DE DESARROLLO (no es el frontend final).
+    Sirve para probar el reconocimiento facial 1:N de personal INTERNO usando la
+    cámara de una laptop o celular, antes de que exista el frontend real.
+
+    Motor: face-api.js (@vladmandic) calcula el descriptor facial de 128
+    dimensiones en el navegador. La comparación ocurre en el backend (pgvector),
+    vía la Edge Function `validar-biometria`. Ver docs/01_AUTENTICACION_Y_ROLES.md §6.
+
+    Cómo abrirlo: la cámara (getUserMedia) exige un origen seguro. Sirve esta
+    carpeta por https o localhost, p. ej.:
+        npx serve scripts/banco_biometria
+    y abre http://localhost:3000  (localhost cuenta como seguro).
+    Para probar desde el celular necesitarás https (túnel) o el modo dev del navegador.
+
+    Las librerías se cargan por CDN, así que requiere conexión a internet al abrirlo.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root { color-scheme: light dark; --ok:#1a7f37; --bad:#cf222e; --line:#8886; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 0; padding: 1rem; max-width: 900px; margin-inline: auto; line-height: 1.4; }
+    h1 { font-size: 1.25rem; } h2 { font-size: 1rem; margin: 1.2rem 0 .4rem; }
+    fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 1rem; }
+    legend { padding: 0 .4rem; font-weight: 600; }
+    label { display: block; font-size: .85rem; margin: .5rem 0 .15rem; }
+    input { width: 100%; padding: .45rem; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+    button { padding: .55rem 1rem; border: 0; border-radius: 6px; background: #2563eb; color: #fff; font: inherit; cursor: pointer; margin: .3rem .3rem 0 0; }
+    button.secondary { background: #6b7280; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .row { display: flex; gap: .8rem; flex-wrap: wrap; }
+    .row > div { flex: 1 1 220px; }
+    video, canvas { width: 100%; max-width: 420px; border-radius: 8px; border: 1px solid var(--line); background: #000; }
+    .tabs { display: flex; gap: .3rem; margin-bottom: .6rem; }
+    .tabs button { background: #6b7280; }
+    .tabs button.active { background: #2563eb; }
+    .panel { display: none; } .panel.active { display: block; }
+    #log { background: #0b0b0b0d; border: 1px solid var(--line); border-radius: 8px; padding: .6rem; font-family: ui-monospace, monospace; font-size: .8rem; white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; }
+    .ok { color: var(--ok); font-weight: 700; } .bad { color: var(--bad); font-weight: 700; }
+    small { opacity: .7; }
+  </style>
+</head>
+<body>
+  <h1>Banco de pruebas biométrico — Personal interno (1:N)</h1>
+  <p><small>Herramienta de desarrollo. Reconoce un rostro entre los enrolados y prueba el flujo de ingreso. No es el frontend final.</small></p>
+
+  <fieldset>
+    <legend>1. Conexión a Supabase</legend>
+    <div class="row">
+      <div>
+        <label>URL del proyecto (o local, p. ej. http://localhost:54321)</label>
+        <input id="cfgUrl" placeholder="https://TU-REF.supabase.co" />
+      </div>
+      <div>
+        <label>Anon key (pública)</label>
+        <input id="cfgKey" placeholder="eyJ..." />
+      </div>
+    </div>
+    <button id="btnConectar">Conectar</button>
+    <button id="btnCamara" class="secondary" disabled>Activar cámara</button>
+    <span id="estadoConexion"><small>Sin conectar.</small></span>
+  </fieldset>
+
+  <div class="row">
+    <div>
+      <video id="video" autoplay muted playsinline></video>
+    </div>
+    <div>
+      <canvas id="canvas" width="320" height="240"></canvas>
+      <p><small>El fotograma capturado se usa para calcular el descriptor y (al enrolar) se sube a Storage.</small></p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="enrolar" class="active">Enrolar (GPI)</button>
+    <button data-tab="ingresar">Ingresar (dispositivo)</button>
+  </div>
+
+  <div id="panel-enrolar" class="panel active">
+    <fieldset>
+      <legend>2a. Enrolar rostro de una persona interna</legend>
+      <p><small>Requiere iniciar sesión como un usuario con permiso <code>GPI_BIOMETRIA_INSERT</code> (la RLS lo exige). El enrolamiento sube la foto al bucket privado y guarda el descriptor.</small></p>
+      <div class="row">
+        <div><label>Correo (usuario GPI)</label><input id="gpiEmail" placeholder="responsable.gpi@epn.edu.ec" /></div>
+        <div><label>Contraseña</label><input id="gpiPass" type="password" /></div>
+      </div>
+      <button id="btnLogin" class="secondary">Iniciar sesión</button>
+      <span id="estadoLogin"><small>Sin sesión.</small></span>
+      <hr style="border-color: var(--line); margin: 1rem 0;" />
+      <label>id_persona (INTERNA) a enrolar</label>
+      <input id="enrIdPersona" value="00000000-0000-0000-0000-0000000000da" />
+      <small>Por defecto: "Docente Demo" del seed_demo.sql.</small>
+      <br />
+      <button id="btnEnrolar" disabled>Capturar rostro y enrolar</button>
+    </fieldset>
+  </div>
+
+  <div id="panel-ingresar" class="panel">
+    <fieldset>
+      <legend>2b. Simular ingreso por reconocimiento facial</legend>
+      <p><small>La cámara captura un rostro, se identifica 1:N contra los enrolados y (opcional) se registra el evento de acceso como lo haría el dispositivo de la garita.</small></p>
+      <button id="btnValidar" disabled>Capturar rostro y validar</button>
+      <label style="margin-top:1rem"><input type="checkbox" id="chkRegistrar" style="width:auto" /> Registrar evento de acceso si hay coincidencia (vía AUTOMATICA)</label>
+      <div class="row">
+        <div><label>id_punto_control</label><input id="regPunto" value="00000000-0000-0000-0000-000000000006" /></div>
+        <div><label>codigo_mac del dispositivo</label><input id="regMac" value="AA:BB:CC:DD:EE:FF" /></div>
+        <div><label>direccion_ip del dispositivo</label><input id="regIp" value="10.0.0.10" /></div>
+      </div>
+      <small>Valores por defecto: dispositivo/garita del seed_demo.sql.</small>
+    </fieldset>
+  </div>
+
+  <h2>Registro</h2>
+  <div id="log">Esperando…</div>
+
+  <script>
+    const MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model';
+    const BUCKET = 'registro-biometrico';
+    let cliente = null;      // service: anon (invocar funciones, sin login)
+    let modelosCargados = false;
+    let stream = null;
+
+    const $ = (id) => document.getElementById(id);
+    function log(msg, cls) {
+      const el = $('log');
+      const linea = document.createElement('div');
+      if (cls) linea.className = cls;
+      linea.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.appendChild(linea);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // Persistencia de la config para no reteclearla.
+    for (const k of ['cfgUrl', 'cfgKey']) {
+      $(k).value = localStorage.getItem('bio_' + k) || '';
+      $(k).addEventListener('change', () => localStorage.setItem('bio_' + k, $(k).value));
+    }
+
+    // ---- Tabs ----
+    document.querySelectorAll('.tabs button').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.tabs button').forEach((x) => x.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((x) => x.classList.remove('active'));
+        b.classList.add('active');
+        $('panel-' + b.dataset.tab).classList.add('active');
+      });
+    });
+
+    // ---- Conexión ----
+    $('btnConectar').addEventListener('click', async () => {
+      const url = $('cfgUrl').value.trim();
+      const key = $('cfgKey').value.trim();
+      if (!url || !key) { log('Falta URL o anon key.', 'bad'); return; }
+      cliente = supabase.createClient(url, key);
+      $('estadoConexion').innerHTML = '<small class="ok">Cliente creado.</small>';
+      log('Cliente Supabase creado. Cargando modelos de face-api…');
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL);
+        await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL);
+        modelosCargados = true;
+        $('btnCamara').disabled = false;
+        log('Modelos cargados. Activa la cámara.', 'ok');
+      } catch (e) {
+        log('Error cargando modelos: ' + e.message, 'bad');
+      }
+    });
+
+    // ---- Cámara ----
+    $('btnCamara').addEventListener('click', async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+        $('video').srcObject = stream;
+        $('btnEnrolar').disabled = false;
+        $('btnValidar').disabled = false;
+        log('Cámara activada.', 'ok');
+      } catch (e) {
+        log('No se pudo abrir la cámara (¿origen https/localhost?): ' + e.message, 'bad');
+      }
+    });
+
+    // Calcula el descriptor 128-d del rostro actual y pinta el fotograma.
+    async function capturarDescriptor() {
+      if (!modelosCargados) throw new Error('Modelos no cargados');
+      const video = $('video');
+      const canvas = $('canvas');
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      const det = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+      if (!det) throw new Error('No se detectó ningún rostro. Acércate y mira a la cámara.');
+      return Array.from(det.descriptor); // 128 floats
+    }
+
+    function canvasABlob() {
+      return new Promise((res) => $('canvas').toBlob(res, 'image/jpeg', 0.9));
+    }
+
+    // ---- Login GPI (para enrolar) ----
+    $('btnLogin').addEventListener('click', async () => {
+      if (!cliente) { log('Conecta primero.', 'bad'); return; }
+      const { data, error } = await cliente.auth.signInWithPassword({
+        email: $('gpiEmail').value.trim(), password: $('gpiPass').value,
+      });
+      if (error) { $('estadoLogin').innerHTML = '<small class="bad">Falló el login.</small>'; log('Login: ' + error.message, 'bad'); return; }
+      $('estadoLogin').innerHTML = '<small class="ok">Sesión iniciada.</small>';
+      log('Sesión iniciada como ' + data.user.email, 'ok');
+    });
+
+    // ---- Enrolar ----
+    $('btnEnrolar').addEventListener('click', async () => {
+      try {
+        const idPersona = $('enrIdPersona').value.trim();
+        log('Capturando descriptor para enrolar a ' + idPersona + '…');
+        const descriptor = await capturarDescriptor();
+        const path = `${idPersona}/${Date.now()}.jpg`;
+        const blob = await canvasABlob();
+        const up = await cliente.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg' });
+        if (up.error) throw new Error('Storage: ' + up.error.message);
+        const { data, error } = await cliente.rpc('enrolar_biometria', {
+          p_id_persona: idPersona, p_descriptor: descriptor, p_path_storage: `${BUCKET}/${path}`,
+        });
+        if (error) throw new Error('RPC enrolar_biometria: ' + error.message);
+        log('Enrolado OK. id_registro=' + data, 'ok');
+      } catch (e) {
+        log('Enrolar falló: ' + e.message, 'bad');
+      }
+    });
+
+    // ---- Validar (ingreso 1:N) ----
+    $('btnValidar').addEventListener('click', async () => {
+      try {
+        log('Capturando descriptor para validar…');
+        const descriptor = await capturarDescriptor();
+        const { data, error } = await cliente.functions.invoke('validar-biometria', { body: { descriptor } });
+        if (error) throw new Error('validar-biometria: ' + error.message);
+        if (data.match) {
+          log(`RECONOCIDO ✔  id_persona=${data.id_persona}  confidence=${data.confidence.toFixed(4)}`, 'ok');
+        } else {
+          log(`NO reconocido ✘  confidence=${Number(data.confidence).toFixed(4)} (umbral no superado)`, 'bad');
+          return;
+        }
+        if ($('chkRegistrar').checked) {
+          log('Registrando evento de acceso (AUTOMATICA)…');
+          const r = await cliente.functions.invoke('registrar-evento-acceso', {
+            body: {
+              origen_registro: 'AUTOMATICA', tipo_movimiento: 'INGRESO',
+              id_punto_control: $('regPunto').value.trim(),
+              codigo_mac: $('regMac').value.trim(), direccion_ip: $('regIp').value.trim(),
+              ocupantes: [{ id_persona: data.id_persona, confidence: data.confidence }],
+            },
+          });
+          if (r.error) throw new Error('registrar-evento-acceso: ' + r.error.message);
+          const oc = r.data.ocupantes?.[0];
+          log(`Evento: ${oc?.autorizado ? 'AUTORIZADO' : 'DENEGADO'} — ${oc?.motivo ?? 'ok'}`, oc?.autorizado ? 'ok' : 'bad');
+        }
+      } catch (e) {
+        log('Validar falló: ' + e.message, 'bad');
+      }
+    });
+  </script>
+</body>
+</html>
