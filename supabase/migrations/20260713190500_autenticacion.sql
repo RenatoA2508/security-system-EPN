@@ -59,12 +59,12 @@ create trigger on_auth_user_email_updated
 after update on auth.users
 for each row execute function public.sincronizar_correo_usuario_sistema();
 
--- auth.tiene_permiso: resuelve auth.uid() -> usuario_sistema -> usuario_rol
+-- public.tiene_permiso: resuelve auth.uid() -> usuario_sistema -> usuario_rol
 -- (activos) -> rol_permiso (activos) -> permiso (activo). STABLE + SECURITY
 -- DEFINER: las politicas RLS la invocan sin poder ver rol_permiso/permiso
 -- directamente. No copia permisos al JWT: se leen en vivo (revocacion
 -- inmediata, §2 doc 01).
-create or replace function auth.tiene_permiso(p_codigo text)
+create or replace function public.tiene_permiso(p_codigo text)
 returns boolean
 language sql
 stable
@@ -86,11 +86,11 @@ as $$
   );
 $$;
 
-grant execute on function auth.tiene_permiso(text) to authenticated;
+grant execute on function public.tiene_permiso(text) to authenticated;
 
--- auth.permisos_efectivos: conjunto completo de codigo_permiso del usuario
+-- public.permisos_efectivos: conjunto completo de codigo_permiso del usuario
 -- actual (docs/01_AUTENTICACION_Y_ROLES.md §2). Base para allowed_modules.
-create or replace function auth.permisos_efectivos()
+create or replace function public.permisos_efectivos()
 returns setof text
 language sql
 stable
@@ -109,7 +109,7 @@ as $$
      and p.estado_permiso = 'ACTIVO';
 $$;
 
-grant execute on function auth.permisos_efectivos() to authenticated;
+grant execute on function public.permisos_efectivos() to authenticated;
 
 -- allowed_modules: un modulo entra solo si el usuario tiene su permiso
 -- *_MODULO_ACCEDER (docs/01_AUTENTICACION_Y_ROLES.md §2).
@@ -121,7 +121,7 @@ security definer
 set search_path = public
 as $$
   select coalesce(array_agg(distinct split_part(codigo_permiso, '_', 1)), array[]::text[])
-    from auth.permisos_efectivos() as codigo_permiso
+    from public.permisos_efectivos() as codigo_permiso
    where codigo_permiso like '%\_MODULO\_ACCEDER' escape '\';
 $$;
 

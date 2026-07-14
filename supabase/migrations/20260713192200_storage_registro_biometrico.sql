@@ -18,23 +18,23 @@ create policy registro_biometrico_bucket_select_gpi
 on storage.objects for select
 using (
   bucket_id = 'registro-biometrico'
-  and auth.tiene_permiso('GPI_BIOMETRIA_SELECT')
+  and public.tiene_permiso('GPI_BIOMETRIA_SELECT')
 );
 
 create policy registro_biometrico_bucket_insert_gpi
 on storage.objects for insert
 with check (
   bucket_id = 'registro-biometrico'
-  and auth.tiene_permiso('GPI_BIOMETRIA_INSERT')
+  and public.tiene_permiso('GPI_BIOMETRIA_INSERT')
 );
 
 create policy registro_biometrico_bucket_update_gpi
 on storage.objects for update
 using (
   bucket_id = 'registro-biometrico'
-  and auth.tiene_permiso('GPI_BIOMETRIA_UPDATE')
+  and public.tiene_permiso('GPI_BIOMETRIA_UPDATE')
 )
 with check (
   bucket_id = 'registro-biometrico'
-  and auth.tiene_permiso('GPI_BIOMETRIA_UPDATE')
+  and public.tiene_permiso('GPI_BIOMETRIA_UPDATE')
 );
