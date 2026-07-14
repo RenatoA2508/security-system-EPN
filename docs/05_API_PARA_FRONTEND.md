@@ -90,14 +90,25 @@ filtrados por RLS a ese punto (`CAC_EVENTO_SELECT_PUNTO_ASIGNADO`).
 ## 5. Edge Functions
 
 ### `POST /functions/v1/validar-biometria`
-Mock de reconocimiento facial (§6 doc 01). Solo INTERNA.
+Reconocimiento facial **1:N** (identificación) de personal INTERNO (§6 doc 01).
+El `descriptor` (128 floats) lo calcula el cliente con `face-api.js`; la
+comparación ocurre en el backend (pgvector). Devuelve a quién pertenece el
+rostro. `id_persona` solo viene poblado si `match` es `true`.
 
 ```json
-// request
-{ "id_persona": "uuid", "imagen_ref": "string", "id_dispositivo": "uuid", "forzar_fallo": false }
+// request  (descriptor = arreglo de exactamente 128 números)
+{ "descriptor": [/* 128 floats */], "id_dispositivo": "uuid", "forzar_fallo": false }
 // response
-{ "match": true, "confidence": 0.95 }
+{ "match": true, "id_persona": "uuid", "confidence": 0.93 }
 ```
+
+El `confidence` es la similitud coseno contra el enrolado más cercano; el match
+se decide contra `UMBRAL_BIOMETRIA` (0.85). Ese mismo `confidence` es el que se
+pasa como `ocupantes[].confidence` a `registrar-evento-acceso`.
+
+**Enrolamiento** (rol GPI, requiere sesión): RPC
+`enrolar_biometria(p_id_persona uuid, p_descriptor float8[128], p_path_storage text)`.
+Herramienta de prueba con cámara: `scripts/banco_biometria/`.
 
 ### `POST /functions/v1/registrar-evento-acceso`
 Flujo completo de ingreso/salida (docs/04_REGLAS_NEGOCIO.md). Dos caminos:

@@ -194,20 +194,45 @@ forma invisible. La expiración real de la sesión es la que configuran `inactiv
 de una persona con `tipo_persona = 'EXTERNA'`. `persona.cedula` necesita índice: es el campo por
 el que el guardia busca.
 
-### Biometría facial (solo interna) — mock para este prototipo
+### Biometría facial (solo interna) — implementación real 1:N con pgvector
 
-Supabase **no hace reconocimiento facial**. En este prototipo académico se simula:
+> **Decisión del equipo (2026-07-14).** Se sustituye el mock 1:1 por un
+> reconocimiento facial **real** de identificación **1:N**, sin hardware
+> dedicado: la cámara de laptop/celular basta. Supabase sigue **sin** hacer el
+> reconocimiento; lo hace el descriptor facial + pgvector.
 
-- Edge Function `validar-biometria`, que recibe `{ id_persona, imagen_ref, id_dispositivo }`
-  y devuelve `{ match: boolean, confidence: number }` — **la misma forma de respuesta que
-  tendría un proveedor real** (AWS Rekognition, Azure Face API, etc.).
-- Comportamiento del mock: verificar que exista un `registro_biometrico` con `vigente = true`
-  para esa persona; si existe → `match: true, confidence: 0.95`. Si no existe → `match: false`.
-  Debe aceptar un parámetro de configuración para forzar fallos y poder probar el camino de
-  denegación y las alertas.
-- Dejar un comentario `// TODO: reemplazar por proveedor real antes de producción` bien visible.
-- Las imágenes viven en **Supabase Storage** (bucket privado), nunca en una columna de la
-  base de datos. `registro_biometrico.path_storage` guarda la referencia.
+**Cómo funciona:**
 
-El resto del flujo de CAC (evento → identidad → regla → resultado → alerta) debe funcionar
-de punta a punta contra este mock, para que reemplazarlo después no requiera tocar nada más.
+- El **descriptor facial (128 dimensiones)** se calcula **en el navegador** con
+  `face-api.js` (no hay proveedor externo ni costo). La **comparación ocurre en
+  el backend** con **pgvector**: la BD sigue siendo la única fuente de verdad y
+  el match no se puede falsificar desde el cliente.
+- El flujo de ingreso de personal interno es una **identificación 1:N**
+  ("¿de quién es este rostro?"), no una verificación 1:1. La Edge Function
+  `validar-biometria` recibe `{ descriptor: number[128], id_dispositivo? }` y
+  devuelve `{ match, id_persona, confidence }` — **la misma forma de respuesta
+  que tendría un proveedor real** (AWS Rekognition `SearchFacesByImage`, Azure
+  Face `Identify`, etc.).
+- La búsqueda 1:N es la función SQL `identificar_por_descriptor` (pgvector,
+  distancia coseno): devuelve la persona **INTERNA** enrolada más cercana y su
+  `confidence = 1 − distancia_coseno`. **No** filtra por `estado`: identificar es
+  distinto de autorizar; el estado ACTIVO, la regla y el horario los decide
+  después `registrar-evento-acceso`.
+- **Un solo umbral para todo el pipeline:** el match se decide con el parámetro
+  `UMBRAL_BIOMETRIA` (0.85, ajustable en `parametro_sistema` sin tocar código),
+  el mismo que ya compara `registrar-evento-acceso`. Por eso el resto del flujo
+  CAC (evento → identidad → regla → resultado → alerta) **no cambia**.
+- El enrolamiento usa la RPC `enrolar_biometria` (SECURITY INVOKER: respeta la
+  RLS de GPI y el trigger que prohíbe biometría de externos). `forzar_fallo`
+  sigue disponible para probar el camino de denegación/alertas.
+- Las imágenes viven en **Supabase Storage** (bucket privado `registro-biometrico`),
+  nunca en una columna; `registro_biometrico.path_storage` guarda la referencia.
+  El **descriptor** sí se guarda, en `registro_biometrico.descriptor_facial`
+  (`vector(128)`), para poder comparar.
+- Comentario `// TODO: reemplazar por proveedor real antes de producción` visible:
+  al migrar a un proveedor real solo cambia el origen del descriptor y esta
+  función; el resto del flujo depende únicamente de la forma de la respuesta.
+
+**Banco de pruebas con cámara:** `scripts/banco_biometria/` (herramienta de
+desarrollo) permite enrolar e ingresar usando la cámara, antes de que exista el
+frontend real.

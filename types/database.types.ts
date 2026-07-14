@@ -798,6 +798,7 @@ export type Database = {
       }
       registro_biometrico: {
         Row: {
+          descriptor_facial: string | null
           fecha_registro: string
           id_persona: string
           id_registro: string
@@ -807,6 +808,7 @@ export type Database = {
           vigente: boolean
         }
         Insert: {
+          descriptor_facial?: string | null
           fecha_registro?: string
           id_persona: string
           id_registro?: string
@@ -816,6 +818,7 @@ export type Database = {
           vigente?: boolean
         }
         Update: {
+          descriptor_facial?: string | null
           fecha_registro?: string
           id_persona?: string
           id_registro?: string
@@ -1226,6 +1229,21 @@ export type Database = {
     }
     Functions: {
       allowed_modules: { Args: never; Returns: string[] }
+      enrolar_biometria: {
+        Args: {
+          p_descriptor: number[]
+          p_id_persona: string
+          p_path_storage: string
+        }
+        Returns: string
+      }
+      identificar_por_descriptor: {
+        Args: { p_descriptor: number[] }
+        Returns: {
+          confidence: number
+          id_persona: string
+        }[]
+      }
       permisos_efectivos: { Args: never; Returns: string[] }
       puntos_control_asignados: { Args: never; Returns: string[] }
       registrar_sesion: {

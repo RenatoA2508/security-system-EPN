@@ -11,17 +11,17 @@
 @baseUrl = http://127.0.0.1:54321/functions/v1
 @anonKey = REEMPLAZAR_CON_supabase_status_anon_key
 
-### 1. validar-biometria — mock, persona INTERNA con biometria vigente.
-### Reemplazar id_persona/id_dispositivo por UUIDs reales de tu base local
-### (p. ej. el docente sembrado por scripts/smoke_test.sql, si lo dejas sin
-### hacer ROLLBACK, o cualquier persona INTERNA con registro_biometrico).
+### 1. validar-biometria — identificacion facial 1:N (personal INTERNO).
+### Recibe el `descriptor` (128 floats) que face-api.js calcula en el navegador;
+### aqui se listan 128 ceros solo como placeholder de forma (no reconocera a
+### nadie). Para una prueba real con camara usa scripts/banco_biometria/.
+### Responde { match, id_persona, confidence }.
 POST {{baseUrl}}/validar-biometria
 Content-Type: application/json
 apikey: {{anonKey}}
 
 {
-  "id_persona": "REEMPLAZAR_UUID_PERSONA_INTERNA",
-  "imagen_ref": "captura-demo.jpg",
+  "descriptor": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   "id_dispositivo": "REEMPLAZAR_UUID_DISPOSITIVO"
 }
 
@@ -31,9 +31,7 @@ Content-Type: application/json
 apikey: {{anonKey}}
 
 {
-  "id_persona": "REEMPLAZAR_UUID_PERSONA_INTERNA",
-  "imagen_ref": "captura-demo.jpg",
-  "id_dispositivo": "REEMPLAZAR_UUID_DISPOSITIVO",
+  "descriptor": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
   "forzar_fallo": true
 }
 
