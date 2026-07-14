@@ -1,0 +1,2 @@
+-- Seed de seguridad: se completa en el bloque 3 (rol, permiso, rol_permiso,
+-- categoria_persona, parametro_sistema, primer administrador, guardia_punto_control).
