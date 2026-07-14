@@ -122,3 +122,26 @@ por D20 (los externos se validan por cédula, nunca por rostro). Se preguntó al
 resolverlo en silencio, dado lo sensible del dato (biometría) y lo enfático del documento fuente.
 Confirmó que el bucket debe ser **solo GPI**, tratando el "y GPE" del prompt como un desliz de
 redacción, no como una instrucción deliberada que deba prevalecer sobre la matriz.
+
+### E11 — Tres huecos menores en la Edge Function `registrar-evento-acceso`
+1. **Zona horaria de `regla_acceso.horario_inicio/fin`:** la columna es `time` sin timezone y
+   ningún documento aclara en qué huso horario se interpreta. Se asumió hora local de Ecuador
+   (`America/Guayaquil`, UTC-5, sin horario de verano) en vez de UTC.
+2. **Dispositivo no reconocido, sin `evento_acceso` que referenciar:** el catálogo de `tipo_alerta`
+   (§D16) incluye `DISPOSITIVO_NO_RECONOCIDO`, pero `alerta_seguridad.id_evento` es `NOT NULL` — no
+   hay forma de generar esa alerta si el rechazo ocurre *antes* de crear cualquier evento (un
+   dispositivo no identificado no debería poder insertar nada). Se optó por dejar constancia en
+   `bitacora_sistema` (que no exige `id_evento`) en vez de en `alerta_seguridad`, y rechazar la
+   solicitud con HTTP 401. El tipo de alerta `DISPOSITIVO_NO_RECONOCIDO` queda sin usar en el código
+   actual; si el equipo prefiere generarla igual, requeriría permitir `id_evento` nullable o crear
+   un evento "fantasma" solo para colgar la alerta, ninguna de las dos evidentemente deseable.
+3. **Atribución de `bitacora_sistema.id_usuario` en inserciones desde la Edge Function:** el trigger
+   automático de bitácora (bloque 5) lee `auth.uid()` a nivel de sesión de Postgres, pero esta
+   función escribe con `service_role` (nunca con el JWT del guardia), así que esas filas
+   automáticas quedan con `id_usuario = NULL` incluso para registros `MANUAL`. Se mitigó
+   parcialmente insertando una fila adicional explícita en `bitacora_sistema` con la atribución
+   correcta al guardia, pero las filas del trigger automático sobre `evento_acceso` en sí siguen
+   sin atribución de usuario. Es una limitación conocida del patrón "Edge Function con
+   service_role"; resolverla del todo requeriría propagar el JWT del usuario hacia la conexión de
+   base de datos en vez de usar `service_role`, lo que reintroduce el problema de RLS que
+   `service_role` existe para evitar.
