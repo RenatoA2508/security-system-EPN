@@ -39,3 +39,21 @@ de forma inequívoca. Se agregó `UNIQUE` sobre `dispositivo.codigo_mac`.
 `rol.nombre_rol`". Se interpretó como un `CHECK` cerrado a esos 7 valores, en vez de dejar la
 columna como texto libre con solo `UNIQUE`. Si el equipo decide permitir roles adicionales en el
 futuro, esto requiere un `ALTER TABLE ... DROP CONSTRAINT` trivial.
+
+### E4 — `categoria_persona.CONDUCTOR` sembrada con `ambito = EXTERNA`
+El catálogo de `codigo_categoria` (§6 del PDF) incluye `CONDUCTOR` sin especificar su `ambito`.
+Las demás categorías se reparten claramente entre internas (DOCENTE, ESTUDIANTE, ADMINISTRATIVO,
+TRABAJADOR) y externas (EMPRESA_SERVICIO, VISITANTE, PROVEEDOR, CONTRATISTA). Se sembró
+`CONDUCTOR` como `EXTERNA` (conductor de una empresa de transporte/servicio contratada), pero es
+una inferencia: un conductor interno de la EPN encajaría igual de bien en `TRABAJADOR`. Si el
+equipo lo confirma como interno, es un `UPDATE` de una fila.
+
+### E5 — Bootstrap de `auth.users` en `seed.sql` sin verificación de ejecución
+Por §D13, el primer administrador (y, para que `guardia_punto_control` no quede vacío en la demo,
+también un guardia) se siembran insertando directamente en `auth.users` (con `encrypted_password`
+vía `pgcrypto`) para poder loguearse con Supabase Auth real, no solo con filas de `usuario_sistema`
+huérfanas. Este patrón es el estándar de la comunidad Supabase, pero **no se pudo ejecutar en este
+entorno** (ver E1) para confirmar que las columnas obligatorias de `auth.users` coinciden
+exactamente con las de esta versión del CLI (`supabase_cli 2.105.0` / Postgres 17). Verificar con
+el primer `supabase db reset` real que ambas cuentas (`admin@epn.edu.ec`,
+`guardia.demo@epn.edu.ec`, contraseña `CambiarInmediatamente#2026`) pueden loguearse.
