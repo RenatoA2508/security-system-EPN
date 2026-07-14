@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(supabase db reset:*)", "Bash(supabase start:*)", "Bash(supabase stop:*)",
+      "Bash(supabase status:*)", "Bash(supabase migration:*)", "Bash(supabase gen types:*)",
+      "Bash(supabase functions serve:*)", "Bash(git add:*)", "Bash(git commit:*)",
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git checkout -b:*)",
+      "Bash(psql:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(mkdir:*)"
+    ],
+    "ask": [
+      "Bash(supabase db push:*)", "Bash(supabase functions deploy:*)",
+      "Bash(supabase link:*)", "Bash(git push:*)", "Bash(git reset --hard:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)", "Bash(supabase projects delete:*)", "Bash(git push --force:*)",
+      "Read(./.env)", "Read(./.env.*)"
+    ]
+  }
+}
