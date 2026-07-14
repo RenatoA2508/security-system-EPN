@@ -154,8 +154,17 @@ sobre la tabla.
 
 ## 7. Tipos TypeScript
 
-`types/database.types.ts` se genera con `npm run gen:types` (requiere
-`supabase start` local, o el proyecto remoto ya actualizado — ver
-`types/README.md`). No está generado en este commit porque ninguna de las
-dos condiciones estaba disponible en el entorno de construcción
-(`docs/99_DUDAS_PARA_EL_EQUIPO.md`, E1).
+`types/database.types.ts` **ya está generado** desde el esquema real del proyecto
+remoto (25 tablas + 2 vistas). Para regenerarlo tras un cambio de esquema:
+`npm run gen:types:linked` (contra el remoto) o `npm run gen:types` (contra un
+stack local con `supabase start`).
+
+## 8. Proyecto y cuentas de prueba
+
+- **Project ref:** `hwfayejcwpmercvmmyvw` · **URL base:** `https://hwfayejcwpmercvmmyvw.supabase.co`
+- La `anon` key (pública) se obtiene del dashboard o con `supabase projects api-keys`.
+- Cuentas de arranque para probar (⚠️ rotar contraseña en el primer login):
+  - `admin@epn.edu.ec` / `CambiarInmediatamente#2026` → ADMINISTRADOR_SISTEMA (módulo ADM)
+  - `guardia.demo@epn.edu.ec` / `CambiarInmediatamente#2026` → GUARDIA_SEGURIDAD (módulo CAC)
+- Datos demo para el flujo de acceso: `scripts/seed_demo.sql` (docente con biometría, visitante con
+  autorización, dispositivo y reglas en la garita demo).

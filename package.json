@@ -1,6 +1,7 @@
 {
   "scripts": {
-    "gen:types": "supabase gen types typescript --local > types/database.types.ts"
+    "gen:types": "supabase gen types typescript --local > types/database.types.ts",
+    "gen:types:linked": "supabase gen types typescript --linked > types/database.types.ts"
   },
   "devDependencies": {
     "supabase": "^2.109.1"
