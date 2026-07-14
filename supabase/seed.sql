@@ -60,6 +60,10 @@ insert into public.permiso (codigo_permiso, descripcion, estado_permiso) values
   ('ADM_PERSONA_VEHICULO_UPDATE', 'Actualizar relaciones persona-vehiculo', 'ACTIVO'),
   ('ADM_BITACORA_SELECT', 'Consultar bitacora del sistema', 'ACTIVO'),
   ('ADM_BITACORA_EXPORTAR', 'Exportar bitacora del sistema', 'ACTIVO'),
+  -- Codigo añadido en el bloque 4 (RLS): el PDF/matriz marca ADMIN=L (solo
+  -- metadatos, footnote 4) en registro_biometrico pero el listado de codigos
+  -- no definia ninguno ADM_* para esa tabla. Ver docs/99_DUDAS_PARA_EL_EQUIPO.md.
+  ('ADM_BIOMETRIA_SELECT', 'Consultar metadatos de registro_biometrico (nunca el archivo)', 'ACTIVO'),
 
   ('GPI_PERSONA_SELECT', 'Consultar personal interno', 'ACTIVO'),
   ('GPI_PERSONA_INSERT', 'Crear personal interno', 'ACTIVO'),
@@ -119,6 +123,10 @@ insert into public.permiso (codigo_permiso, descripcion, estado_permiso) values
   ('CAC_PERSONA_EXTERNA_INSERT', 'Crear persona EXTERNA desde CAC (visitante sin cita, §D6)', 'ACTIVO'),
   ('CAC_AUTORIZACION_INSERT', 'Crear autorizaciones de visita diaria (desde CAC/guardia, §D3)', 'ACTIVO'),
   ('CAC_AUTORIZACION_UPDATE', 'Revocar autorizaciones de visita diaria (desde CAC/guardia)', 'ACTIVO'),
+  -- Codigo añadido en el bloque 4: la matriz por tabla exige SELECT en
+  -- autorizacion_visita_diaria para CAC y GUA (footnote 6), pero el listado
+  -- original solo definia CAC_AUTORIZACION_INSERT/UPDATE, sin su SELECT.
+  ('CAC_AUTORIZACION_SELECT', 'Consultar autorizaciones de visita diaria (desde CAC/guardia)', 'ACTIVO'),
   ('CAC_ASIGNACION_SELECT', 'Consultar asignaciones guardia-punto (desde CAC)', 'ACTIVO'),
   ('CAC_ASIGNACION_INSERT', 'Crear asignaciones guardia-punto (desde CAC)', 'ACTIVO'),
   ('CAC_ASIGNACION_UPDATE', 'Actualizar asignaciones guardia-punto (desde CAC)', 'ACTIVO'),
@@ -171,12 +179,22 @@ select r.id_rol, p.id_permiso, 'ACTIVO'
  where r.nombre_rol = 'RESPONSABLE_PUNTOS_CONTROL'
 on conflict (id_rol, id_permiso) do nothing;
 
--- RESPONSABLE_CONTROL_ACCESOS: todos los CAC_* excepto CAC_PERSONA_EXTERNA_INSERT.
+-- RESPONSABLE_CONTROL_ACCESOS: todos los CAC_* excepto CAC_PERSONA_EXTERNA_INSERT
+-- (excepcion explicita del documento) y, ademas -- segun la matriz tabla x
+-- accion x rol (mas granular que el resumen "todos los CAC_*", y la fuente de
+-- verdad declarada de RLS) -- excepto CAC_EVENTO_INSERT y
+-- CAC_AUTORIZACION_INSERT/UPDATE: esas tres son insert/update exclusivos del
+-- guardia (footnotes 6 y 9 de docs/02_MATRIZ_PERMISOS_RLS.md; el supervisor
+-- CAC solo tiene L en evento_acceso y autorizacion_visita_diaria, no C/A).
+-- Ver docs/99_DUDAS_PARA_EL_EQUIPO.md.
 insert into public.rol_permiso (id_rol, id_permiso, estado_asignacion)
 select r.id_rol, p.id_permiso, 'ACTIVO'
   from public.rol r
   join public.permiso p on p.codigo_permiso like 'CAC\_%' escape '\'
-   and p.codigo_permiso <> 'CAC_PERSONA_EXTERNA_INSERT'
+   and p.codigo_permiso not in (
+     'CAC_PERSONA_EXTERNA_INSERT', 'CAC_EVENTO_INSERT',
+     'CAC_AUTORIZACION_INSERT', 'CAC_AUTORIZACION_UPDATE'
+   )
  where r.nombre_rol = 'RESPONSABLE_CONTROL_ACCESOS'
 on conflict (id_rol, id_permiso) do nothing;
 
@@ -189,7 +207,10 @@ select r.id_rol, p.id_permiso, 'ACTIVO'
     'CAC_MODULO_ACCEDER', 'CAC_VALIDACION_EJECUTAR', 'CAC_EVENTO_INSERT',
     'CAC_EVENTO_SELECT_PUNTO_ASIGNADO', 'CAC_ALERTA_SELECT', 'CAC_PERSONA_EXTERNA_INSERT',
     'CAC_AUTORIZACION_INSERT', 'CAC_AUTORIZACION_UPDATE', 'CAC_ASIGNACION_SELECT_PROPIA',
-    'GPE_MEMORANDO_SELECT', 'GPE_PERSONA_MEMORANDO_SELECT', 'ADM_VEHICULO_SELECT'
+    'GPE_MEMORANDO_SELECT', 'GPE_PERSONA_MEMORANDO_SELECT', 'ADM_VEHICULO_SELECT',
+    -- CAC_AUTORIZACION_SELECT: ver nota mas arriba (codigo añadido en bloque 4);
+    -- footnote 6 exige "L C A" para el guardia en autorizacion_visita_diaria.
+    'CAC_AUTORIZACION_SELECT'
   )
  where r.nombre_rol = 'GUARDIA_SEGURIDAD'
 on conflict (id_rol, id_permiso) do nothing;

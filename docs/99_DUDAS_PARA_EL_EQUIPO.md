@@ -57,3 +57,47 @@ entorno** (ver E1) para confirmar que las columnas obligatorias de `auth.users` 
 exactamente con las de esta versión del CLI (`supabase_cli 2.105.0` / Postgres 17). Verificar con
 el primer `supabase db reset` real que ambas cuentas (`admin@epn.edu.ec`,
 `guardia.demo@epn.edu.ec`, contraseña `CambiarInmediatamente#2026`) pueden loguearse.
+
+### E6 — Patrón `*_MODULO_ACCEDER` como permiso de lectura para tablas sin código dedicado
+Varias filas de la matriz por tabla (`docs/02_MATRIZ_PERMISOS_RLS.md`) marcan `L` para roles que
+no tienen ningún código de permiso dedicado a esa tabla — p. ej. `empresa` da `L` a GPI/GPE, pero
+el listado de códigos no define `GPI_EMPRESA_SELECT` ni `GPE_EMPRESA_SELECT`; `categoria_persona`
+y `parametro_sistema` dan `L` a los 7 roles sin ningún código por-módulo. **Regla aplicada en las
+políticas RLS (bloque 4):** cuando la matriz marca `L` para un conjunto de roles sin código propio,
+se usa el `OR` de los `*_MODULO_ACCEDER` de esos módulos como puerta de lectura (p. ej. `empresa`:
+`ADM_MODULO_ACCEDER OR GPI_MODULO_ACCEDER OR GPE_MODULO_ACCEDER`), en vez de inventar códigos
+nuevos. Se usó también para las tablas de otros módulos donde ADMIN+DIRECTOR necesitan lectura de
+auditoría (`persona_interna_detalle`, `memorando`, `persona_memorando`, `autorizacion_visita_diaria`,
+`zona`, `punto_control`, `evento_acceso`): ahí la puerta es `ADM_MODULO_ACCEDER` sola, porque tanto
+ADMIN como DIRECTOR la tienen. Cuando el rol operativo CAC/GUARDIA también necesitaba entrar sin
+código propio, se reutilizó `CAC_EVENTO_SELECT` (solo CAC), `CAC_EVENTO_SELECT_PUNTO_ASIGNADO`
+(solo guardia) o `CAC_VALIDACION_EJECUTAR` (ambos) según cuál de los dos roles debía quedar
+incluido — verificado caso por caso contra la lista explícita de permisos del guardia para no
+filtrarle acceso a tablas donde la matriz lo excluye explícitamente (p. ej. `registro_biometrico`).
+
+### E7 — Dos códigos de permiso nuevos: `ADM_BIOMETRIA_SELECT` y `CAC_AUTORIZACION_SELECT`
+A diferencia de E6 (donde una combinación de códigos existentes resolvía el hueco), estos dos
+casos no tenían ningún código reutilizable sin sobre-conceder acceso a un rol que la matriz excluye
+explícitamente:
+- `registro_biometrico`: ADMIN tiene `L⁴` (solo metadatos) pero DIRECTOR tiene `—`. Usar
+  `ADM_MODULO_ACCEDER` habría colado a DIRECTOR (lo tiene igual que ADMIN). Se creó
+  `ADM_BIOMETRIA_SELECT`, otorgado solo a ADMIN vía el wildcard `ADM_%` ya existente.
+- `autorizacion_visita_diaria`: la matriz exige `L` para CAC y `L C A` (footnote 6) para el
+  guardia, pero el listado de códigos original solo definía `CAC_AUTORIZACION_INSERT/UPDATE`, sin
+  su `SELECT`. Se creó `CAC_AUTORIZACION_SELECT`, otorgado a CAC vía el wildcard `CAC_%` y añadido
+  explícitamente a la lista del guardia.
+Ambos siguen el formato `MODULO_ENTIDAD_ACCION` ya establecido y no renombran ni normalizan ningún
+código existente (§D19 se respeta: esto es *añadir*, no *tocar* lo que ya existía).
+
+### E8 — Tres permisos revocados a `RESPONSABLE_CONTROL_ACCESOS` por sobre-concesión del wildcard
+El resumen "Asignación de permisos a roles" le da a `RESPONSABLE_CONTROL_ACCESOS` "todos los
+`CAC_*` excepto `CAC_PERSONA_EXTERNA_INSERT`" — un criterio mecánico que, aplicado literalmente,
+también le habría dado `CAC_EVENTO_INSERT` y `CAC_AUTORIZACION_INSERT/UPDATE`. Pero la matriz **por
+tabla** (más granular, y la fuente de verdad declarada de RLS) marca a CAC con **solo `L`** en
+`evento_acceso` y en `autorizacion_visita_diaria` — el `C`/`A` en esas dos filas está pegado
+específicamente a la celda del guardia (footnotes 6 y 9: "el guardia registra el ingreso/salida
+manual", "el guardia crea y revoca autorizaciones... la autorización depende del criterio del
+guardia, no de la DRI"). Se resolvió a favor de la matriz granular (más específica) y se excluyeron
+esos tres códigos de la asignación wildcard de `RESPONSABLE_CONTROL_ACCESOS`. Si el equipo
+considera que el supervisor CAC sí debería poder registrar eventos/autorizaciones directamente
+(no solo el guardia), es un `INSERT` de tres filas en `rol_permiso`.
