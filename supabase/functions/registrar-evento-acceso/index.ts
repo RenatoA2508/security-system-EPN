@@ -137,7 +137,7 @@ async function verificarVehiculoActivo(supabase: SupabaseClient, idVehiculo: str
   if (error) throw new Error(error.message);
   if (!data) return { activo: false, motivo: 'Vehiculo no encontrado' };
   if (data.estado_vehiculo !== 'ACTIVO') {
-    return { activo: false, motivo: `Vehiculo no ACTIVO (estado=${data.estado_vehiculo}); la placa no autoriza el ingreso` };
+    return { activo: false, motivo: `VEHICULO_NO_AUTORIZADO: vehiculo no ACTIVO (estado=${data.estado_vehiculo}); la placa no autoriza el ingreso` };
   }
   return { activo: true, motivo: null as string | null };
 }
@@ -156,18 +156,18 @@ async function validarIngresoOcupante(
     if (confidence < umbralBiometria) {
       return {
         autorizado: false,
-        motivo: `Biometria no coincide (confidence ${confidence} < umbral ${umbralBiometria})`,
+        motivo: `BIOMETRIA_FALLIDA: confidence ${confidence} < umbral ${umbralBiometria}`,
         id_regla_acceso: null,
         id_autorizacion_visita: null,
       };
     }
     if (persona.estado !== 'ACTIVO') {
-      return { autorizado: false, motivo: 'Persona interna no ACTIVA', id_regla_acceso: null, id_autorizacion_visita: null };
+      return { autorizado: false, motivo: 'PERSONA_NO_AUTORIZADA: persona interna no ACTIVA', id_regla_acceso: null, id_autorizacion_visita: null };
     }
 
     const regla = await evaluarReglaAcceso(supabase, persona.id_categoria, idPuntoControl, ahora);
     if (!regla) {
-      return { autorizado: false, motivo: 'Sin regla de acceso aplicable', id_regla_acceso: null, id_autorizacion_visita: null };
+      return { autorizado: false, motivo: 'FUERA_DE_HORARIO: sin regla de acceso aplicable a la categoria/punto/horario', id_regla_acceso: null, id_autorizacion_visita: null };
     }
     return { autorizado: true, motivo: null, id_regla_acceso: regla.id_regla_acceso, id_autorizacion_visita: null };
   }
@@ -178,7 +178,7 @@ async function validarIngresoOcupante(
   if (!vigencia) {
     return {
       autorizado: false,
-      motivo: 'Sin memorando vigente ni autorizacion de visita diaria',
+      motivo: 'MEMORANDO_VENCIDO: sin memorando vigente ni autorizacion de visita diaria',
       id_regla_acceso: null,
       id_autorizacion_visita: null,
     };
@@ -186,12 +186,12 @@ async function validarIngresoOcupante(
 
   const regla = await evaluarReglaAcceso(supabase, persona.id_categoria, idPuntoControl, ahora);
   if (!regla) {
-    return { autorizado: false, motivo: 'Sin regla de acceso aplicable', id_regla_acceso: null, id_autorizacion_visita: null };
+    return { autorizado: false, motivo: 'FUERA_DE_HORARIO: sin regla de acceso aplicable a la categoria/punto/horario', id_regla_acceso: null, id_autorizacion_visita: null };
   }
   if (regla.requiere_memorando && vigencia.via_vigencia !== 'MEMORANDO') {
     return {
       autorizado: false,
-      motivo: 'La regla exige memorando; la persona solo tiene autorizacion de visita diaria',
+      motivo: 'MEMORANDO_VENCIDO: la regla exige memorando; la persona solo tiene autorizacion de visita diaria',
       id_regla_acceso: regla.id_regla_acceso,
       id_autorizacion_visita: vigencia.id_autorizacion ?? null,
     };
@@ -275,7 +275,7 @@ async function validarSalidaOcupante(
 
   return {
     autorizado: false,
-    motivo: 'Debe salir por el mismo punto de control por el que ingreso',
+    motivo: 'PUNTO_SALIDA_INCORRECTO: debe salir por el mismo punto de control por el que ingreso',
     id_regla_acceso: null,
     id_autorizacion_visita: ultimoIngreso.id_autorizacion_visita,
   };
