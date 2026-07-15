@@ -1,0 +1,10 @@
+node_modules
+dist
+.vercel
+dist-ssr
+*.local
+.env.local
+.env
+.DS_Store
+*.log
+.env*

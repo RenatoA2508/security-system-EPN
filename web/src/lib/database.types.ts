@@ -1,0 +1,1407 @@
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
+
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+  public: {
+    Tables: {
+      alerta_seguridad: {
+        Row: {
+          accion_atencion: string | null
+          estado_alerta: string
+          fecha_hora: string
+          id_alerta: string
+          id_evento: string
+          id_usuario_atencion: string | null
+          nivel_riesgo: string
+          observacion_atencion: string | null
+          tipo_alerta: string
+        }
+        Insert: {
+          accion_atencion?: string | null
+          estado_alerta?: string
+          fecha_hora?: string
+          id_alerta?: string
+          id_evento: string
+          id_usuario_atencion?: string | null
+          nivel_riesgo: string
+          observacion_atencion?: string | null
+          tipo_alerta: string
+        }
+        Update: {
+          accion_atencion?: string | null
+          estado_alerta?: string
+          fecha_hora?: string
+          id_alerta?: string
+          id_evento?: string
+          id_usuario_atencion?: string | null
+          nivel_riesgo?: string
+          observacion_atencion?: string | null
+          tipo_alerta?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerta_seguridad_id_evento_fkey"
+            columns: ["id_evento"]
+            isOneToOne: false
+            referencedRelation: "evento_acceso"
+            referencedColumns: ["id_evento"]
+          },
+          {
+            foreignKeyName: "alerta_seguridad_id_evento_fkey"
+            columns: ["id_evento"]
+            isOneToOne: false
+            referencedRelation: "vista_vehiculos_dentro"
+            referencedColumns: ["id_evento_ingreso"]
+          },
+          {
+            foreignKeyName: "alerta_seguridad_id_usuario_atencion_fkey"
+            columns: ["id_usuario_atencion"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      autorizacion_visita_diaria: {
+        Row: {
+          estado_autorizacion: string
+          fecha_registro: string
+          fecha_visita: string
+          id_autorizacion: string
+          id_persona: string
+          id_usuario_registro: string
+          motivo: string
+        }
+        Insert: {
+          estado_autorizacion?: string
+          fecha_registro?: string
+          fecha_visita: string
+          id_autorizacion?: string
+          id_persona: string
+          id_usuario_registro: string
+          motivo: string
+        }
+        Update: {
+          estado_autorizacion?: string
+          fecha_registro?: string
+          fecha_visita?: string
+          id_autorizacion?: string
+          id_persona?: string
+          id_usuario_registro?: string
+          motivo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autorizacion_visita_diaria_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "autorizacion_visita_diaria_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      bitacora_sistema: {
+        Row: {
+          accion: string
+          descripcion: string | null
+          entidad_afectada: string
+          fecha_hora: string
+          id_bitacora: string
+          id_entidad_afectada: string | null
+          id_usuario: string | null
+          ip_origen: string | null
+          modulo: string
+          resultado: string
+          valor_anterior: Json | null
+          valor_nuevo: Json | null
+        }
+        Insert: {
+          accion: string
+          descripcion?: string | null
+          entidad_afectada: string
+          fecha_hora?: string
+          id_bitacora?: string
+          id_entidad_afectada?: string | null
+          id_usuario?: string | null
+          ip_origen?: string | null
+          modulo: string
+          resultado: string
+          valor_anterior?: Json | null
+          valor_nuevo?: Json | null
+        }
+        Update: {
+          accion?: string
+          descripcion?: string | null
+          entidad_afectada?: string
+          fecha_hora?: string
+          id_bitacora?: string
+          id_entidad_afectada?: string | null
+          id_usuario?: string | null
+          ip_origen?: string | null
+          modulo?: string
+          resultado?: string
+          valor_anterior?: Json | null
+          valor_nuevo?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bitacora_sistema_id_usuario_fkey"
+            columns: ["id_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      categoria_persona: {
+        Row: {
+          ambito: string
+          codigo_categoria: string
+          estado: string
+          id_categoria: string
+          nombre_categoria: string
+        }
+        Insert: {
+          ambito: string
+          codigo_categoria: string
+          estado?: string
+          id_categoria?: string
+          nombre_categoria: string
+        }
+        Update: {
+          ambito?: string
+          codigo_categoria?: string
+          estado?: string
+          id_categoria?: string
+          nombre_categoria?: string
+        }
+        Relationships: []
+      }
+      dispositivo: {
+        Row: {
+          codigo_mac: string
+          direccion_ip: string
+          estado_dispositivo: string
+          id_dispositivo: string
+          id_punto_control: string
+          tipo_tecnologia: string
+        }
+        Insert: {
+          codigo_mac: string
+          direccion_ip: string
+          estado_dispositivo?: string
+          id_dispositivo?: string
+          id_punto_control: string
+          tipo_tecnologia: string
+        }
+        Update: {
+          codigo_mac?: string
+          direccion_ip?: string
+          estado_dispositivo?: string
+          id_dispositivo?: string
+          id_punto_control?: string
+          tipo_tecnologia?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispositivo_id_punto_control_fkey"
+            columns: ["id_punto_control"]
+            isOneToOne: false
+            referencedRelation: "punto_control"
+            referencedColumns: ["id_punto_control"]
+          },
+        ]
+      }
+      empresa: {
+        Row: {
+          estado: string
+          fecha_registro: string
+          id_empresa: string
+          nombre: string
+          ruc: string | null
+          tipo_servicio: string | null
+        }
+        Insert: {
+          estado?: string
+          fecha_registro?: string
+          id_empresa?: string
+          nombre: string
+          ruc?: string | null
+          tipo_servicio?: string | null
+        }
+        Update: {
+          estado?: string
+          fecha_registro?: string
+          id_empresa?: string
+          nombre?: string
+          ruc?: string | null
+          tipo_servicio?: string | null
+        }
+        Relationships: []
+      }
+      evento_acceso: {
+        Row: {
+          es_conductor: boolean
+          fecha_hora: string
+          id_autorizacion_visita: string | null
+          id_evento: string
+          id_persona: string
+          id_punto_control: string
+          id_regla_acceso: string | null
+          id_vehiculo: string | null
+          motivo_resultado: string | null
+          origen_registro: string
+          resultado: string
+          tipo_movimiento: string
+        }
+        Insert: {
+          es_conductor?: boolean
+          fecha_hora?: string
+          id_autorizacion_visita?: string | null
+          id_evento?: string
+          id_persona: string
+          id_punto_control: string
+          id_regla_acceso?: string | null
+          id_vehiculo?: string | null
+          motivo_resultado?: string | null
+          origen_registro: string
+          resultado: string
+          tipo_movimiento: string
+        }
+        Update: {
+          es_conductor?: boolean
+          fecha_hora?: string
+          id_autorizacion_visita?: string | null
+          id_evento?: string
+          id_persona?: string
+          id_punto_control?: string
+          id_regla_acceso?: string | null
+          id_vehiculo?: string | null
+          motivo_resultado?: string | null
+          origen_registro?: string
+          resultado?: string
+          tipo_movimiento?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evento_acceso_id_autorizacion_visita_fkey"
+            columns: ["id_autorizacion_visita"]
+            isOneToOne: false
+            referencedRelation: "autorizacion_visita_diaria"
+            referencedColumns: ["id_autorizacion"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_punto_control_fkey"
+            columns: ["id_punto_control"]
+            isOneToOne: false
+            referencedRelation: "punto_control"
+            referencedColumns: ["id_punto_control"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_regla_acceso_fkey"
+            columns: ["id_regla_acceso"]
+            isOneToOne: false
+            referencedRelation: "regla_acceso"
+            referencedColumns: ["id_regla_acceso"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_vehiculo_fkey"
+            columns: ["id_vehiculo"]
+            isOneToOne: false
+            referencedRelation: "vehiculo"
+            referencedColumns: ["id_vehiculo"]
+          },
+        ]
+      }
+      guardia_punto_control: {
+        Row: {
+          estado_asignacion: string
+          fecha_fin: string | null
+          fecha_inicio: string
+          fecha_registro: string
+          id_asignacion: string
+          id_punto_control: string
+          id_usuario: string
+          id_usuario_registro: string
+          turno: string | null
+        }
+        Insert: {
+          estado_asignacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          fecha_registro?: string
+          id_asignacion?: string
+          id_punto_control: string
+          id_usuario: string
+          id_usuario_registro: string
+          turno?: string | null
+        }
+        Update: {
+          estado_asignacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          fecha_registro?: string
+          id_asignacion?: string
+          id_punto_control?: string
+          id_usuario?: string
+          id_usuario_registro?: string
+          turno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardia_punto_control_id_punto_control_fkey"
+            columns: ["id_punto_control"]
+            isOneToOne: false
+            referencedRelation: "punto_control"
+            referencedColumns: ["id_punto_control"]
+          },
+          {
+            foreignKeyName: "guardia_punto_control_id_usuario_fkey"
+            columns: ["id_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+          {
+            foreignKeyName: "guardia_punto_control_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      memorando: {
+        Row: {
+          dependencia_autorizada: string
+          estado_memorando: string
+          fecha_fin: string
+          fecha_inicio: string
+          fecha_registro: string
+          id_empresa: string
+          id_memorando: string
+          id_usuario_registro: string
+          numero_memorando: string
+        }
+        Insert: {
+          dependencia_autorizada: string
+          estado_memorando?: string
+          fecha_fin: string
+          fecha_inicio: string
+          fecha_registro?: string
+          id_empresa: string
+          id_memorando?: string
+          id_usuario_registro: string
+          numero_memorando: string
+        }
+        Update: {
+          dependencia_autorizada?: string
+          estado_memorando?: string
+          fecha_fin?: string
+          fecha_inicio?: string
+          fecha_registro?: string
+          id_empresa?: string
+          id_memorando?: string
+          id_usuario_registro?: string
+          numero_memorando?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memorando_id_empresa_fkey"
+            columns: ["id_empresa"]
+            isOneToOne: false
+            referencedRelation: "empresa"
+            referencedColumns: ["id_empresa"]
+          },
+          {
+            foreignKeyName: "memorando_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      parametro_sistema: {
+        Row: {
+          codigo_parametro: string
+          descripcion: string | null
+          editable: boolean
+          estado_parametro: string
+          fecha_modificacion: string | null
+          fecha_registro: string
+          id_parametro: string
+          id_usuario_modifico: string | null
+          modulo_aplicacion: string
+          nombre_parametro: string
+          tipo_dato: string
+          valor_parametro: string
+        }
+        Insert: {
+          codigo_parametro: string
+          descripcion?: string | null
+          editable?: boolean
+          estado_parametro?: string
+          fecha_modificacion?: string | null
+          fecha_registro?: string
+          id_parametro?: string
+          id_usuario_modifico?: string | null
+          modulo_aplicacion: string
+          nombre_parametro: string
+          tipo_dato: string
+          valor_parametro: string
+        }
+        Update: {
+          codigo_parametro?: string
+          descripcion?: string | null
+          editable?: boolean
+          estado_parametro?: string
+          fecha_modificacion?: string | null
+          fecha_registro?: string
+          id_parametro?: string
+          id_usuario_modifico?: string | null
+          modulo_aplicacion?: string
+          nombre_parametro?: string
+          tipo_dato?: string
+          valor_parametro?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "parametro_sistema_id_usuario_modifico_fkey"
+            columns: ["id_usuario_modifico"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      permiso: {
+        Row: {
+          codigo_permiso: string
+          descripcion: string | null
+          estado_permiso: string
+          id_permiso: string
+        }
+        Insert: {
+          codigo_permiso: string
+          descripcion?: string | null
+          estado_permiso?: string
+          id_permiso?: string
+        }
+        Update: {
+          codigo_permiso?: string
+          descripcion?: string | null
+          estado_permiso?: string
+          id_permiso?: string
+        }
+        Relationships: []
+      }
+      persona: {
+        Row: {
+          apellidos: string
+          cedula: string
+          codigo_unico: string | null
+          correo: string
+          detalle_estado: string | null
+          direccion_domicilio: string | null
+          estado: string
+          fecha_modificacion: string | null
+          fecha_nacimiento: string | null
+          fecha_registro: string
+          id_categoria: string
+          id_empresa: string | null
+          id_persona: string
+          nombres: string
+          sexo: string | null
+          telefono_contacto: string | null
+          telefono_respaldo: string | null
+          tipo_persona: string
+        }
+        Insert: {
+          apellidos: string
+          cedula: string
+          codigo_unico?: string | null
+          correo: string
+          detalle_estado?: string | null
+          direccion_domicilio?: string | null
+          estado?: string
+          fecha_modificacion?: string | null
+          fecha_nacimiento?: string | null
+          fecha_registro?: string
+          id_categoria: string
+          id_empresa?: string | null
+          id_persona?: string
+          nombres: string
+          sexo?: string | null
+          telefono_contacto?: string | null
+          telefono_respaldo?: string | null
+          tipo_persona: string
+        }
+        Update: {
+          apellidos?: string
+          cedula?: string
+          codigo_unico?: string | null
+          correo?: string
+          detalle_estado?: string | null
+          direccion_domicilio?: string | null
+          estado?: string
+          fecha_modificacion?: string | null
+          fecha_nacimiento?: string | null
+          fecha_registro?: string
+          id_categoria?: string
+          id_empresa?: string | null
+          id_persona?: string
+          nombres?: string
+          sexo?: string | null
+          telefono_contacto?: string | null
+          telefono_respaldo?: string | null
+          tipo_persona?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persona_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "categoria_persona"
+            referencedColumns: ["id_categoria"]
+          },
+          {
+            foreignKeyName: "persona_id_empresa_fkey"
+            columns: ["id_empresa"]
+            isOneToOne: false
+            referencedRelation: "empresa"
+            referencedColumns: ["id_empresa"]
+          },
+        ]
+      }
+      persona_interna_detalle: {
+        Row: {
+          cargo: string | null
+          carrera: string | null
+          categoria_escalafon: string | null
+          contrato: string | null
+          curso: string | null
+          id_persona: string
+          nombramiento: string | null
+          unidad: string | null
+        }
+        Insert: {
+          cargo?: string | null
+          carrera?: string | null
+          categoria_escalafon?: string | null
+          contrato?: string | null
+          curso?: string | null
+          id_persona: string
+          nombramiento?: string | null
+          unidad?: string | null
+        }
+        Update: {
+          cargo?: string | null
+          carrera?: string | null
+          categoria_escalafon?: string | null
+          contrato?: string | null
+          curso?: string | null
+          id_persona?: string
+          nombramiento?: string | null
+          unidad?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persona_interna_detalle_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: true
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
+      persona_memorando: {
+        Row: {
+          estado_acceso: string
+          id_memorando: string
+          id_persona: string
+          id_persona_memorando: string
+        }
+        Insert: {
+          estado_acceso?: string
+          id_memorando: string
+          id_persona: string
+          id_persona_memorando?: string
+        }
+        Update: {
+          estado_acceso?: string
+          id_memorando?: string
+          id_persona?: string
+          id_persona_memorando?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persona_memorando_id_memorando_fkey"
+            columns: ["id_memorando"]
+            isOneToOne: false
+            referencedRelation: "memorando"
+            referencedColumns: ["id_memorando"]
+          },
+          {
+            foreignKeyName: "persona_memorando_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
+      persona_vehiculo: {
+        Row: {
+          es_responsable_tramite: boolean
+          estado_relacion: string
+          fecha_fin: string | null
+          fecha_inicio: string
+          fecha_registro: string
+          id_persona: string
+          id_persona_vehiculo: string
+          id_usuario_registro: string
+          id_vehiculo: string
+          motivo_revocacion: string | null
+          tipo_relacion: string
+        }
+        Insert: {
+          es_responsable_tramite?: boolean
+          estado_relacion?: string
+          fecha_fin?: string | null
+          fecha_inicio: string
+          fecha_registro?: string
+          id_persona: string
+          id_persona_vehiculo?: string
+          id_usuario_registro: string
+          id_vehiculo: string
+          motivo_revocacion?: string | null
+          tipo_relacion: string
+        }
+        Update: {
+          es_responsable_tramite?: boolean
+          estado_relacion?: string
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          fecha_registro?: string
+          id_persona?: string
+          id_persona_vehiculo?: string
+          id_usuario_registro?: string
+          id_vehiculo?: string
+          motivo_revocacion?: string | null
+          tipo_relacion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "persona_vehiculo_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "persona_vehiculo_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+          {
+            foreignKeyName: "persona_vehiculo_id_vehiculo_fkey"
+            columns: ["id_vehiculo"]
+            isOneToOne: false
+            referencedRelation: "vehiculo"
+            referencedColumns: ["id_vehiculo"]
+          },
+        ]
+      }
+      punto_control: {
+        Row: {
+          estado_punto: string
+          fecha_registro: string
+          id_punto_control: string
+          id_zona: string
+          nombre_punto: string
+        }
+        Insert: {
+          estado_punto?: string
+          fecha_registro?: string
+          id_punto_control?: string
+          id_zona: string
+          nombre_punto: string
+        }
+        Update: {
+          estado_punto?: string
+          fecha_registro?: string
+          id_punto_control?: string
+          id_zona?: string
+          nombre_punto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "punto_control_id_zona_fkey"
+            columns: ["id_zona"]
+            isOneToOne: false
+            referencedRelation: "zona"
+            referencedColumns: ["id_zona"]
+          },
+        ]
+      }
+      registro_biometrico: {
+        Row: {
+          descriptor_facial: string | null
+          fecha_registro: string
+          id_persona: string
+          id_registro: string
+          id_usuario_registro: string | null
+          path_storage: string
+          tipo_dato: string
+          vigente: boolean
+        }
+        Insert: {
+          descriptor_facial?: string | null
+          fecha_registro?: string
+          id_persona: string
+          id_registro?: string
+          id_usuario_registro?: string | null
+          path_storage: string
+          tipo_dato?: string
+          vigente?: boolean
+        }
+        Update: {
+          descriptor_facial?: string | null
+          fecha_registro?: string
+          id_persona?: string
+          id_registro?: string
+          id_usuario_registro?: string | null
+          path_storage?: string
+          tipo_dato?: string
+          vigente?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registro_biometrico_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "registro_biometrico_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      regla_acceso: {
+        Row: {
+          descripcion: string | null
+          estado_regla: string
+          horario_fin: string
+          horario_inicio: string
+          id_categoria: string
+          id_punto_control: string | null
+          id_regla_acceso: string
+          nombre_regla: string
+          requiere_memorando: boolean
+        }
+        Insert: {
+          descripcion?: string | null
+          estado_regla?: string
+          horario_fin: string
+          horario_inicio: string
+          id_categoria: string
+          id_punto_control?: string | null
+          id_regla_acceso?: string
+          nombre_regla: string
+          requiere_memorando: boolean
+        }
+        Update: {
+          descripcion?: string | null
+          estado_regla?: string
+          horario_fin?: string
+          horario_inicio?: string
+          id_categoria?: string
+          id_punto_control?: string | null
+          id_regla_acceso?: string
+          nombre_regla?: string
+          requiere_memorando?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regla_acceso_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "categoria_persona"
+            referencedColumns: ["id_categoria"]
+          },
+          {
+            foreignKeyName: "regla_acceso_id_punto_control_fkey"
+            columns: ["id_punto_control"]
+            isOneToOne: false
+            referencedRelation: "punto_control"
+            referencedColumns: ["id_punto_control"]
+          },
+        ]
+      }
+      rol: {
+        Row: {
+          descripcion: string | null
+          estado_rol: string
+          id_rol: string
+          nombre_rol: string
+        }
+        Insert: {
+          descripcion?: string | null
+          estado_rol?: string
+          id_rol?: string
+          nombre_rol: string
+        }
+        Update: {
+          descripcion?: string | null
+          estado_rol?: string
+          id_rol?: string
+          nombre_rol?: string
+        }
+        Relationships: []
+      }
+      rol_permiso: {
+        Row: {
+          estado_asignacion: string
+          fecha_asignacion: string
+          fecha_revocacion: string | null
+          id_permiso: string
+          id_rol: string
+          id_rol_permiso: string
+        }
+        Insert: {
+          estado_asignacion?: string
+          fecha_asignacion?: string
+          fecha_revocacion?: string | null
+          id_permiso: string
+          id_rol: string
+          id_rol_permiso?: string
+        }
+        Update: {
+          estado_asignacion?: string
+          fecha_asignacion?: string
+          fecha_revocacion?: string | null
+          id_permiso?: string
+          id_rol?: string
+          id_rol_permiso?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rol_permiso_id_permiso_fkey"
+            columns: ["id_permiso"]
+            isOneToOne: false
+            referencedRelation: "permiso"
+            referencedColumns: ["id_permiso"]
+          },
+          {
+            foreignKeyName: "rol_permiso_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "rol"
+            referencedColumns: ["id_rol"]
+          },
+        ]
+      }
+      sesion: {
+        Row: {
+          estado_sesion: string
+          fecha_cierre: string | null
+          fecha_expiracion: string
+          fecha_inicio: string
+          id_sesion: string
+          id_usuario: string
+          ip_origen: string | null
+          recordar_sesion: boolean
+          token_hash: string | null
+        }
+        Insert: {
+          estado_sesion?: string
+          fecha_cierre?: string | null
+          fecha_expiracion: string
+          fecha_inicio?: string
+          id_sesion?: string
+          id_usuario: string
+          ip_origen?: string | null
+          recordar_sesion?: boolean
+          token_hash?: string | null
+        }
+        Update: {
+          estado_sesion?: string
+          fecha_cierre?: string | null
+          fecha_expiracion?: string
+          fecha_inicio?: string
+          id_sesion?: string
+          id_usuario?: string
+          ip_origen?: string | null
+          recordar_sesion?: boolean
+          token_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sesion_id_usuario_fkey"
+            columns: ["id_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      usuario_rol: {
+        Row: {
+          estado_asignacion: string
+          fecha_asignacion: string
+          fecha_revocacion: string | null
+          id_rol: string
+          id_usuario: string
+          id_usuario_rol: string
+          observacion: string | null
+        }
+        Insert: {
+          estado_asignacion?: string
+          fecha_asignacion?: string
+          fecha_revocacion?: string | null
+          id_rol: string
+          id_usuario: string
+          id_usuario_rol?: string
+          observacion?: string | null
+        }
+        Update: {
+          estado_asignacion?: string
+          fecha_asignacion?: string
+          fecha_revocacion?: string | null
+          id_rol?: string
+          id_usuario?: string
+          id_usuario_rol?: string
+          observacion?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuario_rol_id_rol_fkey"
+            columns: ["id_rol"]
+            isOneToOne: false
+            referencedRelation: "rol"
+            referencedColumns: ["id_rol"]
+          },
+          {
+            foreignKeyName: "usuario_rol_id_usuario_fkey"
+            columns: ["id_usuario"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      usuario_sistema: {
+        Row: {
+          correo_electronico: string
+          estado_usuario: string
+          fecha_creacion: string
+          fecha_modificacion: string | null
+          fecha_ultimo_login: string | null
+          id_persona: string
+          id_usuario: string
+          intentos_fallidos: number
+          nombre_usuario: string
+          requiere_cambio_password: boolean
+        }
+        Insert: {
+          correo_electronico: string
+          estado_usuario?: string
+          fecha_creacion?: string
+          fecha_modificacion?: string | null
+          fecha_ultimo_login?: string | null
+          id_persona: string
+          id_usuario: string
+          intentos_fallidos?: number
+          nombre_usuario: string
+          requiere_cambio_password?: boolean
+        }
+        Update: {
+          correo_electronico?: string
+          estado_usuario?: string
+          fecha_creacion?: string
+          fecha_modificacion?: string | null
+          fecha_ultimo_login?: string | null
+          id_persona?: string
+          id_usuario?: string
+          intentos_fallidos?: number
+          nombre_usuario?: string
+          requiere_cambio_password?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "usuario_sistema_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
+      vehiculo: {
+        Row: {
+          color: string | null
+          estado_vehiculo: string
+          fecha_actualizacion: string | null
+          fecha_registro: string
+          id_usuario_registro: string
+          id_vehiculo: string
+          marca: string | null
+          modelo: string | null
+          placa: string | null
+          tipo_vehiculo: string
+        }
+        Insert: {
+          color?: string | null
+          estado_vehiculo?: string
+          fecha_actualizacion?: string | null
+          fecha_registro?: string
+          id_usuario_registro: string
+          id_vehiculo?: string
+          marca?: string | null
+          modelo?: string | null
+          placa?: string | null
+          tipo_vehiculo: string
+        }
+        Update: {
+          color?: string | null
+          estado_vehiculo?: string
+          fecha_actualizacion?: string | null
+          fecha_registro?: string
+          id_usuario_registro?: string
+          id_vehiculo?: string
+          marca?: string | null
+          modelo?: string | null
+          placa?: string | null
+          tipo_vehiculo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehiculo_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
+          },
+        ]
+      }
+      zona: {
+        Row: {
+          estado_zona: string
+          fecha_registro: string
+          id_zona: string
+          id_zona_padre: string | null
+          nombre_zona: string
+          tipo_zona: string
+        }
+        Insert: {
+          estado_zona?: string
+          fecha_registro?: string
+          id_zona?: string
+          id_zona_padre?: string | null
+          nombre_zona: string
+          tipo_zona: string
+        }
+        Update: {
+          estado_zona?: string
+          fecha_registro?: string
+          id_zona?: string
+          id_zona_padre?: string | null
+          nombre_zona?: string
+          tipo_zona?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "zona_id_zona_padre_fkey"
+            columns: ["id_zona_padre"]
+            isOneToOne: false
+            referencedRelation: "zona"
+            referencedColumns: ["id_zona"]
+          },
+        ]
+      }
+    }
+    Views: {
+      vista_vehiculos_dentro: {
+        Row: {
+          fecha_ingreso: string | null
+          horas_dentro: number | null
+          id_evento_ingreso: string | null
+          id_persona_conductor: string | null
+          id_punto_control: string | null
+          id_vehiculo: string | null
+          limite_abandono_horas: number | null
+          limite_horas_aplicable: number | null
+          placa: string | null
+          tipo_persona_conductor: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "evento_acceso_id_persona_fkey"
+            columns: ["id_persona_conductor"]
+            isOneToOne: false
+            referencedRelation: "persona"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_punto_control_fkey"
+            columns: ["id_punto_control"]
+            isOneToOne: false
+            referencedRelation: "punto_control"
+            referencedColumns: ["id_punto_control"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_vehiculo_fkey"
+            columns: ["id_vehiculo"]
+            isOneToOne: false
+            referencedRelation: "vehiculo"
+            referencedColumns: ["id_vehiculo"]
+          },
+        ]
+      }
+      vista_vigencia_acceso: {
+        Row: {
+          id_autorizacion: string | null
+          id_memorando: string | null
+          id_persona: string | null
+          tipo_persona: string | null
+          via_vigencia: string | null
+          vigente_hasta: string | null
+        }
+        Relationships: []
+      }
+    }
+    Functions: {
+      allowed_modules: { Args: never; Returns: string[] }
+      enrolar_biometria: {
+        Args: {
+          p_descriptor: number[]
+          p_id_persona: string
+          p_path_storage: string
+        }
+        Returns: string
+      }
+      identificar_por_descriptor: {
+        Args: { p_descriptor: number[] }
+        Returns: {
+          confidence: number
+          id_persona: string
+        }[]
+      }
+      permisos_efectivos: { Args: never; Returns: string[] }
+      puntos_control_asignados: { Args: never; Returns: string[] }
+      registrar_sesion: {
+        Args: { p_ip_origen?: string; p_recordar_sesion?: boolean }
+        Returns: {
+          estado_sesion: string
+          fecha_cierre: string | null
+          fecha_expiracion: string
+          fecha_inicio: string
+          id_sesion: string
+          id_usuario: string
+          ip_origen: string | null
+          recordar_sesion: boolean
+          token_hash: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sesion"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      revisar_permanencia_vehiculos: { Args: never; Returns: undefined }
+      tiene_acceso_operativo_cac: { Args: never; Returns: boolean }
+      tiene_algun_modulo: { Args: never; Returns: boolean }
+      tiene_permiso: { Args: { p_codigo: string }; Returns: boolean }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
+  public: {
+    Enums: {},
+  },
+} as const
