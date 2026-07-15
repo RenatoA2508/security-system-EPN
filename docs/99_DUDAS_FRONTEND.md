@@ -8,11 +8,16 @@
 | # | Tema | Estado |
 |---|---|---|
 | F1 | "Dar de baja" temporal con duración (persona/vehículo) | Implementado sin duración |
-| F2 | Ámbito de `EMPRESA_SERVICIO` | Resuelto por el backend real: EXTERNA |
-| F3 | Límite de "2 vehículos por persona" | No implementado en UI |
+| F2 | Ámbito de `EMPRESA_SERVICIO` | **Revertido** — ahora INTERNA (ver F7) |
+| F3 | Límite de "2 vehículos por persona" | Parámetro `MAX_VEHICULOS_POR_PERSONA` creado, sin aplicar aún |
 | F4 | `usuario_rol` bloqueada por RLS para 5 de 7 roles | Resuelto en frontend sin tocar RLS |
 | F5 | DIRECTOR_ADMINISTRATIVO no puede navegar a módulos fuera de ADM | Documentado, no resuelto |
 | F6 | `requiere_cambio_password` no se puede limpiar desde 6 de 7 roles | Resuelto: descarte local del aviso |
+| F7 | `EMPRESA_SERVICIO`: se confirmó INTERNA (revierte F2) | Resuelto: migración aplicada |
+| F8 | Exportación de bitácora: PDF/XLSX pedido, se implementó CSV | Resuelto con alcance reducido |
+| F9 | Registro ágil de visitante sin memorando | Resuelto parcialmente: `correo` opcional |
+| F10 | "No se registra el cambio al dar de baja" (GPI) | No reproducido — ver detalle |
+| F11 | Límite de dispositivos por punto: "máx. 5" ambiguo | Interpretado como total combinado |
 
 ---
 
@@ -87,3 +92,49 @@ tu contraseña" (`BannerPassword` en `App.tsx`) se descarta **solo localmente** 
 navegador), consistente con la decisión de la sesión de tratarlo como aviso suave y no bloqueante. Si
 el equipo quiere que el aviso desaparezca permanentemente tras el cambio, hace falta ampliar el
 `UPDATE` de `usuario_sistema` a "cuenta propia" en RLS (cambio de esquema/política, no de frontend).
+
+---
+
+## F7 — `EMPRESA_SERVICIO`: se confirmó INTERNA, revierte F2 → **resuelto**
+El feedback de GPI (docs/Req_Front) pidió explícitamente que el personal de empresas de seguridad/
+limpieza se gestione como interno (biometría, GPI), contradiciendo la resolución conservadora F2
+(que lo dejaba EXTERNA siguiendo el dato semilla). El usuario confirmó el cambio explícitamente.
+**Aplicado:** migración `20260715011000` — `categoria_persona.ambito='INTERNA'` para
+`EMPRESA_SERVICIO` + `regla_acceso` demo nueva para esa categoría en Garita Principal. No había
+personas ya registradas con esa categoría (verificado), así que no hizo falta migrar filas de
+`persona.tipo_persona`. GPI ya la ofrece automáticamente (su selector de categoría no está
+hardcodeado, filtra por `ambito` en vivo).
+
+## F8 — Exportación de bitácora: se pidió PDF/XLSX, se implementó CSV → **resuelto con alcance reducido**
+El permiso `ADM_BITACORA_EXPORTAR` ya existía sin ninguna función de exportación construida.
+Implementar PDF o XLSX real requiere una librería pesada (jsPDF/exceljs) que no estaba en el
+proyecto; dado el volumen de cambios de esta sesión, se optó por **CSV** (abre nativamente en
+Excel/Sheets, cero dependencias nuevas) como equivalente funcional. Se agregó como mecanismo
+genérico y reutilizable en `ResourceScreen` (`exportarConPermiso`), no solo para bitácora. Si el
+equipo necesita específicamente PDF/XLSX con formato, es una mejora de frontend pendiente.
+
+## F9 — Registro ágil de visitante sin memorando → **resuelto parcialmente**
+El feedback de GPE pedía un formulario reducido (solo cédula + algún contacto) para visitantes de
+paso, en vez del formulario completo de "Personal externo". Se hizo **`persona.correo` nullable**
+(migración `20260715019000`, antes `NOT NULL`) y se quitó el `required` de correo/teléfono en el
+formulario existente — cédula/nombres/apellidos siguen siendo obligatorios (identidad mínima), pero
+ya no hace falta inventar un correo para poder guardar. **No se construyó una pantalla separada**
+de registro rápido embebida dentro del flujo de "Ingresos" (autorización de visita); sigue siendo
+necesario registrar primero la persona en "Personal externo" y luego crear la autorización. Si el
+equipo quiere el flujo embebido de un solo paso, es una ampliación de frontend pendiente.
+
+## F10 — "No se registra el cambio cuando se da de baja a una persona" (GPI) → **no reproducido**
+Se revisó `BajaModal` (usado también por GPI) y la política RLS de `persona` UPDATE para GPI
+(`tiene_permiso('GPI_PERSONA_UPDATE')`, sin restricción de columna) — ambas correctas. Se confirmó
+además, con datos reales ya en la base, una persona de prueba ("TuRostro Muestra2") con
+`estado = INACTIVO`, es decir **una baja anterior sí quedó guardada**. No se encontró evidencia de
+que el mecanismo falle. Posibles explicaciones no descartadas: confusión por falta de confirmación
+visual inmediata, o un caso puntual no reproducido. Si vuelve a ocurrir, reportar con la persona
+exacta y el momento para poder revisar `bitacora_sistema` de esa fila.
+
+## F11 — Límite de dispositivos por punto de control: "máx. 5" ambiguo → **interpretado como total combinado**
+El feedback PCO dice "Para cada punto de control tipo parqueadero, máximo 5 dispositivos,
+biométricos y lectura de placa" — ambiguo entre "5 de cada tipo" (hasta 10 total) o "5 en total
+entre ambos tipos". Se implementó como **5 en total** en el trigger `validar_asignacion_dispositivo`
+(migración `20260715016000`), la lectura más restrictiva y literal de la frase. Si el equipo quiere
+5+5 (10 total), es un cambio de una línea en la función del trigger.
