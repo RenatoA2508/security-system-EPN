@@ -10,12 +10,14 @@ import { BiometriaScreen } from '../pages/modules/BiometriaScreen'
 import { AlertasScreen } from '../pages/modules/AlertasScreen'
 import { MonitoreoView } from '../pages/modules/MonitoreoView'
 import {
-  cfgEmpresa, cfgCategoria, cfgParametro, cfgRol, cfgPermiso, cfgUsuario, cfgUsuarioRol,
+  cfgEmpresa, cfgCategoria, cfgParametro, cfgRol, cfgPermiso, cfgUsuarioRol,
   cfgVehiculo, cfgPersonaVehiculo, cfgZona, cfgPuntoControl, cfgDispositivo, cfgAsignacionGuardia,
   cfgPersonaExterna, cfgMemorando, cfgPersonaMemorando, cfgReglaAcceso, cfgAutorizacion,
 } from './configs'
 import { cfgPersonaADM, cfgBitacora, cfgSesion, cfgEventoAcceso, cfgBiometriaADM } from './configs-lectura'
 import { cfgPersonaInterna, cfgPersonaInternaDetalle } from './configs-gpi'
+import { UsuariosScreen } from '../pages/modules/UsuariosScreen'
+import { RolPermisoScreen } from '../pages/modules/RolPermisoScreen'
 
 export interface SubmoduloDef {
   key: string
@@ -59,13 +61,16 @@ export const MODULOS: ModuloDef[] = [
     titulo: 'Personal Externo',
     descripcion: 'Visitantes, proveedores, memorandos y autorizaciones.',
     icono: <UserCheck className="h-7 w-7" />,
+    // Orden pedido (feedback GPE): Memorando, Persona Externa, Ingresos, Vehículos — los
+    // botones de vinculación (persona-memorando, asociaciones) van después.
     submodulos: [
-      sub('personas', 'Personal externo', 'Registro y consulta de personas externas.', <UserPlus className="h-6 w-6" />, cfgPersonaExterna),
       sub('memorandos', 'Memorandos', 'Memorandos de acceso por empresa.', <FileText className="h-6 w-6" />, cfgMemorando),
-      sub('persona-memorando', 'Personas por memorando', 'Vínculo persona–memorando.', <ClipboardList className="h-6 w-6" />, cfgPersonaMemorando),
-      sub('autorizaciones', 'Autorizaciones de visita', 'Visitas diarias sin memorando.', <ClipboardCheck className="h-6 w-6" />, cfgAutorizacion),
+      sub('personas', 'Personal externo', 'Registro y consulta de personas externas.', <UserPlus className="h-6 w-6" />, cfgPersonaExterna),
+      sub('autorizaciones', 'Ingresos (visitas sin memorando)', 'Visitas diarias sin memorando.', <ClipboardCheck className="h-6 w-6" />, cfgAutorizacion),
       sub('vehiculos', 'Vehículos', 'Alta de vehículos externos.', <Car className="h-6 w-6" />, cfgVehiculo('GPE')),
+      sub('persona-memorando', 'Personas por memorando', 'Vínculo persona–memorando.', <ClipboardList className="h-6 w-6" />, cfgPersonaMemorando),
       sub('asociaciones', 'Asociaciones', 'Vínculos persona–vehículo.', <Link2 className="h-6 w-6" />, cfgPersonaVehiculo('GPE')),
+      sub('empresas', 'Empresas', 'Registrar la empresa del personal externo.', <Building2 className="h-6 w-6" />, cfgEmpresa),
     ],
   },
   {
@@ -89,7 +94,8 @@ export const MODULOS: ModuloDef[] = [
       sub('reglas', 'Reglas de acceso', 'Categoría × punto × horario.', <ListChecks className="h-6 w-6" />, cfgReglaAcceso),
       sub('eventos', 'Eventos de acceso', 'Histórico de ingresos y salidas.', <History className="h-6 w-6" />, cfgEventoAcceso()),
       { key: 'alertas', titulo: 'Alertas de seguridad', descripcion: 'Atención de alertas automáticas.', icono: <ShieldAlert className="h-6 w-6" />, permisoVer: ['CAC_ALERTA_SELECT'], render: () => <AlertasScreen /> },
-      sub('asignaciones', 'Asignaciones de guardia', 'Organización operativa diaria.', <UserCog className="h-6 w-6" />, cfgAsignacionGuardia),
+      // "Asignaciones de guardia" queda exclusivamente en PCO (feedback CAC: "Quitar asignación
+      // de guardia"). El permiso INSERT/UPDATE de CAC sobre guardia_punto_control ya fue revocado.
     ],
   },
   {
@@ -98,10 +104,14 @@ export const MODULOS: ModuloDef[] = [
     descripcion: 'Usuarios, roles, permisos, catálogos maestros y auditoría.',
     icono: <Settings className="h-7 w-7" />,
     submodulos: [
-      sub('usuarios', 'Usuarios', 'Cuentas del sistema.', <Users className="h-6 w-6" />, cfgUsuario),
+      // Pantalla dedicada (feedback ADM §5.3/§7.2): bloquear/desbloquear/activar/dar de baja/
+      // resetear contraseña, cada uno con su propio permiso granular — no encaja en el patrón
+      // CRUD genérico de ResourceScreen.
+      { key: 'usuarios', titulo: 'Usuarios', descripcion: 'Cuentas del sistema.', icono: <Users className="h-6 w-6" />, permisoVer: ['ADM_USUARIO_SELECT'], render: () => <UsuariosScreen /> },
       sub('usuario-rol', 'Asignaciones de rol', 'Roles por usuario.', <UserCog className="h-6 w-6" />, cfgUsuarioRol),
       sub('roles', 'Roles', 'Roles del sistema.', <KeyRound className="h-6 w-6" />, cfgRol),
       sub('permisos', 'Permisos', 'Catálogo de permisos.', <Lock className="h-6 w-6" />, cfgPermiso),
+      { key: 'rol-permiso', titulo: 'Matriz rol × permiso', descripcion: 'Qué permiso tiene cada rol.', icono: <ListChecks className="h-6 w-6" />, permisoVer: ['ADM_ROL_PERMISO_SELECT'], render: () => <RolPermisoScreen /> },
       sub('categorias', 'Categorías', 'Categorías de persona.', <ListChecks className="h-6 w-6" />, cfgCategoria),
       sub('empresas', 'Empresas', 'Empresas de servicio y proveedores.', <Building2 className="h-6 w-6" />, cfgEmpresa),
       sub('parametros', 'Parámetros', 'Parámetros del sistema.', <Settings className="h-6 w-6" />, cfgParametro),

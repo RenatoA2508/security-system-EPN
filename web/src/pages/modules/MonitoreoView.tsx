@@ -17,8 +17,12 @@ interface EventoReciente {
   fecha_hora: string
   tipo_movimiento: string
   resultado: string
-  persona?: { nombres: string; apellidos: string } | null
+  motivo_resultado: string | null
+  origen_registro: string
+  es_conductor: boolean
+  persona?: { nombres: string; apellidos: string; cedula: string } | null
   punto?: { nombre_punto: string } | null
+  vehiculo?: { placa: string } | null
 }
 
 export function MonitoreoView() {
@@ -27,6 +31,7 @@ export function MonitoreoView() {
   const [alertasPend, setAlertasPend] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [seleccionado, setSeleccionado] = useState<EventoReciente | null>(null)
 
   const cargar = async () => {
     setCargando(true)
@@ -34,7 +39,7 @@ export function MonitoreoView() {
       supabase.from('vista_vehiculos_dentro').select('*').order('horas_dentro', { ascending: false }),
       supabase
         .from('evento_acceso')
-        .select('id_evento, fecha_hora, tipo_movimiento, resultado, persona:persona(nombres, apellidos), punto:punto_control(nombre_punto)')
+        .select('id_evento, fecha_hora, tipo_movimiento, resultado, motivo_resultado, origen_registro, es_conductor, persona:persona(nombres, apellidos, cedula), punto:punto_control(nombre_punto), vehiculo:vehiculo(placa)')
         .order('fecha_hora', { ascending: false })
         .limit(15),
       supabase.from('alerta_seguridad').select('id_alerta', { count: 'exact', head: true }).eq('estado_alerta', 'PENDIENTE'),
@@ -107,7 +112,14 @@ export function MonitoreoView() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {eventos.map((e) => (
-                <li key={e.id_evento} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                <li
+                  key={e.id_evento}
+                  onClick={() => setSeleccionado(e)}
+                  className={
+                    'flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 ' +
+                    (seleccionado?.id_evento === e.id_evento ? 'bg-slate-50' : '')
+                  }
+                >
                   <div>
                     <p className="font-medium text-navy">{e.persona ? `${e.persona.apellidos} ${e.persona.nombres}` : '—'}</p>
                     <p className="text-xs text-ink-soft">{e.punto?.nombre_punto ?? '—'} · {fmtFechaHora(e.fecha_hora)}</p>
@@ -119,6 +131,24 @@ export function MonitoreoView() {
           )}
         </Card>
       </div>
+
+      {seleccionado && (
+        <Card className="mt-6 p-5">
+          <h3 className="mb-3 text-sm font-semibold text-navy">Detalle del evento seleccionado</h3>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+            <div><dt className="text-xs text-ink-soft">Persona</dt><dd className="text-navy">{seleccionado.persona ? `${seleccionado.persona.apellidos} ${seleccionado.persona.nombres}` : '—'}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Cédula</dt><dd className="text-navy">{seleccionado.persona?.cedula ?? '—'}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Punto de control</dt><dd className="text-navy">{seleccionado.punto?.nombre_punto ?? '—'}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Fecha y hora</dt><dd className="text-navy">{fmtFechaHora(seleccionado.fecha_hora)}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Movimiento</dt><dd><Badge value={seleccionado.tipo_movimiento} /></dd></div>
+            <div><dt className="text-xs text-ink-soft">Resultado</dt><dd><Badge value={seleccionado.resultado} /></dd></div>
+            <div><dt className="text-xs text-ink-soft">Origen de registro</dt><dd><Badge value={seleccionado.origen_registro} /></dd></div>
+            <div><dt className="text-xs text-ink-soft">Vehículo</dt><dd className="text-navy">{seleccionado.vehiculo?.placa ?? '— (peatonal)'}</dd></div>
+            {seleccionado.vehiculo && <div><dt className="text-xs text-ink-soft">Es conductor</dt><dd className="text-navy">{seleccionado.es_conductor ? 'Sí' : 'No'}</dd></div>}
+            {seleccionado.motivo_resultado && <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-ink-soft">Motivo</dt><dd className="text-navy">{seleccionado.motivo_resultado}</dd></div>}
+          </dl>
+        </Card>
+      )}
       <p className="mt-3 text-xs text-slate-400">Se actualiza automáticamente cada 30 segundos.</p>
     </div>
   )

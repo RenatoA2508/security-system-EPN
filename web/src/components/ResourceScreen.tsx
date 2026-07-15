@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Pencil, Plus, Search, Ban, ArrowLeft } from 'lucide-react'
+import { Pencil, Plus, Search, Ban, ArrowLeft, Download } from 'lucide-react'
 import { fromTable, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
 import type { FieldConfig, Opcion, ResourceConfig } from '../resources/types'
@@ -33,12 +33,36 @@ function useFieldOptions(campos: FieldConfig[]) {
   return opts
 }
 
+/** Igual que useFieldOptions pero para los filtros de columna del listado (config.filtros). */
+function useFiltroOptions(filtros: ResourceConfig['filtros']) {
+  const [opts, setOpts] = useState<Record<string, Opcion[]>>({})
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const entries = await Promise.all(
+        (filtros ?? []).map(async (f) => {
+          const o = typeof f.opciones === 'function' ? await f.opciones() : f.opciones
+          return [f.campo, o] as const
+        }),
+      )
+      if (vivo) setOpts(Object.fromEntries(entries))
+    })()
+    return () => {
+      vivo = false
+    }
+  }, [filtros])
+  return opts
+}
+
+const leerRuta = (r: Row, ruta: string) => ruta.split('.').reduce<any>((o, k) => o?.[k], r)
+
 export function ResourceScreen({ config }: { config: ResourceConfig }) {
   const { tiene } = useAuth()
   const toast = useToast()
   const puedeLeer = config.permisos.select.some(tiene)
   const puedeCrear = !!config.permisos.insert?.some(tiene)
   const puedeEditar = !!config.permisos.update?.some(tiene)
+  const puedeExportar = !!config.exportarConPermiso?.some(tiene)
 
   const [rows, setRows] = useState<Row[]>([])
   const [cargando, setCargando] = useState(true)
@@ -48,8 +72,10 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
   const [vista, setVista] = useState<'lista' | 'form'>('lista')
   const [editando, setEditando] = useState<Row | null>(null)
   const [bajaOpen, setBajaOpen] = useState(false)
+  const [filtrosValor, setFiltrosValor] = useState<Record<string, string>>({})
 
   const opciones = useFieldOptions(config.campos)
+  const opcionesFiltro = useFiltroOptions(config.filtros)
 
   const cargar = useCallback(async () => {
     setCargando(true)
@@ -69,15 +95,37 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
   }, [puedeLeer, cargar])
 
   const filtradas = useMemo(() => {
+    let out = rows
     const t = busqueda.trim().toLowerCase()
-    if (!t || !config.buscarEn?.length) return rows
-    return rows.filter((r) =>
-      config.buscarEn!.some((campo) => {
-        const val = campo.split('.').reduce<any>((o, k) => o?.[k], r)
-        return String(val ?? '').toLowerCase().includes(t)
+    if (t && config.buscarEn?.length) {
+      out = out.filter((r) =>
+        config.buscarEn!.some((campo) => String(leerRuta(r, campo) ?? '').toLowerCase().includes(t)),
+      )
+    }
+    for (const [campo, valor] of Object.entries(filtrosValor)) {
+      if (!valor) continue
+      out = out.filter((r) => String(leerRuta(r, campo) ?? '') === valor)
+    }
+    return out
+  }, [rows, busqueda, config.buscarEn, filtrosValor])
+
+  const exportarCsv = () => {
+    const encabezados = config.columnas.map((c) => c.label)
+    const filas = filtradas.map((r) =>
+      config.columnas.map((c) => {
+        const v = c.valorExport ? c.valorExport(r) : c.render && !c.badge ? '' : String(r[c.key] ?? '')
+        return `"${v.replaceAll('"', '""')}"`
       }),
     )
-  }, [rows, busqueda, config.buscarEn])
+    const csv = [encabezados.join(','), ...filas.map((f) => f.join(','))].join('\n')
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${config.tabla}_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   if (!puedeLeer) {
     return (
@@ -117,6 +165,21 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
             className="pl-9"
           />
         </div>
+        {config.filtros?.map((f) => (
+          <Select
+            key={f.campo}
+            value={filtrosValor[f.campo] ?? ''}
+            onChange={(e) => setFiltrosValor((s) => ({ ...s, [f.campo]: e.target.value }))}
+            placeholder={f.label}
+            options={opcionesFiltro[f.campo] ?? []}
+            className="w-auto min-w-[160px]"
+          />
+        ))}
+        {puedeExportar && (
+          <Button variant="secondary" onClick={exportarCsv}>
+            <Download className="h-4 w-4" /> Exportar CSV
+          </Button>
+        )}
         {puedeCrear && (
           <Button
             onClick={() => {
@@ -247,14 +310,82 @@ function RecordForm({
   const [valores, setValores] = useState<Row>(() => {
     const init: Row = {}
     for (const c of config.campos) {
-      init[c.name] = registro ? registro[c.name] ?? '' : c.default ?? (c.type === 'checkbox' ? false : '')
+      if (c.multiSelect && !registro) {
+        init[c.name] = [] as string[]
+        continue
+      }
+      const def = typeof c.default === 'function' ? c.default() : c.default
+      init[c.name] = registro ? registro[c.name] ?? '' : def ?? (c.type === 'checkbox' ? false : '')
     }
     return init
   })
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dinamicas, setDinamicas] = useState<Record<string, Opcion[]>>({})
 
-  const set = (name: string, v: unknown) => setValores((s) => ({ ...s, [name]: v }))
+  const set = (name: string, v: unknown) => {
+    setValores((s) => {
+      const next = { ...s, [name]: v }
+      const campo = config.campos.find((c) => c.name === name)
+      for (const otro of campo?.alCambiarLimpiar ?? []) next[otro] = ''
+      return next
+    })
+  }
+
+  // Recalcula las opciones de los campos con cascada (opcionesDependientes) cada vez que
+  // cambian los valores del formulario (ej. "Punto de control" según la "Zona" elegida).
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      const dependientes = config.campos.filter((c) => c.opcionesDependientes)
+      if (dependientes.length === 0) return
+      const entries = await Promise.all(
+        dependientes.map(async (c) => [c.name, await c.opcionesDependientes!(valores)] as const),
+      )
+      if (vivo) setDinamicas(Object.fromEntries(entries))
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(valores)])
+
+  // Auto-sugerencia (ej. siguiente nombre de punto de control): solo si el campo destino
+  // sigue vacío, para no pisar algo que el usuario ya escribió.
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      for (const c of config.campos) {
+        if (!c.autoSugerenciaDesde) continue
+        const valorOrigen = valores[c.autoSugerenciaDesde.campo]
+        if (!valorOrigen || valores[c.name]) continue
+        const sugerido = await c.autoSugerenciaDesde.calcular(valorOrigen, valores)
+        if (vivo && sugerido && !valores[c.name]) set(c.name, sugerido)
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...config.campos.filter((c) => c.autoSugerenciaDesde).map((c) => valores[c.autoSugerenciaDesde!.campo])])
+
+  // Valor derivado que SIEMPRE se recalcula (a diferencia de autoSugerenciaDesde), típicamente
+  // un campo oculto que solo alimenta visibleSi de otros campos (ej. categoría de la persona).
+  useEffect(() => {
+    let vivo = true
+    ;(async () => {
+      for (const c of config.campos) {
+        if (!c.derivarSiempreDesde) continue
+        const valorOrigen = valores[c.derivarSiempreDesde.campo]
+        const derivado = valorOrigen ? await c.derivarSiempreDesde.calcular(valorOrigen) : null
+        if (vivo) set(c.name, derivado ?? '')
+      }
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [...config.campos.filter((c) => c.derivarSiempreDesde).map((c) => valores[c.derivarSiempreDesde!.campo])])
 
   const bloqueadoEnEdicion = (c: FieldConfig) => esEdicion && c.editable === false
 
@@ -262,14 +393,48 @@ function RecordForm({
     setError(null)
     // Validación mínima de requeridos
     for (const c of config.campos) {
+      if (c.visibleSi && !c.visibleSi(valores)) continue
+      if (c.multiSelect && c.required && (valores[c.name] as string[])?.length === 0) {
+        setError(`Selecciona al menos un valor en "${c.label}".`)
+        return
+      }
       if (c.required && !bloqueadoEnEdicion(c) && (valores[c.name] === '' || valores[c.name] == null)) {
         setError(`El campo "${c.label}" es obligatorio.`)
         return
       }
     }
+
+    // Selección múltiple (feedback GPE): un INSERT por cada valor elegido, mismo resto de campos.
+    const campoMulti = !esEdicion ? config.campos.find((c) => c.multiSelect) : undefined
+    if (campoMulti) {
+      setGuardando(true)
+      const seleccionados = valores[campoMulti.name] as string[]
+      const base: Row = {}
+      for (const c of config.campos) {
+        if (c === campoMulti || c.persistir === false) continue
+        let v = valores[c.name]
+        if (v === '') v = null
+        if (c.type === 'number' && v != null) v = Number(v)
+        base[c.name] = v
+      }
+      if (config.defaultsInsert) Object.assign(base, config.defaultsInsert)
+      if (config.autoUsuarioRegistro && session?.user.id)
+        for (const col of config.autoUsuarioRegistro) base[col] = session.user.id
+      const filas = seleccionados.map((valor) => ({ ...base, [campoMulti.name]: valor }))
+      const res = await fromTable(config.tabla).insert(filas)
+      setGuardando(false)
+      if (res.error) {
+        setError(mensajeError(res.error))
+        return
+      }
+      onSaved()
+      return
+    }
+
     setGuardando(true)
     const payload: Row = {}
     for (const c of config.campos) {
+      if (c.persistir === false) continue
       if (esEdicion && (c.insertOnly || bloqueadoEnEdicion(c))) continue
       let v = valores[c.name]
       if (v === '') v = null
@@ -310,7 +475,10 @@ function RecordForm({
       <div className="mb-5"><ErrorBanner message={error} /></div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {config.campos.map((c) => {
+        {config.campos
+          .filter((c) => esEdicion || !c.hideOnInsert)
+          .filter((c) => !c.visibleSi || c.visibleSi(valores))
+          .map((c) => {
           const disabled = bloqueadoEnEdicion(c)
           const span = c.colSpan === 3 ? 'lg:col-span-3' : c.colSpan === 2 ? 'sm:col-span-2' : ''
           return (
@@ -328,13 +496,32 @@ function RecordForm({
                 </label>
               ) : (
                 <Field label={c.label} required={c.required && !disabled} hint={c.hint}>
-                  {c.type === 'select' ? (
+                  {c.multiSelect && !esEdicion ? (
+                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+                      {(opciones[c.name] ?? []).length === 0 && <p className="p-1 text-xs text-slate-400">Sin opciones disponibles.</p>}
+                      {(opciones[c.name] ?? []).map((o) => {
+                        const seleccionados = (valores[c.name] as string[]) ?? []
+                        const marcado = seleccionados.includes(o.value)
+                        return (
+                          <label key={o.value} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              checked={marcado}
+                              onChange={(e) => set(c.name, e.target.checked ? [...seleccionados, o.value] : seleccionados.filter((v) => v !== o.value))}
+                              className="h-4 w-4"
+                            />
+                            {o.label}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : c.type === 'select' ? (
                     <Select
                       value={valores[c.name] ?? ''}
                       disabled={disabled}
                       onChange={(e) => set(c.name, e.target.value)}
                       placeholder="— Seleccionar —"
-                      options={opciones[c.name] ?? (Array.isArray(c.options) ? (c.options as Opcion[]) : [])}
+                      options={c.opcionesDependientes ? (dinamicas[c.name] ?? []) : opciones[c.name] ?? (Array.isArray(c.options) ? (c.options as Opcion[]) : [])}
                     />
                   ) : c.type === 'textarea' ? (
                     <Textarea
@@ -343,13 +530,35 @@ function RecordForm({
                       placeholder={c.placeholder}
                       onChange={(e) => set(c.name, e.target.value)}
                     />
+                  ) : c.type === 'timerange' ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        disabled={disabled}
+                        value={String(valores[c.name] ?? '').split('–')[0] ?? ''}
+                        onChange={(e) => {
+                          const fin = String(valores[c.name] ?? '').split('–')[1] ?? ''
+                          set(c.name, `${e.target.value}–${fin}`)
+                        }}
+                      />
+                      <span className="text-ink-soft">a</span>
+                      <Input
+                        type="time"
+                        disabled={disabled}
+                        value={String(valores[c.name] ?? '').split('–')[1] ?? ''}
+                        onChange={(e) => {
+                          const inicio = String(valores[c.name] ?? '').split('–')[0] ?? ''
+                          set(c.name, `${inicio}–${e.target.value}`)
+                        }}
+                      />
+                    </div>
                   ) : (
                     <Input
                       type={c.type === 'number' ? 'number' : c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : c.type === 'email' ? 'email' : 'text'}
                       value={valores[c.name] ?? ''}
                       disabled={disabled}
                       placeholder={c.placeholder}
-                      onChange={(e) => set(c.name, e.target.value)}
+                      onChange={(e) => set(c.name, c.formatear ? c.formatear(e.target.value) : e.target.value)}
                     />
                   )}
                 </Field>

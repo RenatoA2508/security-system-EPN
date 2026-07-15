@@ -1,6 +1,7 @@
 import type { ResourceConfig } from './types'
 import { fmtFecha, fmtFechaHora } from '../lib/format'
 import { Badge } from '../components/ui'
+import { opcionesCatalogo } from './opciones'
 
 const d = (v: any) => (v == null || v === '' ? '—' : String(v))
 
@@ -77,14 +78,21 @@ export const cfgBitacora: ResourceConfig = {
   select: '*, usuario:usuario_sistema(correo_electronico)',
   orderBy: { columna: 'fecha_hora', ascendente: false },
   permisos: { select: ['ADM_BITACORA_SELECT'] },
-  buscarEn: ['modulo', 'entidad_afectada', 'accion', 'descripcion'],
+  exportarConPermiso: ['ADM_BITACORA_EXPORTAR'],
+  buscarEn: ['modulo', 'entidad_afectada', 'accion', 'descripcion', 'ip_origen', 'fecha_hora'],
+  filtros: [
+    { campo: 'modulo', label: 'Filtrar por módulo', opciones: opcionesCatalogo(['ADM', 'GPI', 'GPE', 'PCO', 'CAC']) },
+    { campo: 'accion', label: 'Filtrar por acción', opciones: opcionesCatalogo(['INSERT', 'UPDATE', 'DELETE']) },
+    { campo: 'resultado', label: 'Filtrar por resultado', opciones: opcionesCatalogo(['EXITO', 'ERROR']) },
+  ],
   columnas: [
-    { key: 'fecha_hora', label: 'Fecha', render: (r) => fmtFechaHora(r.fecha_hora) },
+    { key: 'fecha_hora', label: 'Fecha', render: (r) => fmtFechaHora(r.fecha_hora), valorExport: (r) => fmtFechaHora(r.fecha_hora) },
     { key: 'modulo', label: 'Módulo' },
     { key: 'entidad_afectada', label: 'Entidad' },
     { key: 'accion', label: 'Acción' },
     { key: 'resultado', label: 'Resultado', badge: true },
-    { key: 'usuario', label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—' },
+    { key: 'usuario', label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—', valorExport: (r) => r.usuario?.correo_electronico ?? '' },
+    { key: 'ip_origen', label: 'IP' },
   ],
   campoTituloDetalle: (r) => `${r.accion} · ${r.entidad_afectada}`,
   campoSubtituloDetalle: (r) => <><Badge value={r.resultado} /> · {fmtFechaHora(r.fecha_hora)}</>,
@@ -137,7 +145,12 @@ export function cfgEventoAcceso(): ResourceConfig {
     select: '*, persona:persona(nombres, apellidos, cedula), punto:punto_control(nombre_punto), vehiculo:vehiculo(placa)',
     orderBy: { columna: 'fecha_hora', ascendente: false },
     permisos: { select: ['CAC_EVENTO_SELECT', 'CAC_EVENTO_SELECT_PUNTO_ASIGNADO'] },
-    buscarEn: ['persona.cedula', 'persona.apellidos', 'punto.nombre_punto'],
+    buscarEn: ['persona.cedula', 'persona.apellidos', 'punto.nombre_punto', 'fecha_hora'],
+    filtros: [
+      { campo: 'tipo_movimiento', label: 'Movimiento', opciones: [{ value: 'INGRESO', label: 'Ingreso' }, { value: 'SALIDA', label: 'Salida' }] },
+      { campo: 'origen_registro', label: 'Origen', opciones: [{ value: 'AUTOMATICA', label: 'Automática' }, { value: 'MANUAL', label: 'Manual' }] },
+      { campo: 'resultado', label: 'Resultado', opciones: [{ value: 'AUTORIZADO', label: 'Autorizado' }, { value: 'DENEGADO', label: 'Denegado' }] },
+    ],
     columnas: [
       { key: 'fecha_hora', label: 'Fecha', render: (r) => fmtFechaHora(r.fecha_hora) },
       { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.apellidos} ${r.persona.nombres}` : '—') },

@@ -9,7 +9,9 @@
 export const CAT = {
   persona_estado: ['ACTIVO', 'INACTIVO', 'DADO_DE_BAJA'],
   persona_tipo: ['INTERNA', 'EXTERNA'],
-  persona_sexo: ['M', 'F', 'OTRO'],
+  // Feedback GPI: solo Masculino/Femenino (persona.sexo no tiene CHECK real en la BD; este
+  // catálogo es puramente de UI, sin respaldo de constraint — corregido a lo que pide el equipo).
+  persona_sexo: ['M', 'F'],
   categoria_ambito: ['INTERNA', 'EXTERNA'],
   categoria_codigo: [
     'DOCENTE', 'ESTUDIANTE', 'ADMINISTRATIVO', 'TRABAJADOR',

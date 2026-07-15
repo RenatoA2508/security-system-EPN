@@ -1,11 +1,12 @@
 import type { ResourceConfig } from './types'
 import { CAT } from '../lib/catalogos'
-import { fmtFecha, fmtFechaHora, fmtHora } from '../lib/format'
+import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp } from '../lib/format'
 import { Badge } from '../components/ui'
 import {
   opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas, optRoles,
-  opcionesTabla,
+  opcionesTabla, optZonasPorTipo, optPuntosPorZona, optGuardiasDisponibles,
 } from './opciones'
+import { supabase } from '../lib/supabase'
 import { hoyISO } from '../lib/format'
 
 const d = (v: any) => (v == null || v === '' ? '—' : String(v))
@@ -20,7 +21,9 @@ export const cfgEmpresa: ResourceConfig = {
   singular: 'Empresa',
   idField: 'id_empresa',
   orderBy: { columna: 'nombre' },
-  permisos: { select: ['ADM_EMPRESA_SELECT'], insert: ['ADM_EMPRESA_INSERT'], update: ['ADM_EMPRESA_UPDATE'] },
+  // GPE también puede ver/crear empresas desde su propio módulo (feedback GPE, permiso nuevo
+  // GPE_EMPRESA_INSERT — el SELECT ya lo permitía la política RLS vía GPE_MODULO_ACCEDER).
+  permisos: { select: ['ADM_EMPRESA_SELECT', 'GPE_MODULO_ACCEDER'], insert: ['ADM_EMPRESA_INSERT', 'GPE_EMPRESA_INSERT'], update: ['ADM_EMPRESA_UPDATE'] },
   buscarEn: ['nombre', 'ruc', 'tipo_servicio'],
   columnas: [
     { key: 'nombre', label: 'Nombre' },
@@ -195,39 +198,6 @@ export const cfgUsuarioRol: ResourceConfig = {
   baja: { campoEstado: 'estado_asignacion', valorBaja: 'REVOCADO', etiqueta: 'Revocar rol' },
 }
 
-export const cfgUsuario: ResourceConfig = {
-  tabla: 'usuario_sistema',
-  titulo: 'Usuarios del sistema',
-  singular: 'Usuario',
-  idField: 'id_usuario',
-  select: '*, persona:persona!usuario_sistema_id_persona_fkey(nombres, apellidos, cedula)',
-  orderBy: { columna: 'nombre_usuario' },
-  // El alta de usuarios usa Supabase Auth (Admin API), no un INSERT REST (01 §2/§D12).
-  // Desde el frontend ADM solo lista/consulta y actualiza estado. Ver docs/99_DUDAS_FRONTEND.md.
-  permisos: { select: ['ADM_USUARIO_SELECT'], update: ['ADM_USUARIO_UPDATE'] },
-  buscarEn: ['nombre_usuario', 'correo_electronico', 'persona.cedula'],
-  columnas: [
-    { key: 'nombre_usuario', label: 'Usuario' },
-    { key: 'correo_electronico', label: 'Correo' },
-    { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : '—') },
-    { key: 'estado_usuario', label: 'Estado', badge: true },
-  ],
-  campoTituloDetalle: (r) => r.nombre_usuario,
-  campoSubtituloDetalle: (r) => r.correo_electronico,
-  detalle: [
-    { label: 'Persona', render: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : '—') },
-    { label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-    { label: 'Estado', render: (r) => <Badge value={r.estado_usuario} /> },
-    { label: 'Requiere cambio de contraseña', render: (r) => (r.requiere_cambio_password ? 'Sí' : 'No') },
-    { label: 'Último login', render: (r) => fmtFechaHora(r.fecha_ultimo_login) },
-    { label: 'Intentos fallidos', render: (r) => r.intentos_fallidos },
-  ],
-  campos: [
-    { name: 'estado_usuario', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.usuario_estado) },
-  ],
-  campoEstado: 'estado_usuario',
-}
-
 /* =========================================================================
    Compartidos: vehículo, persona_vehiculo (ADM/GPI/GPE)
    ========================================================================= */
@@ -302,7 +272,13 @@ export function cfgPersonaVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfi
       { label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${r.fecha_fin ? fmtFecha(r.fecha_fin) : 'indefinida'}` },
     ],
     campos: [
-      { name: 'id_persona', label: 'Persona', type: 'select', required: true, editable: false, options: opcionesTabla('persona', 'id_persona', (p) => `${p.apellidos} ${p.nombres} · ${p.cedula}`) },
+      // Filtrado por ámbito del módulo (feedback GPE): GPI solo ve INTERNA, GPE solo EXTERNA —
+      // evita vincular por error una persona que no es responsabilidad de ese módulo.
+      {
+        name: 'id_persona', label: 'Persona', type: 'select', required: true, editable: false,
+        options: opcionesTabla('persona', 'id_persona', (p) => `${p.apellidos} ${p.nombres} · ${p.cedula}`,
+          modulo === 'GPI' ? { tipo_persona: 'INTERNA' } : modulo === 'GPE' ? { tipo_persona: 'EXTERNA' } : undefined),
+      },
       { name: 'id_vehiculo', label: 'Vehículo', type: 'select', required: true, editable: false, options: opcionesTabla('vehiculo', 'id_vehiculo', (v) => `${v.placa ?? v.id_vehiculo} · ${v.tipo_vehiculo}`) },
       { name: 'tipo_relacion', label: 'Tipo de relación', type: 'select', required: true, options: opcionesCatalogo(CAT.persona_vehiculo_tipo) },
       { name: 'es_responsable_tramite', label: '¿Responsable del trámite?', type: 'checkbox' },
@@ -343,14 +319,29 @@ export const cfgZona: ResourceConfig = {
     { label: 'Estado', render: (r) => <Badge value={r.estado_zona} /> },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
+  filtros: [{ campo: 'tipo_zona', label: 'Filtrar por zona', opciones: opcionesCatalogo(CAT.zona_tipo) }],
   campos: [
     { name: 'nombre_zona', label: 'Nombre', required: true, colSpan: 2 },
-    { name: 'tipo_zona', label: 'Tipo', type: 'select', required: true, options: opcionesCatalogo(CAT.zona_tipo) },
-    { name: 'id_zona_padre', label: 'Zona padre (opcional)', type: 'select', options: optZonas },
+    { name: 'tipo_zona', label: 'Tipo', type: 'select', required: true, options: opcionesCatalogo(CAT.zona_tipo), alCambiarLimpiar: ['id_zona_padre'] },
+    // Solo tiene sentido una jerarquía dentro de un parqueadero o un edificio (feedback PCO #2).
+    { name: 'id_zona_padre', label: 'Zona padre', type: 'select', options: optZonas, visibleSi: (v) => v.tipo_zona === 'PARQUEADERO' || v.tipo_zona === 'EDIFICIO' },
     { name: 'estado_zona', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.zona_estado), default: 'ACTIVA' },
   ],
   campoEstado: 'estado_zona',
   baja: { campoEstado: 'estado_zona', valorBaja: 'INACTIVA', etiqueta: 'Inactivar' },
+}
+
+/** Siguiente nombre sugerido para un punto de control tipo CAMPUS (feedback PCO #7):
+ *  si ya hay "Acceso A".."Acceso D", sugiere "Acceso E". Solo aplica a zonas CAMPUS. */
+async function sugerirNombrePuntoCampus(idZona: string, valores: Record<string, any>): Promise<string | null> {
+  if (valores._filtro_tipo_zona !== 'CAMPUS') return null
+  const { data } = await (supabase as any).from('punto_control').select('nombre_punto').eq('id_zona', idZona)
+  const letras = ((data as { nombre_punto: string }[]) ?? [])
+    .map((r) => /^Acceso ([A-Z])$/i.exec(r.nombre_punto.trim())?.[1]?.toUpperCase())
+    .filter((l): l is string => !!l)
+    .map((l) => l.charCodeAt(0))
+  const siguiente = letras.length ? Math.max(...letras) + 1 : 'A'.charCodeAt(0)
+  return `Acceso ${String.fromCharCode(siguiente)}`
 }
 
 export const cfgPuntoControl: ResourceConfig = {
@@ -362,6 +353,14 @@ export const cfgPuntoControl: ResourceConfig = {
   orderBy: { columna: 'nombre_punto' },
   permisos: { select: ['PCO_PUNTO_CONTROL_SELECT'], insert: ['PCO_PUNTO_CONTROL_INSERT'], update: ['PCO_PUNTO_CONTROL_UPDATE'] },
   buscarEn: ['nombre_punto'],
+  filtros: [{
+    campo: 'zona.nombre_zona',
+    label: 'Filtrar por zona',
+    opciones: async () => {
+      const { data } = await (supabase as any).from('zona').select('nombre_zona')
+      return ((data as { nombre_zona: string }[]) ?? []).map((z) => ({ value: z.nombre_zona, label: z.nombre_zona }))
+    },
+  }],
   columnas: [
     { key: 'nombre_punto', label: 'Nombre' },
     { key: 'zona', label: 'Zona', render: (r) => r.zona?.nombre_zona ?? '—' },
@@ -375,8 +374,11 @@ export const cfgPuntoControl: ResourceConfig = {
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [
-    { name: 'nombre_punto', label: 'Nombre', required: true, colSpan: 2 },
-    { name: 'id_zona', label: 'Zona', type: 'select', required: true, options: optZonas },
+    // Cascada (feedback PCO #5): primero el tipo de zona, luego se despliegan solo esas zonas.
+    { name: '_filtro_tipo_zona', label: 'Tipo de zona', type: 'select', required: true, persistir: false, options: opcionesCatalogo(CAT.zona_tipo), alCambiarLimpiar: ['id_zona'] },
+    { name: 'id_zona', label: 'Zona', type: 'select', required: true, opcionesDependientes: (v) => optZonasPorTipo(v._filtro_tipo_zona) },
+    // Autonumerado (feedback PCO #7): "Acceso A/B/C..." según cuántos ya existen en esa zona campus.
+    { name: 'nombre_punto', label: 'Nombre', required: true, colSpan: 2, autoSugerenciaDesde: { campo: 'id_zona', calcular: sugerirNombrePuntoCampus } },
     { name: 'estado_punto', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.punto_estado), default: 'ACTIVO' },
   ],
   campoEstado: 'estado_punto',
@@ -389,7 +391,11 @@ export const cfgDispositivo: ResourceConfig = {
   idField: 'id_dispositivo',
   select: '*, punto:punto_control(nombre_punto)',
   permisos: { select: ['PCO_DISPOSITIVO_SELECT'], insert: ['PCO_DISPOSITIVO_INSERT'], update: ['PCO_DISPOSITIVO_UPDATE'] },
-  buscarEn: ['codigo_mac', 'direccion_ip', 'tipo_tecnologia'],
+  buscarEn: ['codigo_mac'],
+  filtros: [
+    { campo: 'tipo_tecnologia', label: 'Filtrar por tecnología', opciones: opcionesCatalogo(CAT.dispositivo_tecnologia) },
+    { campo: 'estado_dispositivo', label: 'Filtrar por estado', opciones: opcionesCatalogo(CAT.dispositivo_estado) },
+  ],
   columnas: [
     { key: 'codigo_mac', label: 'MAC' },
     { key: 'direccion_ip', label: 'IP' },
@@ -405,10 +411,15 @@ export const cfgDispositivo: ResourceConfig = {
     { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? '—' },
   ],
   campos: [
-    { name: 'codigo_mac', label: 'Código MAC', required: true },
-    { name: 'direccion_ip', label: 'Dirección IP', required: true },
-    { name: 'tipo_tecnologia', label: 'Tecnología', type: 'select', required: true, options: opcionesCatalogo(CAT.dispositivo_tecnologia) },
-    { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, options: optPuntosControl },
+    // Orden pedido (feedback PCO #9): tecnología primero, luego MAC/IP con autoformato.
+    { name: 'tipo_tecnologia', label: 'Tecnología', type: 'select', required: true, options: opcionesCatalogo(CAT.dispositivo_tecnologia), alCambiarLimpiar: ['_filtro_zona', 'id_punto_control'] },
+    { name: 'codigo_mac', label: 'Código MAC', required: true, placeholder: 'AA:BB:CC:DD:EE:FF', formatear: formatearMac },
+    { name: 'direccion_ip', label: 'Dirección IP', required: true, placeholder: '10.0.0.10', formatear: formatearIp },
+    // Cascada (feedback PCO #10): zona → punto de control, ya filtrada por compatibilidad
+    // tecnología↔zona (LPR_PLACAS solo PARQUEADERO). El trigger validar_asignacion_dispositivo
+    // en la base de datos es la garantía real; esto es solo para no ofrecer opciones inválidas.
+    { name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false, opcionesDependientes: (v) => v.tipo_tecnologia === 'LPR_PLACAS' ? optZonasPorTipo('PARQUEADERO') : optZonas(), alCambiarLimpiar: ['id_punto_control'] },
+    { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, opcionesDependientes: (v) => optPuntosPorZona(v._filtro_zona) },
     { name: 'estado_dispositivo', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.dispositivo_estado), default: 'OPERATIVO' },
   ],
   campoEstado: 'estado_dispositivo',
@@ -420,8 +431,9 @@ export const cfgAsignacionGuardia: ResourceConfig = {
   singular: 'Asignación',
   idField: 'id_asignacion',
   select: '*, guardia:usuario_sistema!guardia_punto_control_id_usuario_fkey(nombre_usuario, correo_electronico), punto:punto_control(nombre_punto)',
-  // PCO y CAC pueden asignar (matriz doc 02); el guardia NO (solo lee la propia, ver vista guardia).
-  permisos: { select: ['PCO_ASIGNACION_SELECT', 'CAC_ASIGNACION_SELECT'], insert: ['PCO_ASIGNACION_INSERT', 'CAC_ASIGNACION_INSERT'], update: ['PCO_ASIGNACION_UPDATE', 'CAC_ASIGNACION_UPDATE'] },
+  // Solo PCO asigna (feedback CAC: "quitar asignación de guardia" — ya revocado en rol_permiso).
+  // CAC conserva SELECT únicamente, para supervisión.
+  permisos: { select: ['PCO_ASIGNACION_SELECT', 'CAC_ASIGNACION_SELECT'], insert: ['PCO_ASIGNACION_INSERT'], update: ['PCO_ASIGNACION_UPDATE'] },
   autoUsuarioRegistro: ['id_usuario_registro'],
   buscarEn: ['guardia.correo_electronico', 'punto.nombre_punto', 'turno'],
   columnas: [
@@ -438,11 +450,16 @@ export const cfgAsignacionGuardia: ResourceConfig = {
     { label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${r.fecha_fin ? fmtFecha(r.fecha_fin) : 'indefinida'}` },
   ],
   campos: [
-    { name: 'id_usuario', label: 'Guardia', type: 'select', required: true, editable: false, options: opcionesTabla('usuario_sistema', 'id_usuario', (u) => u.correo_electronico) },
-    { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, options: optPuntosControl },
-    { name: 'turno', label: 'Turno', placeholder: 'Ej. 06:00–14:00' },
+    // Solo cuentas con rol GUARDIA_SEGURIDAD activo (feedback PCO #11: un Responsable de
+    // Módulo no debe poder ser asignado como guardia).
+    { name: 'id_usuario', label: 'Guardia', type: 'select', required: true, editable: false, options: optGuardiasDisponibles },
+    // Cascada (feedback PCO #13): primero la zona, luego solo sus puntos de control.
+    { name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false, options: optZonas, alCambiarLimpiar: ['id_punto_control'] },
+    { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, opcionesDependientes: (v) => optPuntosPorZona(v._filtro_zona) },
+    { name: 'turno', label: 'Turno', type: 'timerange' },
     { name: 'fecha_inicio', label: 'Inicio', type: 'date', required: true },
-    { name: 'fecha_fin', label: 'Fin (opcional)', type: 'date' },
+    // Obligatoria (feedback PCO #12): todos los guardias cumplen contrato con fecha de fin.
+    { name: 'fecha_fin', label: 'Fin', type: 'date', required: true },
     { name: 'estado_asignacion', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.asignacion_estado), default: 'ACTIVA' },
   ],
   campoEstado: 'estado_asignacion',
@@ -453,12 +470,25 @@ export const cfgAsignacionGuardia: ResourceConfig = {
    GPE — personal externo, memorandos, autorizaciones
    ========================================================================= */
 
+/** "Ingreso por días" (feedback GPE): null hasta vincularse a un memorando; 1 día para
+ *  visitantes sin memorando (solo autorización diaria); multi-día calculado de las fechas
+ *  del memorando vigente al que esté vinculada. */
+function diasIngreso(r: { vinculos?: { memorando?: { fecha_inicio: string; fecha_fin: string } | null }[]; visitas?: unknown[] }): string {
+  const memo = r.vinculos?.[0]?.memorando
+  if (memo) {
+    const dias = Math.round((+new Date(memo.fecha_fin) - +new Date(memo.fecha_inicio)) / 86400000) + 1
+    return dias <= 1 ? '1 día' : `${dias} días`
+  }
+  if (r.visitas?.length) return '1 día'
+  return '—'
+}
+
 export const cfgPersonaExterna: ResourceConfig = {
   tabla: 'persona',
   titulo: 'Personal externo',
   singular: 'Persona externa',
   idField: 'id_persona',
-  select: '*, categoria:categoria_persona(nombre_categoria, codigo_categoria), empresa:empresa(nombre)',
+  select: '*, categoria:categoria_persona(nombre_categoria, codigo_categoria), empresa:empresa(nombre), vinculos:persona_memorando(memorando:memorando(fecha_inicio, fecha_fin)), visitas:autorizacion_visita_diaria(fecha_visita)',
   orderBy: { columna: 'apellidos' },
   filtroFijo: { tipo_persona: 'EXTERNA' },
   permisos: { select: ['GPE_PERSONA_SELECT'], insert: ['GPE_PERSONA_INSERT'], update: ['GPE_PERSONA_UPDATE'] },
@@ -469,6 +499,7 @@ export const cfgPersonaExterna: ResourceConfig = {
     { key: 'nombres', label: 'Nombres', render: (r) => `${r.apellidos} ${r.nombres}` },
     { key: 'categoria', label: 'Categoría', render: (r) => r.categoria?.codigo_categoria ?? '—' },
     { key: 'empresa', label: 'Empresa', render: (r) => r.empresa?.nombre ?? '—' },
+    { key: 'dias', label: 'Ingreso', render: diasIngreso },
     { key: 'estado', label: 'Estado', badge: true },
   ],
   campoTituloDetalle: (r) => `${r.nombres} ${r.apellidos}`,
@@ -479,14 +510,17 @@ export const cfgPersonaExterna: ResourceConfig = {
     { label: 'Teléfono', render: (r) => d(r.telefono_contacto) },
     { label: 'Categoría', render: (r) => r.categoria?.nombre_categoria ?? '—' },
     { label: 'Empresa', render: (r) => r.empresa?.nombre ?? '—' },
+    { label: 'Ingreso por días', render: diasIngreso },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [
     { name: 'cedula', label: 'Cédula', required: true, editable: false },
     { name: 'nombres', label: 'Nombres', required: true, editable: false },
     { name: 'apellidos', label: 'Apellidos', required: true, editable: false },
-    { name: 'correo', label: 'Correo', type: 'email', required: true },
-    { name: 'telefono_contacto', label: 'Teléfono' },
+    // Ya no obligatorio (feedback GPE: registro ágil de visitas sin memorando — basta con
+    // cédula + algún contacto, no hace falta correo si ya se da teléfono, o viceversa).
+    { name: 'correo', label: 'Correo (opcional)', type: 'email' },
+    { name: 'telefono_contacto', label: 'Teléfono (opcional)' },
     { name: 'id_categoria', label: 'Categoría (externa)', type: 'select', required: true, options: optCategorias('EXTERNA') },
     { name: 'id_empresa', label: 'Empresa (opcional)', type: 'select', options: optEmpresas },
     { name: 'sexo', label: 'Sexo', type: 'select', options: opcionesCatalogo(CAT.persona_sexo) },
@@ -496,6 +530,14 @@ export const cfgPersonaExterna: ResourceConfig = {
   campoEstado: 'estado',
   // Brecha §6.1: baja de persona = INACTIVO (sin "temporal con duración"). Ver 99_DUDAS_FRONTEND.md.
   baja: { campoEstado: 'estado', valorBaja: 'INACTIVO', campoMotivo: 'detalle_estado', etiqueta: 'Dar de baja' },
+}
+
+/** Estado mostrado en pantalla: si la fecha_fin ya pasó, se muestra VENCIDO aunque el campo
+ *  guardado siga en VIGENTE (feedback GPE: no hay proceso automático que actualice el estado
+ *  almacenado, así que el frontend no debe confiar ciegamente en él para decidir qué mostrar). */
+function estadoMemorandoEfectivo(r: { estado_memorando: string; fecha_fin: string }): string {
+  if (r.estado_memorando === 'VIGENTE' && r.fecha_fin < hoyISO()) return 'VENCIDO'
+  return r.estado_memorando
 }
 
 export const cfgMemorando: ResourceConfig = {
@@ -513,23 +555,27 @@ export const cfgMemorando: ResourceConfig = {
     { key: 'empresa', label: 'Empresa', render: (r) => r.empresa?.nombre ?? '—' },
     { key: 'dependencia_autorizada', label: 'Dependencia' },
     { key: 'vigencia', label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${fmtFecha(r.fecha_fin)}` },
-    { key: 'estado_memorando', label: 'Estado', badge: true },
+    { key: 'estado_memorando', label: 'Estado', render: (r) => <Badge value={estadoMemorandoEfectivo(r)} /> },
   ],
   campoTituloDetalle: (r) => r.numero_memorando,
-  campoSubtituloDetalle: (r) => <><Badge value={r.estado_memorando} /> · {r.empresa?.nombre}</>,
+  campoSubtituloDetalle: (r) => <><Badge value={estadoMemorandoEfectivo(r)} /> · {r.empresa?.nombre}</>,
   detalle: [
     { label: 'Empresa', render: (r) => r.empresa?.nombre ?? '—' },
-    { label: 'Dependencia autorizada', render: (r) => r.dependencia_autorizada },
+    { label: 'Dependencia autorizada', render: (r) => d(r.dependencia_autorizada) },
     { label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${fmtFecha(r.fecha_fin)}` },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [
-    { name: 'numero_memorando', label: 'Número de memorando', required: true, editable: false },
+    // Autogenerado (feedback GPE): evita problemas de validación/formato manual del número.
+    { name: 'numero_memorando', label: 'Número de memorando', required: true, editable: false, hideOnInsert: true, default: () => `MEM-${Date.now().toString(36).toUpperCase()}` },
     { name: 'id_empresa', label: 'Empresa', type: 'select', required: true, options: optEmpresas },
-    { name: 'dependencia_autorizada', label: 'Dependencia autorizada', required: true, colSpan: 2 },
+    // Ya no obligatoria (feedback GPE): una persona puede acudir a más de una dependencia.
+    { name: 'dependencia_autorizada', label: 'Dependencia autorizada (opcional)', colSpan: 2 },
     { name: 'fecha_inicio', label: 'Inicio de vigencia', type: 'date', required: true },
     { name: 'fecha_fin', label: 'Fin de vigencia', type: 'date', required: true, hint: 'fecha_fin inclusiva (§D24)' },
-    { name: 'estado_memorando', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.memorando_estado), default: 'VIGENTE' },
+    // Oculto en el alta (feedback GPE): no tiene sentido crear un memorando ya vencido; el
+    // estado nace VIGENTE (default de la BD) y "VENCIDO" se calcula en pantalla desde la fecha.
+    { name: 'estado_memorando', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.memorando_estado), default: 'VIGENTE', hideOnInsert: true },
   ],
   campoEstado: 'estado_memorando',
 }
@@ -555,7 +601,8 @@ export const cfgPersonaMemorando: ResourceConfig = {
     { label: 'Estado de acceso', render: (r) => <Badge value={r.estado_acceso} /> },
   ],
   campos: [
-    { name: 'id_persona', label: 'Persona externa', type: 'select', required: true, editable: false, options: opcionesTabla('persona', 'id_persona', (p) => `${p.apellidos} ${p.nombres} · ${p.cedula}`, { tipo_persona: 'EXTERNA' }) },
+    // Selección múltiple (feedback GPE): vincular varias personas al mismo memorando de una vez.
+    { name: 'id_persona', label: 'Personas externas', type: 'select', required: true, editable: false, multiSelect: true, options: opcionesTabla('persona', 'id_persona', (p) => `${p.apellidos} ${p.nombres} · ${p.cedula}`, { tipo_persona: 'EXTERNA' }) },
     { name: 'id_memorando', label: 'Memorando', type: 'select', required: true, editable: false, options: opcionesTabla('memorando', 'id_memorando', (m) => m.numero_memorando) },
     { name: 'estado_acceso', label: 'Estado de acceso', type: 'select', options: opcionesCatalogo(CAT.persona_memorando_estado), default: 'ACTIVO' },
   ],
@@ -599,8 +646,9 @@ export const cfgReglaAcceso: ResourceConfig = {
     { name: 'horario_inicio', label: 'Horario inicio', type: 'time', required: true },
     { name: 'horario_fin', label: 'Horario fin', type: 'time', required: true },
     { name: 'requiere_memorando', label: '¿Requiere memorando?', type: 'checkbox' },
-    { name: 'estado_regla', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.regla_estado), default: 'ACTIVA' },
-    { name: 'descripcion', label: 'Descripción', type: 'textarea', colSpan: 3 },
+    // Oculto en el alta: toda regla nueva nace ACTIVA (feedback CAC). Solo editable después.
+    { name: 'estado_regla', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.regla_estado), default: 'ACTIVA', hideOnInsert: true },
+    { name: 'descripcion', label: 'Descripción', type: 'textarea', required: true, colSpan: 3 },
   ],
   campoEstado: 'estado_regla',
   baja: { campoEstado: 'estado_regla', valorBaja: 'INACTIVA', etiqueta: 'Inactivar regla' },

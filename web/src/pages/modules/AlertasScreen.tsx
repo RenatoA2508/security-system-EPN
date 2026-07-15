@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Search, ShieldAlert } from 'lucide-react'
 import { supabase, mensajeError } from '../../lib/supabase'
 import { useAuth } from '../../auth/AuthProvider'
 import { fmtFechaHora } from '../../lib/format'
 import {
-  Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Modal, SidePanel, Textarea, useToast,
+  Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input, Modal, Select, SidePanel, Textarea, useToast,
 } from '../../components/ui'
+
+const OPCIONES_ESTADO = [{ value: 'PENDIENTE', label: 'Pendiente' }, { value: 'ATENDIDA', label: 'Atendida' }]
+const OPCIONES_RIESGO = [{ value: 'BAJO', label: 'Bajo' }, { value: 'MEDIO', label: 'Medio' }, { value: 'ALTO', label: 'Alto' }, { value: 'CRITICO', label: 'Crítico' }]
 
 interface Alerta {
   id_alerta: string
@@ -34,6 +37,9 @@ export function AlertasScreen() {
   const [accion, setAccion] = useState('')
   const [obs, setObs] = useState('')
   const [guardando, setGuardando] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
+  const [fEstado, setFEstado] = useState('')
+  const [fRiesgo, setFRiesgo] = useState('')
 
   const cargar = async () => {
     setCargando(true)
@@ -79,6 +85,21 @@ export function AlertasScreen() {
 
   const pendientes = alertas.filter((a) => a.estado_alerta === 'PENDIENTE')
 
+  const filtradas = useMemo(() => {
+    const t = busqueda.trim().toLowerCase()
+    return alertas.filter((a) => {
+      if (fEstado && a.estado_alerta !== fEstado) return false
+      if (fRiesgo && a.nivel_riesgo !== fRiesgo) return false
+      if (!t) return true
+      const campos = [
+        a.tipo_alerta, a.nivel_riesgo, a.estado_alerta,
+        a.evento?.persona?.nombres, a.evento?.persona?.apellidos, a.evento?.persona?.cedula,
+        a.accion_atencion, a.observacion_atencion,
+      ]
+      return campos.some((c) => String(c ?? '').toLowerCase().includes(t))
+    })
+  }, [alertas, busqueda, fEstado, fRiesgo])
+
   return (
     <div>
       <ErrorBanner message={error} />
@@ -86,11 +107,19 @@ export function AlertasScreen() {
         <ShieldAlert className="h-4 w-4 text-red" />
         {pendientes.length} pendiente(s) de {alertas.length} alerta(s)
       </div>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <Input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por tipo, persona, cédula, riesgo..." className="pl-9" />
+        </div>
+        <Select value={fEstado} onChange={(e) => setFEstado(e.target.value)} placeholder="Estado" options={OPCIONES_ESTADO} className="w-auto min-w-[150px]" />
+        <Select value={fRiesgo} onChange={(e) => setFRiesgo(e.target.value)} placeholder="Nivel de riesgo" options={OPCIONES_RIESGO} className="w-auto min-w-[160px]" />
+      </div>
       <Card className="overflow-hidden">
         {cargando ? (
           <CenterSpinner label="Cargando alertas..." />
-        ) : alertas.length === 0 ? (
-          <EmptyState title="No hay alertas" hint="Las alertas nacen automáticamente de eventos denegados o permanencia excedida." />
+        ) : filtradas.length === 0 ? (
+          <EmptyState title={alertas.length === 0 ? 'No hay alertas' : 'Sin resultados para el filtro actual'} hint={alertas.length === 0 ? 'Las alertas nacen automáticamente de eventos denegados o permanencia excedida.' : undefined} />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -104,7 +133,7 @@ export function AlertasScreen() {
                 </tr>
               </thead>
               <tbody>
-                {alertas.map((a) => (
+                {filtradas.map((a) => (
                   <tr key={a.id_alerta} onClick={() => setSel(a)} className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-slate-50">
                     <td className="px-4 py-2.5">{fmtFechaHora(a.fecha_hora)}</td>
                     <td className="px-4 py-2.5 text-navy">{a.tipo_alerta.replaceAll('_', ' ')}</td>

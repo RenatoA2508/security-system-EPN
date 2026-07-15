@@ -11,7 +11,7 @@ export function ModuleHome() {
   const modulo = moduloPorCodigo(codigo)
 
   if (!modulo) return <Navigate to="/" replace />
-  const permitido = modulo.codigo === 'MON' ? tiene('CAC_EVENTO_SELECT') || tiene('ADM_PERSONA_SELECT') : modulos.includes(modulo.codigo)
+  const permitido = modulo.codigo === 'MON' ? tiene('CAC_EVENTO_SELECT') : modulos.includes(modulo.codigo)
   if (!permitido) return <Navigate to="/" replace />
 
   const puedeVer = (s: SubmoduloDef) => !s.permisoVer || s.permisoVer.some(tiene)

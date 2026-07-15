@@ -31,6 +31,7 @@ export function BiometriaScreen() {
   const [error, setError] = useState<string | null>(null)
   const [sel, setSel] = useState('')
   const [enrolando, setEnrolando] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const camRef = useRef<CameraHandle>(null)
 
   const cargar = async () => {
@@ -50,6 +51,21 @@ export function BiometriaScreen() {
     else setCargando(false)
   }, [puedeLeer])
 
+  /** Sube el JPEG y confirma que el objeto realmente aterrizó en Storage antes de continuar
+   *  (bug real detectado: la subida a veces "resuelve OK" sin dejar el archivo, dejando un
+   *  registro_biometrico huérfano sin foto). Reintenta una vez si la verificación falla. */
+  const subirYVerificar = async (path: string, jpeg: Blob): Promise<void> => {
+    const carpeta = sel
+    const archivo = path.slice(carpeta.length + 1)
+    for (let intento = 1; intento <= 2; intento++) {
+      const up = await supabase.storage.from(BUCKET).upload(path, jpeg, { contentType: 'image/jpeg', upsert: true })
+      if (up.error) throw new Error('Storage: ' + up.error.message)
+      const { data: listado, error: listError } = await supabase.storage.from(BUCKET).list(carpeta, { search: archivo })
+      if (!listError && listado?.some((f) => f.name === archivo)) return
+      if (intento === 2) throw new Error('La foto no se confirmó en Storage tras 2 intentos. Vuelve a intentar el enrolamiento.')
+    }
+  }
+
   const enrolar = async () => {
     if (!sel) {
       setError('Selecciona una persona interna.')
@@ -60,16 +76,17 @@ export function BiometriaScreen() {
     try {
       const descriptor = await camRef.current!.descriptor()
       const jpeg = await camRef.current!.jpeg()
+      if (jpeg.size < 2000) throw new Error('La foto capturada parece inválida (muy pequeña). Verifica que el rostro esté bien iluminado e inténtalo de nuevo.')
       const path = `${sel}/${Date.now()}.jpg`
-      const up = await supabase.storage.from(BUCKET).upload(path, jpeg, { contentType: 'image/jpeg' })
-      if (up.error) throw new Error('Storage: ' + up.error.message)
+      await subirYVerificar(path, jpeg)
       const { error } = await supabase.rpc('enrolar_biometria', {
         p_id_persona: sel,
         p_descriptor: descriptor,
         p_path_storage: `${BUCKET}/${path}`,
       })
       if (error) throw new Error(error.message)
-      toast('ok', 'Biometría enrolada correctamente.')
+      setPreviewUrl(URL.createObjectURL(jpeg))
+      toast('ok', 'Biometría enrolada correctamente: foto confirmada en Storage.')
       setSel('')
       await cargar()
     } catch (e) {
@@ -150,6 +167,12 @@ export function BiometriaScreen() {
             <Button onClick={enrolar} loading={enrolando} className="w-full">
               <Fingerprint className="h-4 w-4" /> Capturar y enrolar
             </Button>
+            {previewUrl && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-center">
+                <img src={previewUrl} alt="Última foto enrolada" className="mx-auto h-24 rounded object-cover" />
+                <p className="mt-1 text-[11px] text-emerald-700">Foto confirmada en Storage.</p>
+              </div>
+            )}
           </div>
         )}
       </Card>

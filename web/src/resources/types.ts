@@ -5,7 +5,7 @@ export interface Opcion {
   label: string
 }
 
-export type FieldType = 'text' | 'number' | 'date' | 'time' | 'email' | 'select' | 'textarea' | 'checkbox'
+export type FieldType = 'text' | 'number' | 'date' | 'time' | 'email' | 'select' | 'textarea' | 'checkbox' | 'timerange'
 
 export interface FieldConfig {
   name: string
@@ -18,11 +18,41 @@ export interface FieldConfig {
   editable?: boolean
   /** Solo se envía en INSERT, no en UPDATE. */
   insertOnly?: boolean
+  /** No se muestra en el formulario de alta — solo aparece al editar. Útil para campos como
+   *  "estado" que deben fijarse automáticamente al crear (ej. regla_acceso siempre ACTIVA). */
+  hideOnInsert?: boolean
+  /** Si es false, el campo es solo de UI (filtro en cascada) y NO se envía en el payload. */
+  persistir?: boolean
+  /** Opciones que dependen del valor actual de OTRO campo del mismo formulario (cascada,
+   *  ej. "Punto de control" según la "Zona" elegida). Se re-evalúa cada vez que cambian los
+   *  valores del formulario. Tiene prioridad sobre `options` si está presente. */
+  opcionesDependientes?: (valores: Record<string, any>) => Promise<Opcion[]> | Opcion[]
+  /** Autocompleta este campo cuando cambia el campo `campo`, solo si el usuario no lo ha
+   *  tocado todavía (ej. sugerir el siguiente nombre de punto de control según la zona). */
+  autoSugerenciaDesde?: { campo: string; calcular: (valorOrigen: any, valores: Record<string, any>) => Promise<string | null> }
+  /** Igual que `opcionesDependientes` pero para un valor derivado (no opciones de select) que
+   *  SIEMPRE se recalcula al cambiar `campo`, incluso si el usuario ya tiene algo escrito aquí.
+   *  Pensado para campos ocultos (persistir: false) que solo condicionan `visibleSi` de otros
+   *  campos (ej. la categoría de la persona elegida, para mostrar/ocultar campos por categoría). */
+  derivarSiempreDesde?: { campo: string; calcular: (valorOrigen: any) => Promise<string | null> }
+  /** Al cambiar este campo, limpia el valor de estos otros (ej. cambiar el filtro de zona
+   *  invalida el punto de control ya elegido). */
+  alCambiarLimpiar?: string[]
+  /** El campo solo se muestra si esta función devuelve true para los valores actuales
+   *  (ej. "Zona padre" solo si el tipo de zona es Parqueadero o Edificio). */
+  visibleSi?: (valores: Record<string, any>) => boolean
+  /** Formatea el valor tecleado en un input de texto (ej. MAC con ":", IP con ".") */
+  formatear?: (valorCrudo: string) => string
+  /** Selección múltiple (lista de checkboxes) en vez de un <select> simple. Al guardar, se
+   *  crea un registro por cada valor seleccionado (ej. vincular varias personas a un mismo
+   *  memorando de una sola vez). Solo tiene efecto en el alta, no en edición. */
+  multiSelect?: boolean
   hint?: string
   placeholder?: string
   colSpan?: 1 | 2 | 3
-  /** Valor por defecto al registrar. */
-  default?: string | number | boolean
+  /** Valor por defecto al registrar. Puede ser una función para valores calculados (ej. un
+   *  código autogenerado distinto cada vez que se abre el formulario). */
+  default?: string | number | boolean | (() => string | number | boolean)
 }
 
 export interface ColumnConfig<Row = any> {
@@ -31,6 +61,9 @@ export interface ColumnConfig<Row = any> {
   render?: (row: Row) => ReactNode
   /** Marca la columna como badge de estado. */
   badge?: boolean
+  /** Valor de texto plano para exportar a CSV (si no está, se usa row[key] o "" para columnas
+   *  con `render` — export a texto y JSX son cosas distintas, no se puede derivar del render). */
+  valorExport?: (row: Row) => string
 }
 
 export interface DetailRow<Row = any> {
@@ -71,10 +104,20 @@ export interface ResourceConfig<Row = any> {
   campos: FieldConfig[]
   /** Filtro fijo aplicado a todas las consultas (ej. tipo_persona=INTERNA). */
   filtroFijo?: Record<string, string>
+  /** Filtros adicionales de columna (dropdowns junto a la barra de búsqueda). Soporta rutas
+   *  con punto para campos embebidos (ej. "categoria.codigo_categoria"). */
+  filtros?: {
+    campo: string
+    label: string
+    opciones: Opcion[] | (() => Promise<Opcion[]>)
+  }[]
   campoEstado?: string
   baja?: BajaConfig
   /** Valores por defecto extra al insertar (además de los `default` por campo). */
   defaultsInsert?: Record<string, unknown>
   /** Columnas que se rellenan automáticamente con el id del usuario autenticado al INSERTAR. */
   autoUsuarioRegistro?: string[]
+  /** Si el usuario tiene alguno de estos permisos, se muestra un botón "Exportar CSV" que
+   *  exporta las filas actualmente filtradas/buscadas (feedback ADM: ADM_BITACORA_EXPORTAR). */
+  exportarConPermiso?: string[]
 }

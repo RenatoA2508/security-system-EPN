@@ -11,7 +11,7 @@ export function ScreenPage() {
   const submodulo = modulo?.submodulos.find((s) => s.key === sub)
 
   if (!modulo || !submodulo) return <Navigate to="/" replace />
-  const permitidoModulo = modulo.codigo === 'MON' ? tiene('CAC_EVENTO_SELECT') || tiene('ADM_PERSONA_SELECT') : modulos.includes(modulo.codigo)
+  const permitidoModulo = modulo.codigo === 'MON' ? tiene('CAC_EVENTO_SELECT') : modulos.includes(modulo.codigo)
   if (!permitidoModulo) return <Navigate to="/" replace />
 
   return (

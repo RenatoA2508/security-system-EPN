@@ -10,8 +10,9 @@ export function HomePage() {
 
   const visible = (m: ModuloDef): boolean => {
     if (m.codigo === 'MON') {
-      // Monitoreo es un módulo de UI (no lo devuelve allowed_modules): visible a supervisión/dirección.
-      return tiene('CAC_EVENTO_SELECT') || tiene('ADM_PERSONA_SELECT')
+      // Monitoreo es un módulo de UI (no lo devuelve allowed_modules): visible solo a quien
+      // supervisa eventos de acceso (CAC). ADMINISTRADOR_SISTEMA no lo ve (docs/Req_Front, eval ADM).
+      return tiene('CAC_EVENTO_SELECT')
     }
     return modulos.includes(m.codigo)
   }
