@@ -6,7 +6,16 @@
  *
  * Solo aplica a personas INTERNAS (§D20). Los externos NUNCA tienen biometría.
  */
-import * as faceapi from '@vladmandic/face-api'
+// @vladmandic/face-api es una dependencia pesada usada solo por GPI (enrolamiento) y el
+// guardia (identificación). Se importa de forma dinámica para que quede en su propio chunk,
+// no en el bundle principal que descarga cualquier usuario (ADM/GPE/PCO nunca la necesitan).
+type FaceApiModule = typeof import('@vladmandic/face-api')
+let faceapiMod: FaceApiModule | null = null
+
+async function cargarLibreria(): Promise<FaceApiModule> {
+  if (!faceapiMod) faceapiMod = await import('@vladmandic/face-api')
+  return faceapiMod
+}
 
 // Mismos pesos que el banco de pruebas; se cargan por CDN (requiere internet).
 const MODELS_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model'
@@ -18,11 +27,12 @@ export function modelosListos(): boolean {
   return listo
 }
 
-/** Carga (una sola vez) los modelos necesarios para detección + descriptor. */
+/** Carga (una sola vez) la librería + los modelos necesarios para detección + descriptor. */
 export function cargarModelos(): Promise<void> {
   if (listo) return Promise.resolve()
   if (!cargando) {
     cargando = (async () => {
+      const faceapi = await cargarLibreria()
       await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS_URL)
       await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS_URL)
       await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS_URL)
@@ -35,6 +45,7 @@ export function cargarModelos(): Promise<void> {
 /** Calcula el descriptor (128 floats) del rostro visible en un <video>. */
 export async function descriptorDesdeVideo(video: HTMLVideoElement): Promise<number[]> {
   await cargarModelos()
+  const faceapi = await cargarLibreria()
   const det = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
     .withFaceLandmarks()

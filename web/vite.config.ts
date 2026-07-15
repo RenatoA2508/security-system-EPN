@@ -8,4 +8,16 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, './src') },
   },
   server: { port: 5173 },
+  build: {
+    rollupOptions: {
+      output: {
+        // Vendors grandes en su propio chunk: cambian poco entre despliegues, así el navegador
+        // los cachea aparte del código de la app (que sí cambia seguido).
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+        },
+      },
+    },
+  },
 })
