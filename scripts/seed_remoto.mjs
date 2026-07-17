@@ -44,14 +44,17 @@ const PUNTO_ID = '00000000-0000-0000-0000-000000000006';
 
 // Responsables operativos: un usuario por modulo, para poder ingresar al
 // sistema y operar/probar cada modulo. Todos INTERNA, categoria ADMINISTRATIVO.
-// ⚠️ Las cedulas son PLACEHOLDER (persona.cedula es NOT NULL): ADM debe
-// reemplazarlas por las reales. UUIDs fijos para que el seed sea idempotente.
+// ⚠️ Las cedulas son FICTICIAS pero VALIDAS (persona.cedula es NOT NULL y desde
+// 20260716010200 hay un CHECK con el algoritmo del Registro Civil): son de
+// Pichincha y traen el digito verificador correcto, pero no corresponden a la
+// cedula real de nadie. ADM debe reemplazarlas por las reales.
+// UUIDs fijos para que el seed sea idempotente.
 const RESPONSABLES = [
-  { persona: '00000000-0000-0000-0000-0000000000a1', email: 'gary.defas@epn.edu.ec',     usuario: 'gary.defas',     nombres: 'Gary',      apellidos: 'Defas',      cedula: '9999999990', rol: 'DIRECTOR_ADMINISTRATIVO' },
-  { persona: '00000000-0000-0000-0000-0000000000a2', email: 'lenin.amangandi@epn.edu.ec', usuario: 'lenin.amangandi', nombres: 'Lenin',   apellidos: 'Amangandi',  cedula: '9999999991', rol: 'RESPONSABLE_PERSONAL_INTERNO' },
-  { persona: '00000000-0000-0000-0000-0000000000a3', email: 'joel.velastegui@epn.edu.ec', usuario: 'joel.velastegui', nombres: 'Joel',    apellidos: 'Velastegui', cedula: '9999999992', rol: 'RESPONSABLE_PERSONAL_EXTERNO' },
-  { persona: '00000000-0000-0000-0000-0000000000a4', email: 'heidy.tenelema@epn.edu.ec',  usuario: 'heidy.tenelema',  nombres: 'Heidy',   apellidos: 'Tenelema',   cedula: '9999999993', rol: 'RESPONSABLE_PUNTOS_CONTROL' },
-  { persona: '00000000-0000-0000-0000-0000000000a5', email: 'carlos.chavez03@epn.edu.ec', usuario: 'carlos.chavez03', nombres: 'Sebastián', apellidos: 'Chávez',   cedula: '9999999994', rol: 'RESPONSABLE_CONTROL_ACCESOS' },
+  { persona: '00000000-0000-0000-0000-0000000000a1', email: 'gary.defas@epn.edu.ec',     usuario: 'gary.defas',     nombres: 'Gary',      apellidos: 'Defas',      cedula: '1750000109', rol: 'DIRECTOR_ADMINISTRATIVO' },
+  { persona: '00000000-0000-0000-0000-0000000000a2', email: 'lenin.amangandi@epn.edu.ec', usuario: 'lenin.amangandi', nombres: 'Lenin',   apellidos: 'Amangandi',  cedula: '1750000117', rol: 'RESPONSABLE_PERSONAL_INTERNO' },
+  { persona: '00000000-0000-0000-0000-0000000000a3', email: 'joel.velastegui@epn.edu.ec', usuario: 'joel.velastegui', nombres: 'Joel',    apellidos: 'Velastegui', cedula: '1750000125', rol: 'RESPONSABLE_PERSONAL_EXTERNO' },
+  { persona: '00000000-0000-0000-0000-0000000000a4', email: 'heidy.tenelema@epn.edu.ec',  usuario: 'heidy.tenelema',  nombres: 'Heidy',   apellidos: 'Tenelema',   cedula: '1750000133', rol: 'RESPONSABLE_PUNTOS_CONTROL' },
+  { persona: '00000000-0000-0000-0000-0000000000a5', email: 'carlos.chavez03@epn.edu.ec', usuario: 'carlos.chavez03', nombres: 'Sebastián', apellidos: 'Chávez',   cedula: '1750000141', rol: 'RESPONSABLE_CONTROL_ACCESOS' },
 ];
 
 const restHeaders = {
@@ -149,12 +152,12 @@ async function main() {
 
   await upsertPersona({
     id_persona: ADMIN_PERSONA_ID, tipo_persona: 'INTERNA', id_categoria: idCatAdministrativo,
-    cedula: '9999999999', nombres: 'Administrador', apellidos: 'del Sistema',
+    cedula: '1750000000', nombres: 'Administrador', apellidos: 'del Sistema',
     correo: 'admin@epn.edu.ec', estado: 'ACTIVO',
   });
   await upsertPersona({
     id_persona: GUARDIA_PERSONA_ID, tipo_persona: 'INTERNA', id_categoria: idCatTrabajador,
-    cedula: '9999999998', nombres: 'Guardia', apellidos: 'Demo',
+    cedula: '1750000018', nombres: 'Guardia', apellidos: 'Demo',
     correo: 'guardia.demo@epn.edu.ec', estado: 'ACTIVO',
   });
 
@@ -217,7 +220,7 @@ async function main() {
   for (const r of RESPONSABLES) {
     console.log(`  ${r.email} / ${PASSWORD_ARRANQUE}  (${r.rol})`);
   }
-  console.log('\n⚠️  Las cedulas de los responsables son PLACEHOLDER (9999999990-4); reemplazar por las reales desde ADM.');
+  console.log('\n⚠️  Las cedulas de los responsables son ficticias (1750000109-141), validas pero no reales; reemplazar desde ADM.');
 }
 
 main().catch((e) => { console.error('\nFALLO:', e.message); process.exit(1); });

@@ -30,7 +30,7 @@ begin
   insert into public.persona (
     id_persona, tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado
   ) values (
-    v_admin_persona_id, 'INTERNA', v_id_categoria_admin, '9999999999',
+    v_admin_persona_id, 'INTERNA', v_id_categoria_admin, '1750000000',
     'Administrador', 'del Sistema', 'admin@epn.edu.ec', 'ACTIVO'
   )
   on conflict (id_persona) do nothing;
@@ -93,7 +93,7 @@ begin
   insert into public.persona (
     id_persona, tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado
   ) values (
-    v_guardia_persona_id, 'INTERNA', v_id_categoria_trabajador, '9999999998',
+    v_guardia_persona_id, 'INTERNA', v_id_categoria_trabajador, '1750000018',
     'Guardia', 'Demo', 'guardia.demo@epn.edu.ec', 'ACTIVO'
   )
   on conflict (id_persona) do nothing;

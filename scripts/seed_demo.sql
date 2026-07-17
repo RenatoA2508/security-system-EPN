@@ -31,7 +31,7 @@ on conflict (id_regla_acceso) do nothing;
 -- Docente demo (INTERNA) con biometria vigente: valida-biometria devuelve
 -- match:true y el ingreso peatonal AUTOMATICA queda AUTORIZADO.
 insert into public.persona (id_persona, tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado)
-select '00000000-0000-0000-0000-0000000000da', 'INTERNA', id_categoria, '1712345678', 'Docente', 'Demo', 'docente.demo@epn.edu.ec', 'ACTIVO'
+select '00000000-0000-0000-0000-0000000000da', 'INTERNA', id_categoria, '1750000208', 'Docente', 'Demo', 'docente.demo@epn.edu.ec', 'ACTIVO'
 from public.categoria_persona where codigo_categoria = 'DOCENTE'
 on conflict (id_persona) do nothing;
 
@@ -42,7 +42,7 @@ where not exists (select 1 from public.registro_biometrico where id_persona = '0
 -- Visitante demo (EXTERNA) con autorizacion de visita diaria de HOY: valida la
 -- vía MANUAL/cedula (§D20) del guardia. id_usuario_registro = el guardia demo.
 insert into public.persona (id_persona, tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado)
-select '00000000-0000-0000-0000-0000000000db', 'EXTERNA', id_categoria, '1798765432', 'Visitante', 'Demo', 'visita.demo@example.com', 'ACTIVO'
+select '00000000-0000-0000-0000-0000000000db', 'EXTERNA', id_categoria, '1750000067', 'Visitante', 'Demo', 'visita.demo@example.com', 'ACTIVO'
 from public.categoria_persona where codigo_categoria = 'VISITANTE'
 on conflict (id_persona) do nothing;
 
