@@ -54,7 +54,20 @@ function useFiltroOptions(filtros: ResourceConfig['filtros']) {
   return opts
 }
 
-const leerRuta = (r: Row, ruta: string) => ruta.split('.').reduce<any>((o, k) => o?.[k], r)
+/**
+ * Lee una ruta con puntos ("persona.cedula") sobre una fila.
+ *
+ * Atraviesa también las relaciones de muchos (PostgREST las embebe como array): en
+ * "relaciones.persona.apellidos", `relaciones` es un array y se recorre elemento a elemento,
+ * devolviendo la lista de valores. Sin esto la búsqueda por esa ruta no fallaba — devolvía
+ * undefined en silencio, que es peor.
+ */
+const leerRuta = (r: Row, ruta: string): any =>
+  ruta.split('.').reduce<any>((o, k) => {
+    if (o == null) return undefined
+    if (Array.isArray(o)) return o.map((x) => x?.[k]).filter((x) => x != null)
+    return o[k]
+  }, r)
 
 export function ResourceScreen({ config }: { config: ResourceConfig }) {
   const { tiene } = useAuth()
@@ -329,11 +342,21 @@ function RecordForm({
   const [error, setError] = useState<string | null>(null)
   const [dinamicas, setDinamicas] = useState<Record<string, Opcion[]>>({})
 
+  /** Error de formato por campo, mostrado bajo el input mientras se escribe. */
+  const [erroresCampo, setErroresCampo] = useState<Record<string, string | null>>({})
+
   const set = (name: string, v: unknown) => {
     setValores((s) => {
       const next = { ...s, [name]: v }
       const campo = config.campos.find((c) => c.name === name)
       for (const otro of campo?.alCambiarLimpiar ?? []) next[otro] = ''
+
+      // Validar en vivo contra el formulario COMPLETO (next, no s): hay reglas que dependen de
+      // otro campo, como el valor de un parámetro según su tipo_dato.
+      if (campo?.validar) {
+        const texto = v == null ? '' : String(v)
+        setErroresCampo((e) => ({ ...e, [name]: texto === '' ? null : campo.validar!(texto, next) }))
+      }
       return next
     })
   }
@@ -415,6 +438,8 @@ function RecordForm({
         if (v != null && v !== '') {
           const problema = c.validar(String(v), valores)
           if (problema) {
+            // El banner dice qué pasó; el error bajo el campo dice dónde.
+            setErroresCampo((e) => ({ ...e, [c.name]: problema }))
             setError(`${c.label}: ${problema}`)
             return
           }
@@ -515,7 +540,13 @@ function RecordForm({
                   {c.label}
                 </label>
               ) : (
-                <Field label={c.label} required={c.required && !disabled} hint={c.hint}>
+                <Field
+                  label={c.label}
+                  required={c.required && !disabled}
+                  hint={c.hint}
+                  ayuda={c.ayuda}
+                  error={erroresCampo[c.name]}
+                >
                   {c.multiSelect && !esEdicion ? (
                     <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
                       {(opciones[c.name] ?? []).length === 0 && <p className="p-1 text-xs text-slate-400">Sin opciones disponibles.</p>}

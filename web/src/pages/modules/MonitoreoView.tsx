@@ -11,6 +11,11 @@ interface VehiculoDentro {
   horas_dentro: number | null
   limite_horas_aplicable: number | null
   tipo_persona_conductor: string | null
+  // La vista traía solo el tipo (Interna/Externa): la columna decía "Conductor" pero no decía
+  // quién era. Añadidos en la migración vista_vehiculos_dentro_con_conductor.
+  nombres_conductor: string | null
+  apellidos_conductor: string | null
+  cedula_conductor: string | null
   fecha_ingreso: string | null
 }
 interface EventoReciente {
@@ -94,7 +99,19 @@ export function MonitoreoView() {
                     return (
                       <tr key={v.id_vehiculo} className="border-b border-slate-100 last:border-0">
                         <td className="px-4 py-2 font-medium text-navy">{v.placa ? formatearPlaca(v.placa) : '—'}</td>
-                        <td className="px-4 py-2"><Badge value={v.tipo_persona_conductor ?? '—'} /></td>
+                        <td className="px-4 py-2">
+                          {v.apellidos_conductor ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-medium text-navy">{`${v.apellidos_conductor} ${v.nombres_conductor ?? ''}`.trim()}</span>
+                              <span className="flex items-center gap-1.5 text-xs text-ink-soft">
+                                {v.cedula_conductor}
+                                <Badge value={v.tipo_persona_conductor} />
+                              </span>
+                            </div>
+                          ) : (
+                            <Badge value={v.tipo_persona_conductor} />
+                          )}
+                        </td>
                         <td className={'px-4 py-2 ' + (excede ? 'font-semibold text-red' : '')}>{v.horas_dentro?.toFixed(1) ?? '—'} h</td>
                         <td className="px-4 py-2 text-ink-soft">{v.limite_horas_aplicable ?? '—'} h</td>
                       </tr>

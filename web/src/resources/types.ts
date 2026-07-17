@@ -58,6 +58,9 @@ export interface FieldConfig {
    *  memorando de una sola vez). Solo tiene efecto en el alta, no en edición. */
   multiSelect?: boolean
   hint?: string
+  /** Explicación del formato esperado, en la ventanita de la "i" junto a la etiqueta. Para las
+   *  reglas que no caben en un `hint` de una línea (ej. qué valida una cédula y por qué). */
+  ayuda?: string
   placeholder?: string
   colSpan?: 1 | 2 | 3
   /** Valor por defecto al registrar. Puede ser una función para valores calculados (ej. un

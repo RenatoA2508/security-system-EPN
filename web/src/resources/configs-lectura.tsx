@@ -3,6 +3,7 @@ import { fmtFecha, fmtFechaHora } from '../lib/format'
 import { formatearPlaca } from '../lib/validacion'
 import { Badge } from '../components/ui'
 import { opcionesCatalogo } from './opciones'
+import { humanizar } from '../lib/catalogos'
 
 const d = (v: any) => (v == null || v === '' ? '—' : String(v))
 
@@ -57,14 +58,14 @@ export const cfgBiometriaADM: ResourceConfig = {
   columnas: [
     { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.apellidos} ${r.persona.nombres}` : '—') },
     { key: 'cedula', label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-    { key: 'tipo_dato', label: 'Tipo de dato' },
+    { key: 'tipo_dato', label: 'Tipo de dato', render: (r) => humanizar(r.tipo_dato) },
     { key: 'vigente', label: 'Vigente', render: (r) => (r.vigente ? <Badge value="ACTIVA" /> : <Badge value="INACTIVO" />) },
     { key: 'fecha_registro', label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campoTituloDetalle: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : 'Registro biométrico'),
   detalle: [
     { label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-    { label: 'Tipo de dato', render: (r) => r.tipo_dato },
+    { label: 'Tipo de dato', render: (r) => humanizar(r.tipo_dato) },
     { label: 'Vigente', render: (r) => (r.vigente ? 'Sí' : 'No') },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
@@ -80,7 +81,7 @@ export const cfgBitacora: ResourceConfig = {
   orderBy: { columna: 'fecha_hora', ascendente: false },
   permisos: { select: ['ADM_BITACORA_SELECT'] },
   exportarConPermiso: ['ADM_BITACORA_EXPORTAR'],
-  buscarEn: ['modulo', 'entidad_afectada', 'accion', 'descripcion', 'ip_origen', 'fecha_hora'],
+  buscarEn: ['modulo', 'entidad_afectada', 'accion', 'descripcion', 'fecha_hora'],
   filtros: [
     { campo: 'modulo', label: 'Filtrar por módulo', opciones: opcionesCatalogo(['ADM', 'GPI', 'GPE', 'PCO', 'CAC']) },
     { campo: 'accion', label: 'Filtrar por acción', opciones: opcionesCatalogo(['INSERT', 'UPDATE', 'DELETE']) },
@@ -93,7 +94,6 @@ export const cfgBitacora: ResourceConfig = {
     { key: 'accion', label: 'Acción' },
     { key: 'resultado', label: 'Resultado', badge: true },
     { key: 'usuario', label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—', valorExport: (r) => r.usuario?.correo_electronico ?? '' },
-    { key: 'ip_origen', label: 'IP' },
   ],
   campoTituloDetalle: (r) => `${r.accion} · ${r.entidad_afectada}`,
   campoSubtituloDetalle: (r) => <><Badge value={r.resultado} /> · {fmtFechaHora(r.fecha_hora)}</>,
@@ -102,7 +102,6 @@ export const cfgBitacora: ResourceConfig = {
     { label: 'Entidad', render: (r) => r.entidad_afectada },
     { label: 'ID entidad', render: (r) => d(r.id_entidad_afectada) },
     { label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—' },
-    { label: 'IP', render: (r) => d(r.ip_origen) },
     { label: 'Descripción', render: (r) => d(r.descripcion) },
     { label: 'Valor anterior', render: (r) => <pre className="whitespace-pre-wrap break-all text-xs">{r.valor_anterior ? JSON.stringify(r.valor_anterior, null, 2) : '—'}</pre> },
     { label: 'Valor nuevo', render: (r) => <pre className="whitespace-pre-wrap break-all text-xs">{r.valor_nuevo ? JSON.stringify(r.valor_nuevo, null, 2) : '—'}</pre> },
@@ -129,13 +128,12 @@ export const cfgSesion: ResourceConfig = {
   select: '*, usuario:usuario_sistema(correo_electronico)',
   orderBy: { columna: 'fecha_inicio', ascendente: false },
   permisos: { select: ['ADM_USUARIO_SELECT'] },
-  buscarEn: ['ip_origen', 'usuario.correo_electronico'],
+  buscarEn: ['usuario.correo_electronico'],
   columnas: [
     { key: 'usuario', label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—' },
     { key: 'fecha_inicio', label: 'Inicio', render: (r) => fmtFechaHora(r.fecha_inicio) },
     { key: 'fecha_cierre', label: 'Cierre', render: (r) => fmtFechaHora(r.fecha_cierre) },
     { key: 'duracion', label: 'Duración', render: (r) => duracionSesion(r) },
-    { key: 'ip_origen', label: 'IP', render: (r) => d(r.ip_origen) },
     { key: 'estado_sesion', label: 'Estado', badge: true },
   ],
   // Separa las sesiones vivas del histórico: era imposible saber cuáles seguían abiertas.
@@ -157,7 +155,6 @@ export const cfgSesion: ResourceConfig = {
     { label: 'Expiración', render: (r) => fmtFechaHora(r.fecha_expiracion) },
     { label: 'Cierre', render: (r) => fmtFechaHora(r.fecha_cierre) },
     { label: 'Duración', render: (r) => duracionSesion(r) },
-    { label: 'IP', render: (r) => d(r.ip_origen) },
     { label: 'Estado', render: (r) => <Badge value={r.estado_sesion} /> },
   ],
   campos: [],
@@ -195,7 +192,7 @@ export function cfgEventoAcceso(): ResourceConfig {
       { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? '—' },
       { label: 'Vehículo', render: (r) => (r.vehiculo?.placa ? formatearPlaca(r.vehiculo.placa) : '—') },
       { label: 'Conductor', render: (r) => (r.es_conductor ? 'Sí' : 'No') },
-      { label: 'Origen', render: (r) => r.origen_registro },
+      { label: 'Origen', render: (r) => humanizar(r.origen_registro) },
       { label: 'Motivo', render: (r) => d(r.motivo_resultado) },
     ],
     campos: [],

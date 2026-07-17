@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { KeyRound, Lock, Search, ShieldCheck, UserX } from 'lucide-react'
+import { KeyRound, Lock, Search, ShieldCheck, UserPlus, UserX } from 'lucide-react'
 import { supabase, mensajeError } from '../../lib/supabase'
 import { useAuth } from '../../auth/AuthProvider'
 import { fmtFechaHora } from '../../lib/format'
 import {
-  Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Modal, SidePanel, useToast,
+  Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input, Modal, Select,
+  SidePanel, useToast,
 } from '../../components/ui'
+import { ROL_LABEL, humanizar } from '../../lib/catalogos'
+import { validarCorreoInstitucional, validarNombreUsuario } from '../../lib/validacion'
 
 interface Usuario {
   id_usuario: string
@@ -25,7 +28,7 @@ interface Usuario {
  * ni siquiera un UPDATE de esta tabla, es la Auth Admin API vía Edge Function.
  */
 export function UsuariosScreen() {
-  const { tiene } = useAuth()
+  const { tiene, perfil } = useAuth()
   const toast = useToast()
   const puedeLeer = tiene('ADM_USUARIO_SELECT')
 
@@ -36,6 +39,7 @@ export function UsuariosScreen() {
   const [sel, setSel] = useState<Usuario | null>(null)
   const [accionando, setAccionando] = useState(false)
   const [passwordModal, setPasswordModal] = useState<string | null>(null)
+  const [creando, setCreando] = useState(false)
 
   const cargar = async () => {
     setCargando(true)
@@ -76,22 +80,27 @@ export function UsuariosScreen() {
     await cargar()
   }
 
-  const resetearPassword = async () => {
-    if (!sel) return
-    setAccionando(true)
+  /** Llama a una Edge Function con el JWT del usuario actual (ella verifica el permiso granular). */
+  const llamarFuncion = async (nombre: string, cuerpo: unknown) => {
     const { data: sess } = await supabase.auth.getSession()
-    const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/resetear-password-usuario`, {
+    const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${nombre}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         apikey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
         Authorization: `Bearer ${sess.session?.access_token}`,
       },
-      body: JSON.stringify({ id_usuario: sel.id_usuario }),
+      body: JSON.stringify(cuerpo),
     })
-    const json = await resp.json()
+    return { ok: resp.ok, json: await resp.json() }
+  }
+
+  const resetearPassword = async () => {
+    if (!sel) return
+    setAccionando(true)
+    const { ok, json } = await llamarFuncion('resetear-password-usuario', { id_usuario: sel.id_usuario })
     setAccionando(false)
-    if (!resp.ok) {
+    if (!ok) {
       toast('error', json.error ?? 'No se pudo restablecer la contraseña.')
       return
     }
@@ -99,20 +108,44 @@ export function UsuariosScreen() {
     await cargar()
   }
 
+  const esMiCuenta = !!sel && sel.id_usuario === perfil?.id_usuario
+
   if (!puedeLeer) return <EmptyState title="No tienes acceso a usuarios" hint="Requiere ADM_USUARIO_SELECT." />
 
   return (
     <div>
       <ErrorBanner message={error} />
-      <div className="relative mb-3 max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-        <input
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-          placeholder="Buscar por usuario, correo, cédula..."
-          className="epn-input pl-9"
-        />
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative max-w-md flex-1">
+          <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+          <input
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por usuario, correo, cédula..."
+            className="epn-input pl-9"
+          />
+        </div>
+        {/* Antes no había forma de crear una cuenta desde el sistema: había que sembrarla con un
+            script. Necesario cuando un encargado de módulo deja la EPN y entra su reemplazo. */}
+        {tiene('ADM_USUARIO_INSERT') && (
+          <Button onClick={() => setCreando(true)}>
+            <UserPlus className="h-4 w-4" />
+            Crear usuario
+          </Button>
+        )}
       </div>
+
+      {creando && (
+        <CrearUsuarioPanel
+          onCerrar={() => setCreando(false)}
+          onCreado={async (password) => {
+            setCreando(false)
+            setPasswordModal(password)
+            await cargar()
+          }}
+          llamarFuncion={llamarFuncion}
+        />
+      )}
       <Card className="overflow-hidden">
         {cargando ? (
           <CenterSpinner label="Cargando usuarios..." />
@@ -160,7 +193,16 @@ export function UsuariosScreen() {
               <Row label="Intentos fallidos" val={String(sel.intentos_fallidos)} />
             </dl>
             <div className="space-y-2">
-              {tiene('ADM_USUARIO_BLOQUEAR') && sel.estado_usuario === 'ACTIVO' && (
+              {/* La BD ya lo impide (trigger proteger_administracion): esto solo evita que el
+                  administrador descubra la regla chocándose con un error. La guarda de verdad no
+                  puede vivir aquí — la API REST está expuesta y no pasa por esta pantalla. */}
+              {esMiCuenta && (
+                <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                  Es tu propia cuenta: no puedes bloquearla ni darla de baja. Si necesitas hacerlo, pídeselo a
+                  otro administrador — así el sistema nunca se queda sin nadie que pueda entrar.
+                </p>
+              )}
+              {tiene('ADM_USUARIO_BLOQUEAR') && sel.estado_usuario === 'ACTIVO' && !esMiCuenta && (
                 <Button variant="danger" className="w-full" loading={accionando} onClick={() => cambiarEstado('BLOQUEADO')}>
                   <Lock className="h-4 w-4" /> Bloquear usuario
                 </Button>
@@ -175,7 +217,7 @@ export function UsuariosScreen() {
                   <ShieldCheck className="h-4 w-4" /> Activar usuario
                 </Button>
               )}
-              {tiene('ADM_USUARIO_DAR_BAJA') && sel.estado_usuario !== 'DADO_DE_BAJA' && (
+              {tiene('ADM_USUARIO_DAR_BAJA') && sel.estado_usuario !== 'DADO_DE_BAJA' && !esMiCuenta && (
                 <Button variant="danger" className="w-full" loading={accionando} onClick={() => cambiarEstado('DADO_DE_BAJA')}>
                   <UserX className="h-4 w-4" /> Dar de baja
                 </Button>
@@ -190,7 +232,7 @@ export function UsuariosScreen() {
         )}
       </SidePanel>
 
-      <Modal open={!!passwordModal} onClose={() => setPasswordModal(null)} title="Contraseña restablecida">
+      <Modal open={!!passwordModal} onClose={() => setPasswordModal(null)} title="Contraseña temporal">
         <p className="mb-3 text-sm text-ink-soft">
           Comunica esta contraseña temporal al usuario por un canal seguro. Deberá cambiarla en su próximo inicio de sesión.
         </p>
@@ -206,5 +248,186 @@ function Row({ label, val }: { label: string; val: string }) {
       <dt className="text-xs font-medium text-ink-soft">{label}</dt>
       <dd className="col-span-2 text-sm text-navy">{val}</dd>
     </div>
+  )
+}
+
+interface PersonaSinCuenta {
+  id_persona: string
+  nombres: string
+  apellidos: string
+  cedula: string
+  correo: string | null
+}
+
+/**
+ * Alta de una cuenta sobre una persona interna ya registrada.
+ *
+ * La cuenta se crea en la Edge Function `crear-usuario-sistema` (Auth Admin API): auth.users está
+ * fuera del alcance de RLS, así que no hay forma de hacerlo con un INSERT desde aquí.
+ *
+ * Solo lista personas INTERNAS activas que aún no tengan cuenta: `persona` es la maestra única
+ * (CLAUDE.md) y el alta de personas es de GPI, no de ADM.
+ */
+function CrearUsuarioPanel({
+  onCerrar,
+  onCreado,
+  llamarFuncion,
+}: {
+  onCerrar: () => void
+  onCreado: (password: string) => void
+  llamarFuncion: (nombre: string, cuerpo: unknown) => Promise<{ ok: boolean; json: any }>
+}) {
+  const toast = useToast()
+  const [personas, setPersonas] = useState<PersonaSinCuenta[]>([])
+  const [roles, setRoles] = useState<{ id_rol: string; nombre_rol: string }[]>([])
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [idPersona, setIdPersona] = useState('')
+  const [nombreUsuario, setNombreUsuario] = useState('')
+  const [correo, setCorreo] = useState('')
+  const [idRol, setIdRol] = useState('')
+  const [usuarioTocado, setUsuarioTocado] = useState(false)
+
+  useEffect(() => {
+    ;(async () => {
+      const [personasRes, rolesRes, usuariosRes] = await Promise.all([
+        supabase.from('persona').select('id_persona, nombres, apellidos, cedula, correo')
+          .eq('tipo_persona', 'INTERNA').eq('estado', 'ACTIVO').order('apellidos'),
+        supabase.from('rol').select('id_rol, nombre_rol').eq('estado_rol', 'ACTIVO').order('nombre_rol'),
+        supabase.from('usuario_sistema').select('id_persona'),
+      ])
+      if (personasRes.error) setError(mensajeError(personasRes.error))
+      const conCuenta = new Set(((usuariosRes.data as { id_persona: string }[] | null) ?? []).map((u) => u.id_persona))
+      setPersonas(((personasRes.data as PersonaSinCuenta[] | null) ?? []).filter((p) => !conCuenta.has(p.id_persona)))
+      setRoles((rolesRes.data as { id_rol: string; nombre_rol: string }[] | null) ?? [])
+      setCargando(false)
+    })()
+  }, [])
+
+  /** Al elegir la persona se propone usuario y correo, pero se pueden corregir. */
+  const alElegirPersona = (id: string) => {
+    setIdPersona(id)
+    const p = personas.find((x) => x.id_persona === id)
+    if (!p) return
+    if (p.correo) setCorreo(p.correo)
+    if (!usuarioTocado) {
+      const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      const nombre = sinTildes(p.nombres.trim().split(/\s+/)[0] ?? '').toLowerCase()
+      const apellido = sinTildes(p.apellidos.trim().split(/\s+/)[0] ?? '').toLowerCase()
+      setNombreUsuario(`${nombre}.${apellido}`.replace(/[^a-z0-9._-]/g, ''))
+    }
+  }
+
+  const errorUsuario = nombreUsuario ? validarNombreUsuario(nombreUsuario) : null
+  const errorCorreo = correo ? validarCorreoInstitucional(correo) : null
+  const listo = idPersona && nombreUsuario && correo && idRol && !errorUsuario && !errorCorreo
+
+  const crear = async () => {
+    setGuardando(true)
+    setError(null)
+    const { ok, json } = await llamarFuncion('crear-usuario-sistema', {
+      id_persona: idPersona,
+      nombre_usuario: nombreUsuario,
+      correo,
+      id_rol: idRol,
+    })
+    setGuardando(false)
+    if (!ok) {
+      setError(json.error ?? 'No se pudo crear el usuario.')
+      return
+    }
+    toast('ok', `Cuenta "${json.nombre_usuario}" creada para ${json.persona}.`)
+    onCreado(json.password_temporal)
+  }
+
+  return (
+    <Card className="mb-4 p-6">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-semibold text-navy">Crear usuario del sistema</h3>
+          <p className="mt-0.5 text-sm text-ink-soft">
+            La cuenta se crea sobre una persona interna ya registrada. Si no aparece en la lista, regístrala
+            primero en Personal interno (GPI) o comprueba que no tenga ya una cuenta.
+          </p>
+        </div>
+        <Button variant="ghost" onClick={onCerrar}>Cancelar</Button>
+      </div>
+
+      <ErrorBanner message={error} />
+
+      {cargando ? (
+        <CenterSpinner label="Cargando personas..." />
+      ) : personas.length === 0 ? (
+        <EmptyState
+          title="No hay personas disponibles"
+          hint="Todas las personas internas activas ya tienen cuenta. Registra una nueva persona en el módulo GPI."
+        />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field label="Persona" required htmlFor="alta-persona">
+              <Select
+                id="alta-persona"
+                value={idPersona}
+                onChange={(e) => alElegirPersona(e.target.value)}
+                placeholder="— Seleccionar —"
+                options={personas.map((p) => ({ value: p.id_persona, label: `${p.apellidos} ${p.nombres} · ${p.cedula}` }))}
+              />
+            </Field>
+          </div>
+
+          <Field
+            label="Nombre de usuario"
+            required
+            htmlFor="alta-usuario"
+            error={errorUsuario}
+            ayuda="Solo minúsculas, dígitos, punto, guion y guion bajo, entre 3 y 50 caracteres. Se propone nombre.apellido a partir de la persona elegida, pero puedes cambiarlo."
+          >
+            <Input
+              id="alta-usuario"
+              value={nombreUsuario}
+              onChange={(e) => { setUsuarioTocado(true); setNombreUsuario(e.target.value.toLowerCase()) }}
+              placeholder="nombre.apellido"
+            />
+          </Field>
+
+          <Field
+            label="Correo institucional"
+            required
+            htmlFor="alta-correo"
+            error={errorCorreo}
+            ayuda="Debe ser una dirección de la Politécnica: @epn.edu.ec (o un subdominio) o @cec.edu.ec. Es el correo con el que la persona iniciará sesión."
+          >
+            <Input id="alta-correo" type="email" value={correo} onChange={(e) => setCorreo(e.target.value.toLowerCase())} placeholder="nombre.apellido@epn.edu.ec" />
+          </Field>
+
+          <div className="sm:col-span-2">
+            <Field
+              label="Rol"
+              required
+              htmlFor="alta-rol"
+              ayuda="Define qué módulos y acciones podrá usar. Un usuario sin rol no tiene ningún permiso y no vería nada al entrar."
+            >
+              <Select
+                id="alta-rol"
+                value={idRol}
+                onChange={(e) => setIdRol(e.target.value)}
+                placeholder="— Seleccionar —"
+                options={roles.map((r) => ({ value: r.id_rol, label: ROL_LABEL[r.nombre_rol] ?? humanizar(r.nombre_rol) }))}
+              />
+            </Field>
+          </div>
+
+          <div className="sm:col-span-2 flex items-center gap-3 pt-1">
+            <Button onClick={crear} loading={guardando} disabled={!listo}>Crear usuario</Button>
+            <span className="text-xs text-ink-soft">
+              Se generará una contraseña temporal que deberás entregarle; el sistema le exigirá cambiarla al entrar.
+            </span>
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }

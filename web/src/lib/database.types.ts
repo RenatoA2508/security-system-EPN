@@ -422,7 +422,7 @@ export type Database = {
       }
       memorando: {
         Row: {
-          dependencia_autorizada: string
+          dependencia_autorizada: string | null
           estado_memorando: string
           fecha_fin: string
           fecha_inicio: string
@@ -433,7 +433,7 @@ export type Database = {
           numero_memorando: string
         }
         Insert: {
-          dependencia_autorizada: string
+          dependencia_autorizada?: string | null
           estado_memorando?: string
           fecha_fin: string
           fecha_inicio: string
@@ -444,7 +444,7 @@ export type Database = {
           numero_memorando: string
         }
         Update: {
-          dependencia_autorizada?: string
+          dependencia_autorizada?: string | null
           estado_memorando?: string
           fecha_fin?: string
           fecha_inicio?: string
@@ -550,7 +550,8 @@ export type Database = {
           apellidos: string
           cedula: string
           codigo_unico: string | null
-          correo: string
+          correo: string | null
+          correo_respaldo: string | null
           detalle_estado: string | null
           direccion_domicilio: string | null
           estado: string
@@ -570,7 +571,8 @@ export type Database = {
           apellidos: string
           cedula: string
           codigo_unico?: string | null
-          correo: string
+          correo?: string | null
+          correo_respaldo?: string | null
           detalle_estado?: string | null
           direccion_domicilio?: string | null
           estado?: string
@@ -590,7 +592,8 @@ export type Database = {
           apellidos?: string
           cedula?: string
           codigo_unico?: string | null
-          correo?: string
+          correo?: string | null
+          correo_respaldo?: string | null
           detalle_estado?: string | null
           direccion_domicilio?: string | null
           estado?: string
@@ -1180,6 +1183,8 @@ export type Database = {
     Views: {
       vista_vehiculos_dentro: {
         Row: {
+          apellidos_conductor: string | null
+          cedula_conductor: string | null
           fecha_ingreso: string | null
           horas_dentro: number | null
           id_evento_ingreso: string | null
@@ -1188,6 +1193,7 @@ export type Database = {
           id_vehiculo: string | null
           limite_abandono_horas: number | null
           limite_horas_aplicable: number | null
+          nombres_conductor: string | null
           placa: string | null
           tipo_persona_conductor: string | null
         }
@@ -1229,21 +1235,6 @@ export type Database = {
     }
     Functions: {
       allowed_modules: { Args: never; Returns: string[] }
-      enrolar_biometria: {
-        Args: {
-          p_descriptor: number[]
-          p_id_persona: string
-          p_path_storage: string
-        }
-        Returns: string
-      }
-      identificar_por_descriptor: {
-        Args: { p_descriptor: number[] }
-        Returns: {
-          confidence: number
-          id_persona: string
-        }[]
-      }
       cerrar_sesion: {
         Args: never
         Returns: {
@@ -1257,7 +1248,58 @@ export type Database = {
           recordar_sesion: boolean
           token_hash: string | null
         }
+        SetofOptions: {
+          from: "*"
+          to: "sesion"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
+      enrolar_biometria: {
+        Args: {
+          p_descriptor: number[]
+          p_id_persona: string
+          p_path_storage: string
+        }
+        Returns: string
+      }
+      es_cedula_ecuatoriana: { Args: { p_cedula: string }; Returns: boolean }
+      es_codigo_permiso: { Args: { p_codigo: string }; Returns: boolean }
+      es_correo: { Args: { p_correo: string }; Returns: boolean }
+      es_correo_institucional_epn: {
+        Args: { p_correo: string }
+        Returns: boolean
+      }
+      es_fecha_nacimiento_valida: {
+        Args: { p_fecha: string }
+        Returns: boolean
+      }
+      es_ip: { Args: { p_ip: string }; Returns: boolean }
+      es_mac: { Args: { p_mac: string }; Returns: boolean }
+      es_nombre_persona: { Args: { p_nombre: string }; Returns: boolean }
+      es_placa_ec: { Args: { p_placa: string }; Returns: boolean }
+      es_ruc_ecuatoriano: { Args: { p_ruc: string }; Returns: boolean }
+      es_telefono_ec: { Args: { p_telefono: string }; Returns: boolean }
+      expirar_sesiones_vencidas: { Args: never; Returns: number }
+      formatear_placa: { Args: { p_placa: string }; Returns: string }
+      guardias_disponibles: {
+        Args: never
+        Returns: {
+          correo_electronico: string
+          id_usuario: string
+          nombre_usuario: string
+        }[]
+      }
+      identificar_por_descriptor: {
+        Args: { p_descriptor: number[] }
+        Returns: {
+          confidence: number
+          id_persona: string
+        }[]
+      }
+      normalizar_espacios: { Args: { p_texto: string }; Returns: string }
+      normalizar_placa: { Args: { p_placa: string }; Returns: string }
+      normalizar_telefono_ec: { Args: { p_telefono: string }; Returns: string }
       permisos_efectivos: { Args: never; Returns: string[] }
       puntos_control_asignados: { Args: never; Returns: string[] }
       registrar_sesion: {
@@ -1284,6 +1326,10 @@ export type Database = {
       tiene_acceso_operativo_cac: { Args: never; Returns: boolean }
       tiene_algun_modulo: { Args: never; Returns: boolean }
       tiene_permiso: { Args: { p_codigo: string }; Returns: boolean }
+      valor_parametro_coherente: {
+        Args: { p_tipo_dato: string; p_valor: string }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

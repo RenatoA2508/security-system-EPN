@@ -1,5 +1,5 @@
 import type { ResourceConfig } from './types'
-import { CAT } from '../lib/catalogos'
+import { CAT, humanizar } from '../lib/catalogos'
 import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp } from '../lib/format'
 import { Badge } from '../components/ui'
 import {
@@ -46,7 +46,7 @@ export const cfgEmpresa: ResourceConfig = {
   ],
   campos: [
     { name: 'nombre', label: 'Nombre', required: true, colSpan: 2, validar: validarNoVacio },
-    { name: 'ruc', label: 'RUC', validar: validarRuc, hint: '13 dígitos, termina en el establecimiento (001).', placeholder: '1790012345001' },
+    { name: 'ruc', label: 'RUC', validar: validarRuc, hint: '13 dígitos, termina en el establecimiento (001).', ayuda: '13 dígitos. Los dos primeros son la provincia (01 a 24, o 30). El tercero indica el tipo de contribuyente: menor que 6 persona natural, 6 sector público, 9 sociedad privada. Termina en el número de establecimiento (001 para la matriz). Se verifica el dígito verificador.', placeholder: '1790012345001' },
     { name: 'tipo_servicio', label: 'Tipo de servicio', validar: validarNoVacio },
     { name: 'estado', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.empresa_estado), default: 'ACTIVO', editable: true },
   ],
@@ -71,7 +71,7 @@ export const cfgCategoria: ResourceConfig = {
   campoTituloDetalle: (r) => r.nombre_categoria,
   campoSubtituloDetalle: (r) => <><Badge value={r.codigo_categoria} /> <Badge value={r.ambito} /></>,
   detalle: [
-    { label: 'Código', render: (r) => r.codigo_categoria },
+    { label: 'Código', render: (r) => humanizar(r.codigo_categoria) },
     { label: 'Ámbito', render: (r) => <Badge value={r.ambito} /> },
     { label: 'Estado', render: (r) => <Badge value={r.estado} /> },
   ],
@@ -104,17 +104,17 @@ export const cfgParametro: ResourceConfig = {
   campoSubtituloDetalle: (r) => <><code className="text-xs">{r.codigo_parametro}</code> · <Badge value={r.estado_parametro} /></>,
   detalle: [
     { label: 'Valor', render: (r) => <b>{r.valor_parametro}</b> },
-    { label: 'Tipo de dato', render: (r) => r.tipo_dato },
-    { label: 'Módulo', render: (r) => r.modulo_aplicacion },
+    { label: 'Tipo de dato', render: (r) => humanizar(r.tipo_dato) },
+    { label: 'Módulo', render: (r) => humanizar(r.modulo_aplicacion) },
     { label: 'Editable', render: (r) => (r.editable ? 'Sí' : 'No') },
     { label: 'Descripción', render: (r) => d(r.descripcion) },
     { label: 'Modificado', render: (r) => fmtFechaHora(r.fecha_modificacion) },
   ],
   campos: [
-    { name: 'codigo_parametro', label: 'Código', required: true, editable: false, colSpan: 2, validar: validarCodigoParametro, placeholder: 'TIEMPO_SESION_MIN' },
+    { name: 'codigo_parametro', label: 'Código', required: true, editable: false, colSpan: 2, validar: validarCodigoParametro, ayuda: 'Solo mayúsculas, números y guion bajo, empezando por una letra. Por ejemplo TIEMPO_SESION_MIN.', placeholder: 'TIEMPO_SESION_MIN' },
     { name: 'nombre_parametro', label: 'Nombre', required: true, colSpan: 2, validar: validarNoVacio },
     // El valor debe castear al tipo_dato elegido en el propio formulario.
-    { name: 'valor_parametro', label: 'Valor', required: true, validar: (v, vals) => validarValorParametro(String(vals.tipo_dato ?? ''), v) },
+    { name: 'valor_parametro', label: 'Valor', required: true, validar: (v, vals) => validarValorParametro(String(vals.tipo_dato ?? ''), v), ayuda: 'El valor debe corresponder al tipo de dato elegido abajo: un número entero si es ENTERO, un decimal como 0.38 si es DECIMAL, true o false si es BOOLEANO.' },
     { name: 'tipo_dato', label: 'Tipo de dato', type: 'select', required: true, options: opcionesCatalogo(CAT.parametro_tipo_dato) },
     { name: 'modulo_aplicacion', label: 'Módulo', type: 'select', required: true, options: opcionesCatalogo(CAT.parametro_modulo) },
     { name: 'estado_parametro', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.parametro_estado), default: 'ACTIVO' },
@@ -168,7 +168,7 @@ export const cfgPermiso: ResourceConfig = {
     { label: 'Estado', render: (r) => <Badge value={r.estado_permiso} /> },
   ],
   campos: [
-    { name: 'codigo_permiso', label: 'Código', required: true, editable: false, colSpan: 2, hint: 'Formato MODULO_ENTIDAD_ACCION', validar: validarCodigoPermiso, placeholder: 'GPI_PERSONA_INSERT' },
+    { name: 'codigo_permiso', label: 'Código', required: true, editable: false, colSpan: 2, hint: 'Formato MODULO_ENTIDAD_ACCION', validar: validarCodigoPermiso, ayuda: 'Convención del sistema: MÓDULO_ENTIDAD_ACCIÓN en mayúsculas, por ejemplo GPI_PERSONA_INSERT. El módulo debe ser ADM, GPI, GPE, PCO o CAC.', placeholder: 'GPI_PERSONA_INSERT' },
     { name: 'descripcion', label: 'Descripción', type: 'textarea', colSpan: 3 },
     { name: 'estado_permiso', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.categoria_estado), default: 'ACTIVO' },
   ],
@@ -209,6 +209,22 @@ export const cfgUsuarioRol: ResourceConfig = {
    Compartidos: vehículo, persona_vehiculo (ADM/GPI/GPE)
    ========================================================================= */
 
+/** Nombre completo de una persona embebida por PostgREST. */
+const nombrePersona = (p: any): string => (p ? `${p.apellidos} ${p.nombres}` : '—')
+
+/** Relaciones persona-vehículo vigentes (las revocadas/vencidas no cuentan como "pertenece a"). */
+const relacionesVigentes = (r: any): any[] =>
+  ((r.relaciones ?? []) as any[]).filter((x) => x.estado_relacion === 'ACTIVA')
+
+/** Propietario actual del vehículo, o la primera relación vigente si nadie figura como tal. */
+function propietarioDe(r: any): string {
+  const vigentes = relacionesVigentes(r)
+  const duenio = vigentes.find((x) => x.tipo_relacion === 'PROPIETARIO')
+  if (duenio) return nombrePersona(duenio.persona)
+  if (vigentes.length > 0) return `${nombrePersona(vigentes[0].persona)} (${humanizar(vigentes[0].tipo_relacion)})`
+  return '—'
+}
+
 export function cfgVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfig {
   const select = [`${modulo}_VEHICULO_SELECT`]
   const insert = [`${modulo}_VEHICULO_INSERT`]
@@ -219,22 +235,48 @@ export function cfgVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfig {
     titulo: 'Vehículos',
     singular: 'Vehículo',
     idField: 'id_vehiculo',
+    // Trae las personas asociadas: un vehículo suelto sin dueño no dice nada al guardia ni a ADM.
+    // La FK de persona_vehiculo hacia vehiculo permite embeberlas en una sola consulta.
+    select: '*, relaciones:persona_vehiculo(id_persona, tipo_relacion, estado_relacion, fecha_inicio, fecha_fin, es_responsable_tramite, persona:persona(nombres, apellidos, cedula, tipo_persona))',
     orderBy: { columna: 'placa' },
     permisos: { select, insert, update },
     autoUsuarioRegistro: ['id_usuario_registro'],
-    buscarEn: ['placa', 'marca', 'modelo', 'color'],
+    buscarEn: ['placa', 'marca', 'modelo', 'color', 'relaciones.persona.apellidos', 'relaciones.persona.cedula'],
     columnas: [
       { key: 'placa', label: 'Placa', render: (r) => (r.placa ? formatearPlaca(r.placa) : '—'), valorExport: (r) => (r.placa ? formatearPlaca(r.placa) : '') },
-      { key: 'tipo_vehiculo', label: 'Tipo' },
+      { key: 'tipo_vehiculo', label: 'Tipo', render: (r) => humanizar(r.tipo_vehiculo) },
+      // La pregunta real frente a un vehículo es "¿de quién es?", no "¿qué marca es?".
+      { key: 'propietario', label: 'Propietario', render: (r) => propietarioDe(r), valorExport: (r) => propietarioDe(r) },
       { key: 'marca', label: 'Marca', render: (r) => d(r.marca) },
-      { key: 'modelo', label: 'Modelo', render: (r) => d(r.modelo) },
       { key: 'estado_vehiculo', label: 'Estado', badge: true },
     ],
     campoTituloDetalle: (r) => (r.placa ? formatearPlaca(r.placa) : 'Vehículo'),
-    campoSubtituloDetalle: (r) => <><Badge value={r.tipo_vehiculo} /> <Badge value={r.estado_vehiculo} /></>,
+    campoSubtituloDetalle: (r) => <><Badge value={r.tipo_vehiculo} /> <Badge value={r.estado_vehiculo} /> · {propietarioDe(r)}</>,
     detalle: [
       { label: 'Marca / Modelo', render: (r) => `${d(r.marca)} ${d(r.modelo)}` },
       { label: 'Color', render: (r) => d(r.color) },
+      // Un vehículo puede tener varias personas (propietario + conductores autorizados): la
+      // columna muestra la principal, aquí está la verdad completa.
+      {
+        label: 'Personas asociadas',
+        render: (r) => {
+          const todas = (r.relaciones ?? []) as any[]
+          if (todas.length === 0) return <span className="text-slate-400">Sin personas asociadas</span>
+          return (
+            <ul className="space-y-1.5">
+              {todas.map((x, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-medium text-navy">{nombrePersona(x.persona)}</span>
+                  <span className="text-xs text-ink-soft">{x.persona?.cedula}</span>
+                  <Badge value={x.tipo_relacion} />
+                  <Badge value={x.estado_relacion} />
+                  {x.es_responsable_tramite && <span className="text-xs text-ink-soft">· responsable del trámite</span>}
+                </li>
+              ))}
+            </ul>
+          )
+        },
+      },
       { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
     ],
     campos: [
@@ -243,7 +285,7 @@ export function cfgVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfig {
       {
         name: 'placa', label: 'Placa', colSpan: 1, validar: validarPlaca,
         formatear: formatearPlacaInput, normalizar: normalizarPlaca,
-        hint: '3 letras y 3 o 4 dígitos.', placeholder: 'PDF-1234',
+        hint: '3 letras y 3 o 4 dígitos.', ayuda: 'Formato de la ANT: 3 letras y 3 o 4 dígitos (ABC-1234 o ABC-123). La primera letra es la provincia donde se matriculó. Se guarda sin guion para poder compararla con la lectura de la cámara.', placeholder: 'PDF-1234',
       },
       { name: 'tipo_vehiculo', label: 'Tipo', type: 'select', required: true, options: opcionesCatalogo(CAT.vehiculo_tipo) },
       { name: 'marca', label: 'Marca', validar: validarNoVacio },
@@ -420,14 +462,14 @@ export const cfgDispositivo: ResourceConfig = {
   campoSubtituloDetalle: (r) => <Badge value={r.estado_dispositivo} />,
   detalle: [
     { label: 'IP', render: (r) => r.direccion_ip },
-    { label: 'Tecnología', render: (r) => r.tipo_tecnologia },
+    { label: 'Tecnología', render: (r) => humanizar(r.tipo_tecnologia) },
     { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? '—' },
   ],
   campos: [
     // Orden pedido (feedback PCO #9): tecnología primero, luego MAC/IP con autoformato.
     { name: 'tipo_tecnologia', label: 'Tecnología', type: 'select', required: true, options: opcionesCatalogo(CAT.dispositivo_tecnologia), alCambiarLimpiar: ['_filtro_zona', 'id_punto_control'] },
-    { name: 'codigo_mac', label: 'Código MAC', required: true, placeholder: 'AA:BB:CC:DD:EE:FF', formatear: formatearMac, validar: validarMac },
-    { name: 'direccion_ip', label: 'Dirección IP', required: true, placeholder: '10.0.0.10', formatear: formatearIp, validar: validarIp },
+    { name: 'codigo_mac', label: 'Código MAC', required: true, placeholder: 'AA:BB:CC:DD:EE:FF', formatear: formatearMac, validar: validarMac, ayuda: 'Seis pares de dígitos hexadecimales (0-9 y A-F) separados por dos puntos: AA:BB:CC:DD:EE:FF. Los dos puntos se añaden solos mientras escribes.' },
+    { name: 'direccion_ip', label: 'Dirección IP', required: true, placeholder: '10.0.0.10', formatear: formatearIp, validar: validarIp, ayuda: 'Dirección IPv4 con cuatro números de 0 a 255 separados por puntos (10.0.0.10). También se acepta IPv6.' },
     // Cascada (feedback PCO #10): zona → punto de control, ya filtrada por compatibilidad
     // tecnología↔zona (LPR_PLACAS solo PARQUEADERO). El trigger validar_asignacion_dispositivo
     // en la base de datos es la garantía real; esto es solo para no ofrecer opciones inválidas.
@@ -527,18 +569,18 @@ export const cfgPersonaExterna: ResourceConfig = {
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [
-    { name: 'cedula', label: 'Cédula', required: true, editable: false, validar: validarCedula, hint: '10 dígitos; se verifica provincia y dígito verificador.', placeholder: '1712345678' },
-    { name: 'nombres', label: 'Nombres', required: true, editable: false, validar: validarNombre },
-    { name: 'apellidos', label: 'Apellidos', required: true, editable: false, validar: validarNombre },
+    { name: 'cedula', label: 'Cédula', required: true, editable: false, validar: validarCedula, hint: '10 dígitos; se verifica provincia y dígito verificador.', ayuda: '10 dígitos numéricos. Se comprueba que los dos primeros correspondan a una provincia del Ecuador (01 a 24, o 30 para documentos emitidos en el exterior), que el tercero sea menor que 6 (persona natural) y que el último dígito verificador cuadre con el algoritmo del Registro Civil.', placeholder: '1712345678' },
+    { name: 'nombres', label: 'Nombres', required: true, editable: false, validar: validarNombre, ayuda: 'Solo letras, incluidas tildes y ñ, además de espacios, guiones y apóstrofes. Sin números. Mínimo 2 caracteres.' },
+    { name: 'apellidos', label: 'Apellidos', required: true, editable: false, validar: validarNombre, ayuda: 'Solo letras, incluidas tildes y ñ, además de espacios, guiones y apóstrofes. Sin números. Mínimo 2 caracteres.' },
     // Ya no obligatorio (feedback GPE: registro ágil de visitas sin memorando — basta con
     // cédula + algún contacto, no hace falta correo si ya se da teléfono, o viceversa).
     // Dominio libre: un externo no tiene correo institucional por definición.
-    { name: 'correo', label: 'Correo (opcional)', type: 'email', validar: validarCorreo },
-    { name: 'telefono_contacto', label: 'Teléfono (opcional)', validar: validarTelefono, normalizar: normalizarTelefono, hint: 'Se guarda como +593…', placeholder: '0987654321' },
+    { name: 'correo', label: 'Correo (opcional)', type: 'email', validar: validarCorreo, ayuda: 'Formato usuario@dominio.com. Cualquier dominio es válido: una persona externa no tiene por qué tener correo de la EPN.' },
+    { name: 'telefono_contacto', label: 'Teléfono (opcional)', validar: validarTelefono, normalizar: normalizarTelefono, hint: 'Se guarda como +593…', ayuda: 'Celular de 10 dígitos (0987654321) o fijo con código de provincia (022345678). Puedes escribirlo con espacios o guiones. Se guarda siempre en formato internacional: +593987654321.', placeholder: '0987654321' },
     { name: 'id_categoria', label: 'Categoría (externa)', type: 'select', required: true, options: optCategorias('EXTERNA') },
     { name: 'id_empresa', label: 'Empresa (opcional)', type: 'select', options: optEmpresas },
     { name: 'sexo', label: 'Sexo', type: 'select', options: opcionesCatalogo(CAT.persona_sexo) },
-    { name: 'fecha_nacimiento', label: 'Fecha de nacimiento', type: 'date', validar: validarFechaNacimiento },
+    { name: 'fecha_nacimiento', label: 'Fecha de nacimiento', type: 'date', validar: validarFechaNacimiento, ayuda: 'No puede ser una fecha futura ni de hace más de 120 años. No hay edad mínima: el CEC registra a menores de edad en sus cursos.' },
     { name: 'direccion_domicilio', label: 'Dirección', colSpan: 2 },
   ],
   campoEstado: 'estado',

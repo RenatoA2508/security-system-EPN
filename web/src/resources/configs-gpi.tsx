@@ -1,5 +1,5 @@
 import type { ResourceConfig } from './types'
-import { CAT } from '../lib/catalogos'
+import { CAT, humanizar } from '../lib/catalogos'
 import { fmtFecha } from '../lib/format'
 import { Badge } from '../components/ui'
 import { opcionesCatalogo, optCategorias, opcionesTabla } from './opciones'
@@ -65,21 +65,21 @@ export const cfgPersonaInterna: ResourceConfig = {
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [
-    { name: 'cedula', label: 'Cédula', required: true, editable: false, validar: validarCedula, hint: '10 dígitos; se verifica provincia y dígito verificador.', placeholder: '1712345678' },
+    { name: 'cedula', label: 'Cédula', required: true, editable: false, validar: validarCedula, hint: '10 dígitos; se verifica provincia y dígito verificador.', ayuda: '10 dígitos numéricos. Se comprueba que los dos primeros correspondan a una provincia del Ecuador (01 a 24, o 30 para documentos emitidos en el exterior), que el tercero sea menor que 6 (persona natural) y que el último dígito verificador cuadre con el algoritmo del Registro Civil.', placeholder: '1712345678' },
     // No editable (feedback GPI): identifica de forma única al estudiante, no debe cambiar tras el registro.
     { name: 'codigo_unico', label: 'Código único', editable: false, validar: validarNoVacio },
-    { name: 'nombres', label: 'Nombres', required: true, editable: false, validar: validarNombre },
-    { name: 'apellidos', label: 'Apellidos', required: true, editable: false, validar: validarNombre },
+    { name: 'nombres', label: 'Nombres', required: true, editable: false, validar: validarNombre, ayuda: 'Solo letras, incluidas tildes y ñ, además de espacios, guiones y apóstrofes. Sin números. Mínimo 2 caracteres.' },
+    { name: 'apellidos', label: 'Apellidos', required: true, editable: false, validar: validarNombre, ayuda: 'Solo letras, incluidas tildes y ñ, además de espacios, guiones y apóstrofes. Sin números. Mínimo 2 caracteres.' },
     // El personal interno usa correo institucional (@epn.edu.ec o @cec.edu.ec).
-    { name: 'correo', label: 'Correo', type: 'email', required: true, validar: validarCorreoInstitucional, hint: 'Correo institucional EPN.' },
+    { name: 'correo', label: 'Correo', type: 'email', required: true, validar: validarCorreoInstitucional, hint: 'Correo institucional EPN.', ayuda: 'Debe ser una dirección institucional de la Politécnica: @epn.edu.ec (o un subdominio como @fis.epn.edu.ec) o @cec.edu.ec para el Centro de Educación Continua.' },
     // El de respaldo es el personal alternativo: cualquier dominio.
-    { name: 'correo_respaldo', label: 'Correo alternativo', type: 'email', validar: validarCorreo },
-    { name: 'telefono_contacto', label: 'Teléfono', validar: validarTelefono, normalizar: normalizarTelefono, hint: 'Se guarda como +593…', placeholder: '0987654321' },
-    { name: 'telefono_respaldo', label: 'Teléfono alternativo', validar: validarTelefono, normalizar: normalizarTelefono, placeholder: '0987654321' },
+    { name: 'correo_respaldo', label: 'Correo alternativo', type: 'email', validar: validarCorreo, ayuda: 'Formato usuario@dominio.com. Cualquier dominio es válido: una persona externa no tiene por qué tener correo de la EPN.' },
+    { name: 'telefono_contacto', label: 'Teléfono', validar: validarTelefono, normalizar: normalizarTelefono, hint: 'Se guarda como +593…', ayuda: 'Celular de 10 dígitos (0987654321) o fijo con código de provincia (022345678). Puedes escribirlo con espacios o guiones. Se guarda siempre en formato internacional: +593987654321.', placeholder: '0987654321' },
+    { name: 'telefono_respaldo', label: 'Teléfono alternativo', validar: validarTelefono, normalizar: normalizarTelefono, ayuda: 'Celular de 10 dígitos (0987654321) o fijo con código de provincia (022345678). Puedes escribirlo con espacios o guiones. Se guarda siempre en formato internacional: +593987654321.', placeholder: '0987654321' },
     { name: 'id_categoria', label: 'Categoría (interna)', type: 'select', required: true, options: optCategorias('INTERNA') },
     { name: 'sexo', label: 'Sexo', type: 'select', options: OPCIONES_SEXO },
     // No editable (feedback GPI): un dato de identidad que no debería cambiar tras el registro.
-    { name: 'fecha_nacimiento', label: 'Fecha de nacimiento', type: 'date', editable: false, validar: validarFechaNacimiento },
+    { name: 'fecha_nacimiento', label: 'Fecha de nacimiento', type: 'date', editable: false, validar: validarFechaNacimiento, ayuda: 'No puede ser una fecha futura ni de hace más de 120 años. No hay edad mínima: el CEC registra a menores de edad en sus cursos.' },
     { name: 'direccion_domicilio', label: 'Dirección', colSpan: 2 },
   ],
   campoEstado: 'estado',
@@ -97,14 +97,14 @@ export const cfgPersonaInternaDetalle: ResourceConfig = {
   buscarEn: ['persona.cedula', 'persona.apellidos', 'cargo', 'unidad'],
   columnas: [
     { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.apellidos} ${r.persona.nombres}` : '—') },
-    { key: 'unidad', label: 'Unidad', render: (r) => d(r.unidad) },
+    { key: 'unidad', label: 'Unidad', render: (r) => (r.unidad ? humanizar(r.unidad) : '—') },
     { key: 'cargo', label: 'Cargo', render: (r) => d(r.cargo) },
     { key: 'carrera', label: 'Carrera', render: (r) => d(r.carrera) },
   ],
   campoTituloDetalle: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : 'Detalle'),
   detalle: [
     { label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-    { label: 'Unidad', render: (r) => d(r.unidad) },
+    { label: 'Unidad', render: (r) => (r.unidad ? humanizar(r.unidad) : '—') },
     { label: 'Cargo', render: (r) => d(r.cargo) },
     { label: 'Carrera', render: (r) => d(r.carrera) },
     { label: 'Curso', render: (r) => d(r.curso) },
