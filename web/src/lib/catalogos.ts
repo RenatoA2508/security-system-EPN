@@ -72,9 +72,134 @@ export const ROL_LABEL: Record<string, string> = {
   GUARDIA_SEGURIDAD: 'Guardia de Seguridad',
 }
 
-/** Convierte MAYUSCULAS_CON_GUION a "Mayúsculas con guion" para mostrar. */
+/**
+ * Etiquetas de presentación de los valores de catálogo.
+ *
+ * La BD los guarda en MAYÚSCULAS y sin tildes por convención de CLAUDE.md
+ * (`AUTENTICACION`, no `AUTENTICACIÓN`) — eso NO se toca: es el contrato del
+ * backend. Pero el usuario no debería leer `DADO_DE_BAJA` ni `DANO_FISICO` en
+ * pantalla, que es lo que pasaba porque `Badge` pintaba el valor crudo y
+ * `humanizar()` solo bajaba a minúsculas (dejando "Autenticacion" sin tilde).
+ *
+ * Aquí vive la traducción, en un solo lugar. Cubre los 80 valores de catálogo
+ * que devuelven los CHECK reales del backend (consultados desde pg_constraint
+ * el 2026-07-16). Si el backend añade un valor nuevo y no está en este mapa,
+ * `humanizar()` cae a la conversión automática: se verá aceptable aunque sin
+ * tildes, nunca como el código crudo.
+ */
+export const ETIQUETA: Record<string, string> = {
+  // Estados generales
+  ACTIVO: 'Activo',
+  ACTIVA: 'Activa',
+  INACTIVO: 'Inactivo',
+  INACTIVA: 'Inactiva',
+  BLOQUEADO: 'Bloqueado',
+  BLOQUEADA: 'Bloqueada',
+  DADO_DE_BAJA: 'Dado de baja',
+  SUSPENDIDO: 'Suspendido',
+  SUSPENDIDA: 'Suspendida',
+  VENCIDO: 'Vencido',
+  VENCIDA: 'Vencida',
+  VIGENTE: 'Vigente',
+  REVOCADO: 'Revocado',
+  REVOCADA: 'Revocada',
+  FINALIZADA: 'Finalizada',
+  PENDIENTE: 'Pendiente',
+  ATENDIDA: 'Atendida',
+  TEMPORAL: 'Temporal',
+  OTRO: 'Otro',
+  GENERAL: 'General',
+
+  // Persona
+  INTERNA: 'Interna',
+  EXTERNA: 'Externa',
+  M: 'Masculino',
+  F: 'Femenino',
+  DOCENTE: 'Docente',
+  ESTUDIANTE: 'Estudiante',
+  ADMINISTRATIVO: 'Administrativo',
+  TRABAJADOR: 'Trabajador',
+  EMPRESA_SERVICIO: 'Empresa de servicio',
+  VISITANTE: 'Visitante',
+  PROVEEDOR: 'Proveedor',
+  CONTRATISTA: 'Contratista',
+  CONDUCTOR: 'Conductor',
+  EPN: 'EPN',
+  CEC: 'CEC',
+
+  // Vehículo
+  AUTOMOVIL: 'Automóvil',
+  MOTOCICLETA: 'Motocicleta',
+  CAMIONETA: 'Camioneta',
+  BICICLETA: 'Bicicleta',
+  PROPIETARIO: 'Propietario',
+  CONDUCTOR_AUTORIZADO: 'Conductor autorizado',
+  PASAJERO: 'Pasajero',
+
+  // Zonas y puntos de control
+  CAMPUS: 'Campus',
+  EDIFICIO: 'Edificio',
+  PARQUEADERO: 'Parqueadero',
+  FALLA: 'Falla',
+  MANTENIMIENTO: 'Mantenimiento',
+  OPERATIVO: 'Operativo',
+  FALLA_DE_RED: 'Falla de red',
+  DANO_FISICO: 'Daño físico',
+  BIOMETRIA_FACIAL: 'Biometría facial',
+  LPR_PLACAS: 'Lector de placas (LPR)',
+
+  // Eventos de acceso
+  INGRESO: 'Ingreso',
+  SALIDA: 'Salida',
+  AUTORIZADO: 'Autorizado',
+  DENEGADO: 'Denegado',
+  AUTOMATICA: 'Automática',
+  MANUAL: 'Manual',
+
+  // Alertas
+  BAJO: 'Bajo',
+  MEDIO: 'Medio',
+  ALTO: 'Alto',
+  CRITICO: 'Crítico',
+  BIOMETRIA_FALLIDA: 'Biometría fallida',
+  PERSONA_NO_AUTORIZADA: 'Persona no autorizada',
+  MEMORANDO_VENCIDO: 'Memorando vencido',
+  FUERA_DE_HORARIO: 'Fuera de horario',
+  PUNTO_SALIDA_INCORRECTO: 'Punto de salida incorrecto',
+  DISPOSITIVO_NO_RECONOCIDO: 'Dispositivo no reconocido',
+  VEHICULO_NO_AUTORIZADO: 'Vehículo no autorizado',
+  VEHICULO_PERMANENCIA_EXCEDIDA: 'Vehículo con permanencia excedida',
+  VEHICULO_ABANDONADO: 'Vehículo abandonado',
+
+  // Sesiones y bitácora
+  CERRADA: 'Cerrada',
+  EXPIRADA: 'Expirada',
+  EXITO: 'Éxito',
+  ERROR: 'Error',
+
+  // Parámetros del sistema
+  AUTENTICACION: 'Autenticación',
+  SESION: 'Sesión',
+  SEGURIDAD: 'Seguridad',
+  ENTERO: 'Entero',
+  TEXTO: 'Texto',
+  BOOLEANO: 'Booleano',
+  DECIMAL: 'Decimal',
+  FECHA: 'Fecha',
+
+  ...ROL_LABEL,
+}
+
+/**
+ * Etiqueta legible de un valor de catálogo: `DADO_DE_BAJA` → "Dado de baja",
+ * `AUTENTICACION` → "Autenticación".
+ *
+ * Si el valor no está en ETIQUETA, cae a la conversión automática
+ * (MAYUSCULAS_CON_GUION → "Mayusculas con guion"): sin tildes, pero legible.
+ */
 export function humanizar(valor?: string | null): string {
   if (!valor) return '—'
+  if (ETIQUETA[valor]) return ETIQUETA[valor]
   return valor
     .toLowerCase()
     .split('_')

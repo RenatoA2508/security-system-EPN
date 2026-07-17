@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { createContext, forwardRef, useCallback, useContext, useEffect, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, Loader2, X } from 'lucide-react'
+import { humanizar } from '../../lib/catalogos'
 
 export function cx(...cls: (string | false | null | undefined)[]): string {
   return cls.filter(Boolean).join(' ')
@@ -54,21 +55,86 @@ export function Badge({ value, className }: { value?: string | null; className?:
   return (
     <span className={cx('inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset', tone, className)}>
       <span className={cx('h-1.5 w-1.5 rounded-full', dot)} />
-      {value ?? '—'}
+      {/* El color se decide con el valor crudo de la BD; el texto se muestra ya traducido
+          ("DADO_DE_BAJA" -> "Dado de baja"). Antes se pintaba el codigo tal cual. */}
+      {humanizar(value)}
     </span>
   )
 }
 
 /* ---------- Campos de formulario ---------- */
-export function Field({ label, required, children, hint }: { label: string; required?: boolean; children: ReactNode; hint?: string }) {
+/**
+ * Campo de formulario con ayuda de formato y error en vivo.
+ *
+ * `ayuda` es la explicación de qué formato se espera y por qué (ej. las reglas de la cédula):
+ * aparece en una ventanita al pulsar la "i", para no llenar el formulario de texto pero tenerla
+ * a un clic. `error` es el problema concreto del valor tecleado ahora mismo.
+ *
+ * No es un <label> envolvente: el botón de ayuda dentro de un <label> haría que pulsarlo enfocara
+ * el input y cerrara la ventanita al instante.
+ */
+export function Field({
+  label, required, children, hint, ayuda, error, htmlFor,
+}: {
+  label: string
+  required?: boolean
+  children: ReactNode
+  hint?: string
+  ayuda?: string
+  error?: string | null
+  htmlFor?: string
+}) {
+  const [abierta, setAbierta] = useState(false)
+
+  useEffect(() => {
+    if (!abierta) return
+    const alPulsarEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setAbierta(false)
+    }
+    document.addEventListener('keydown', alPulsarEscape)
+    return () => document.removeEventListener('keydown', alPulsarEscape)
+  }, [abierta])
+
   return (
-    <label className="block">
-      <span className="epn-label">
-        {label} {required && <span className="text-red">*</span>}
+    <div className="block">
+      <span className="epn-label flex items-center gap-1.5">
+        <label htmlFor={htmlFor}>
+          {label} {required && <span className="text-red">*</span>}
+        </label>
+        {ayuda && (
+          <span className="relative inline-flex">
+            <button
+              type="button"
+              onClick={() => setAbierta((v) => !v)}
+              onBlur={() => setAbierta(false)}
+              aria-label={`Ver el formato de ${label}`}
+              aria-expanded={abierta}
+              className="inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-navy focus:outline-none focus:ring-2 focus:ring-navy/30"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </button>
+            {abierta && (
+              <span
+                role="tooltip"
+                className="absolute left-1/2 top-6 z-20 w-64 -translate-x-1/2 rounded-lg border border-slate-200 bg-white p-3 text-xs font-normal leading-relaxed text-ink shadow-lg"
+              >
+                <span className="mb-1 block font-semibold text-navy">Formato de {label.toLowerCase()}</span>
+                {ayuda}
+              </span>
+            )}
+          </span>
+        )}
       </span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>}
-    </label>
+      {error ? (
+        <span className="mt-1 flex items-start gap-1 text-xs font-medium text-red">
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+          {error}
+        </span>
+      ) : (
+        hint && <span className="mt-1 block text-xs text-slate-400">{hint}</span>
+      )}
+    </div>
   )
 }
 
