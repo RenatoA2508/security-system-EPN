@@ -1,13 +1,22 @@
-# 99 — Dudas para el equipo → **TODAS RESUELTAS**
+# 99 — Dudas para el equipo
 
-> Registro de las 11 dudas/inferencias que surgieron durante la construcción autónoma del backend.
+> Registro de las 11 dudas/inferencias que surgieron durante la construcción autónoma del backend
+> (E1-E11, **todas resueltas**), más las que abrió la ronda de validación de datos (V1-V5, abiertas).
 > En la primera sesión se implementó la opción más conservadora y se anotaron aquí. En la segunda
-> sesión (despliegue al proyecto remoto de Supabase) **todas quedaron resueltas y verificadas
+> sesión (despliegue al proyecto remoto de Supabase) **E1-E11 quedaron resueltas y verificadas
 > contra la base real**. Cada entrada indica la **resolución** y **cómo se ejecutó/verificó**.
 >
 > Para el detalle completo del despliegue ver `docs/06_DESPLIEGUE_Y_RESOLUCIONES.md`.
 
-| # | Tema | Estado |
+| # | Tema (ronda de validación, 2026-07-16) | Estado |
+|---|---|---|
+| V1 | 18 de 19 cédulas del remoto eran de prueba e inválidas | Reemplazadas por ficticias válidas |
+| V2 | MAC corrupta `00:14:2B:44:14:1` (le falta un dígito) | CHECK NOT VALID; fila intacta |
+| V3 | Formato real de `codigo_unico` y `numero_memorando` | Sin patrón: solo no-vacío |
+| V4 | `empresa.tipo_servicio` y `guardia_punto_control.turno` sin catálogo | Se dejan como texto libre |
+| V5 | Sin `supabase db reset`: Docker no disponible en el entorno | Validado contra el remoto con ROLLBACK |
+
+| # | Tema (construcción del backend, sesiones 1-2) | Estado |
 |---|---|---|
 | E1 | Validación local sin Docker | ✅ Resuelta: validado y desplegado contra el remoto |
 | E2 | `dispositivo.codigo_mac` UNIQUE | ✅ Confirmada como decisión de diseño |
@@ -112,3 +121,83 @@ Al desplegar y probar contra el remoto se detectaron y **corrigieron** además:
   `authenticated` **debe** poder llamar (RLS + RPC del frontend) y `rls_auto_enable` (función de la
   plataforma), ambos aceptados; y la protección de contraseñas filtradas (HIBP), que **requiere plan
   Pro** — habilitarla en el dashboard tras el upgrade.
+
+---
+
+# Ronda de validación de datos (2026-07-16)
+
+> Dudas abiertas por la implementación de validación de campos, cierre de sesiones y bloqueo
+> efectivo de usuarios. Mismo criterio de siempre: se implementó la opción más conservadora y se
+> anotó aquí; ninguna bloqueó el desarrollo.
+
+## V1 — 18 de las 19 cédulas del remoto eran de prueba → **reemplazadas por ficticias válidas**
+
+**Hallazgo:** al aplicar el algoritmo del Registro Civil (provincia + tercer dígito + módulo 10),
+solo **1 de las 19** personas del proyecto remoto tenía una cédula válida (`1756082184`). El resto
+eran de relleno: `9999999999` (provincia 99, que no existe), `1234567890`, `152711695` (9 dígitos),
+y `1798765432`, que *parece* válida pero tiene tercer dígito 9 — eso identifica a una persona
+jurídica, no natural.
+
+**Decisión del usuario:** reemplazar las 18 por cédulas ficticias **válidas** (Pichincha, tercer
+dígito 5, dígito verificador correcto), en vez de dejar el CHECK como `NOT VALID`.
+
+**Riesgo asumido:** varias de esas filas parecen personas reales del equipo (Frank Jumbo, Victor
+Coyago, Camila Caicedo, Cecilia Jaramillo, Hernán Avellaneda, Alexander Guerra). Sus cédulas
+**ahora son inventadas**: `1750000208`, `1750000216`, `1750000224`, `1750000232`, `1750000240`,
+`1750000257`. Si alguna de esas personas es real y su cédula importaba, **ADM debe corregirla a
+mano**. El mapeo completo está en `supabase/migrations/20260716010100_saneamiento_datos.sql`.
+
+**Pendiente del equipo:** sustituir las 18 cédulas ficticias por las reales desde el módulo ADM.
+
+## V2 — MAC corrupta en el remoto → **CHECK NOT VALID**
+
+**Hallazgo:** `dispositivo.codigo_mac` contiene `00:14:2B:44:14:1`, con el último octeto de un solo
+dígito. Es una MAC imposible.
+
+**Decisión:** no se puede adivinar el dígito que falta sin inventar la identidad de un dispositivo
+de control de acceso, así que el CHECK `dispositivo_mac_valida` se aplica **NOT VALID**: la fila
+histórica sobrevive, pero todo INSERT/UPDATE nuevo sí se valida.
+
+**Pendiente del equipo:** corregir esa MAC contra el dispositivo físico y luego ejecutar
+`ALTER TABLE public.dispositivo VALIDATE CONSTRAINT dispositivo_mac_valida;`.
+
+## V3 — Formato de `codigo_unico` y `numero_memorando` → **sin patrón**
+
+**Duda:** ninguno de los documentos define el formato real de estos dos campos. El frontend genera
+`numero_memorando` como `MEM-<base36>`, que parece un placeholder y no un número de memorando de la
+EPN (que suelen verse como `EPN-VIPS-2026-0123-M`).
+
+**Decisión conservadora:** solo se valida que no estén vacíos. Inventar un patrón y ponerlo como
+CHECK bloquearía registros legítimos el día que se use el número real.
+
+**Pendiente del equipo:** confirmar ambos formatos. Si existen, se añaden como CHECK con regex.
+
+## V4 — `tipo_servicio` y `turno` sin catálogo → **texto libre**
+
+**Duda:** ambos son texto libre sin CHECK, y el remoto ya tiene valores heterogéneos:
+`tipo_servicio` = "Limpieza"/"Seguridad" (minúsculas, contra la convención de CLAUDE.md de catálogos
+en MAYÚSCULAS), y `turno` = "MATUTINO" pero también `"07:00–17:00"`.
+
+**Decisión:** se dejan libres. Para `turno`, el doc 03 (§línea 39) dice literalmente
+*"Ej. MATUTINO, VESPERTINO, NOCTURNO"* — **"Ej." es una lista abierta, no un catálogo cerrado**, y
+un CHECK contradiría el documento fuente.
+
+**Pendiente del equipo:** decidir si alguno de los dos debe ser catálogo cerrado. Si `turno` lo
+fuera, hay que migrar antes el valor `"07:00–17:00"`.
+
+## V5 — Sin validación local: Docker no disponible → **validado contra el remoto con ROLLBACK**
+
+**Hallazgo:** el flujo obligatorio de CLAUDE.md exige `supabase db reset` antes de tocar el remoto,
+pero en este entorno (WSL2) **Docker no está instalado** y solo existen las herramientas cliente de
+PostgreSQL 16 (`psql`, `pg_dump`) — no hay binario de servidor (`postgres`, `initdb`), así que no se
+puede levantar una base local. Es la misma duda E1 de la primera sesión, que había quedado resuelta
+con "validado contra el remoto" pero vuelve a aparecer en cada sesión.
+
+**Cómo se validó en su lugar:** cada función y trigger se cargó en el proyecto remoto dentro de una
+transacción `BEGIN … ROLLBACK`, se ejerció con casos de prueba (20 grupos de aserciones para las
+validaciones; una simulación completa de bloqueo → corte de sesión → reactivación) y se revirtió.
+Se verificó después que el remoto quedara intacto (0 funciones nuevas). **Ninguna migración se
+aplicó**: `supabase db push` sigue pendiente de aprobación humana.
+
+**Pendiente del equipo:** instalar Docker Desktop con integración WSL2, o aceptar formalmente el
+patrón `BEGIN … ROLLBACK` contra el remoto como sustituto del reset local.

@@ -332,6 +332,59 @@ autenticada con `service_role` key, que valida `codigo_mac`/`direccion_ip` contr
 *Resuelve la ambigüedad de `matrizGeneralDePermisos.md`, donde "PCO" y "CAC" aparecían
 validando accesos en tiempo real — eso era el dispositivo, no una persona.*
 
+### D27 — Validación de datos en dos capas, con la BD como autoridad
+- **Problema:** ningún campo tenía validación de formato. `persona.cedula` era `varchar(10)` a
+  secas, los teléfonos texto libre, la placa solo `upper()`. La API REST de Supabase está
+  expuesta: cualquier cliente con un token válido podía insertar basura sin pasar por el
+  formulario.
+- **Resuelto:** cada regla vive **dos veces**, a propósito:
+  1. `supabase/migrations/20260716010000_funciones_validacion.sql` — funciones `IMMUTABLE`
+     aplicadas como `CHECK`. **Es la autoridad.**
+  2. `web/src/lib/validacion.ts` — el mismo algoritmo en TypeScript, solo para que el usuario
+     vea el error antes de enviar y en español.
+  Si cambias una regla, cámbiala en las dos. La duplicación es deliberada: la alternativa
+  (validar solo en el cliente) deja la BD abierta, y (validar solo en la BD) da errores de
+  Postgres ilegibles al usuario final.
+- **Patrón:** el trigger **normaliza** antes de que el `CHECK` **juzgue**. Un guardia que teclea
+  `0987654321` o `pdf-1234` no debe recibir un error: debe quedar guardado `+593987654321` y
+  `PDF1234`. El CHECK solo rechaza lo que no se puede interpretar.
+- **Excepción documentada:** `regla_acceso` **no** exige `horario_fin > horario_inicio`. El turno
+  `NOCTURNO` existe (§D11, `turno`) y una regla de 22:00 a 06:00 es legítima.
+- **Excepción documentada:** `persona.fecha_nacimiento` no tiene edad mínima. El CEC dicta cursos
+  a menores (`persona_interna_detalle.curso`). Se valida por trigger, no por CHECK, porque
+  depende de `current_date` y un CHECK exige inmutabilidad.
+
+### D28 — `vehiculo.placa` se guarda canónica sin guion (`ABC1234`)
+- **Decisión:** la columna guarda la forma canónica **sin guion y en mayúsculas**; la UI la
+  muestra con guion vía `formatear_placa()` / `formatearPlaca()`.
+- **Por qué:** en una sesión posterior se añadirá **lectura de placas por cámara (OCR)**, igual
+  que el reconocimiento facial. Normalizando ambos lados a la misma forma, el match es una
+  igualdad exacta y no depende de si la cámara distinguió el guion.
+- **Formato (ANT):** 3 letras + 3 o 4 dígitos. La **1.ª letra** es la provincia y se valida
+  contra las 24 asignadas (D y F no se usan). La **2.ª letra** es el tipo de servicio y **no se
+  valida**: es `E` en vehículos del gobierno central y `M` en los de un GAD, y la EPN es
+  universidad pública — restringirla bloquearía los vehículos de la propia Politécnica.
+- **Fuera de alcance:** placas diplomáticas (`CC`, `CD`, `OI`, `AT`, `IT`), que usan otro formato.
+
+### D29 — `estado_usuario` corta el acceso de verdad, por dos vías
+- **Problema:** `usuario_sistema.estado_usuario` era decorativo. Un usuario `BLOQUEADO`
+  conservaba su JWT, sus permisos y su capacidad de iniciar sesión: nadie leía la columna.
+  Verificado contra el remoto: dos cuentas `BLOQUEADO` tenían 12 y 13 permisos vivos.
+- **Resuelto** (`20260716030000_bloqueo_efectivo.sql`), con dos mecanismos **independientes**:
+  1. `auth.users.banned_until` = 100 años (lo mismo que hace la Admin API con
+     `ban_duration: '876000h'`) + borrado de `auth.sessions` y `auth.refresh_tokens` → GoTrue
+     rechaza el login y lo echa de las sesiones abiertas.
+  2. Guard `estado_usuario = 'ACTIVO'` dentro de `tiene_permiso()` y `permisos_efectivos()` →
+     aunque conserve un JWT sin expirar (viven hasta 1 h), se queda sin un solo permiso y RLS le
+     niega todo. Efecto inmediato.
+- **Por qué las dos:** `banned_until` no invalida un JWT ya emitido, y el guard por sí solo no
+  impide iniciar sesión. Cada una tapa el hueco de la otra.
+- **`ACTIVO` es el único estado que permite entrar.** `INACTIVO`, `BLOQUEADO` y `DADO_DE_BAJA`
+  cortan el acceso; se distinguen por intención administrativa, no por efecto técnico.
+- **Coherente con "sin DELETE físico":** `DADO_DE_BAJA` **no** elimina de `auth.users`, es un ban
+  permanente. La cuenta sigue existiendo para que la bitácora y los eventos históricos conserven
+  su FK — que es justo lo que la regla persigue.
+
 ---
 
 ## Conflictos resueltos entre documentos
