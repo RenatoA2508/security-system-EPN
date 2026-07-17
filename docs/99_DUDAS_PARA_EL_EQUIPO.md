@@ -15,6 +15,8 @@
 | V3 | Formato real de `codigo_unico` y `numero_memorando` | Sin patrón: solo no-vacío |
 | V4 | `empresa.tipo_servicio` y `guardia_punto_control.turno` sin catálogo | Se dejan como texto libre |
 | V5 | Sin `supabase db reset`: Docker no disponible en el entorno | Validado contra el remoto con ROLLBACK |
+| V6 | `sesion.ip_origen` / `bitacora_sistema.ip_origen` nunca se poblaron | Ocultos en la interfaz |
+| V7 | Regresión propia: la vista perdió `security_invoker` al reemplazarla | Corregida el mismo día |
 
 | # | Tema (construcción del backend, sesiones 1-2) | Estado |
 |---|---|---|
@@ -201,3 +203,39 @@ aplicó**: `supabase db push` sigue pendiente de aprobación humana.
 
 **Pendiente del equipo:** instalar Docker Desktop con integración WSL2, o aceptar formalmente el
 patrón `BEGIN … ROLLBACK` contra el remoto como sustituto del reset local.
+
+
+## V6 — El campo IP nunca se pobló → **oculto en la interfaz**
+
+**Hallazgo:** 1 de 171 filas de `sesion` tenía `ip_origen` (y era `10.0.0.5`, de un seed); 0 de 565
+en `bitacora_sistema`. El frontend llamaba a `registrar_sesion()` sin pasar nunca `p_ip_origen`, así
+que la columna "IP" mostraba `—` siempre.
+
+**Decisión del usuario:** ocultarlo de la ventana de sesiones y de la bitácora. La columna se
+conserva porque ambas tablas son históricas (solo INSERT) y el modelo tiene 25 entidades cerradas.
+
+**Fallo de diseño anotado:** la firma `registrar_sesion(p_ip_origen text)` deja que **el cliente
+declare su propia IP**. Para un campo de auditoría de seguridad eso no vale nada: un cliente puede
+mentir. Si el equipo decide poblarla, debe leerse en el servidor con
+`current_setting('request.headers')::json ->> 'x-forwarded-for'` (comprobado: PostgREST expone las
+cabeceras a la BD) y eliminar el parámetro. **Pendiente del equipo:** decidir si la auditoría de
+accesos necesita IP; hoy no la tiene y la interfaz ya no finge que sí.
+
+## V7 — Regresión propia: la vista perdió `security_invoker` → **corregida**
+
+**Qué pasó:** al añadir el nombre del conductor a `vista_vehiculos_dentro` se usó
+`CREATE OR REPLACE VIEW` sin la cláusula `WITH`. Eso **no conserva las reloptions**: la vista volvió
+al valor por defecto (`security_invoker = false`), es decir, pasó a evaluarse con los permisos de su
+propietario y **saltándose el RLS** de quien consulta — justo cuando acababa de ganar nombre y
+cédula del conductor.
+
+**Cómo se detectó:** el linter de Supabase (`get_advisors`), que marcó
+`0010_security_definer_view` como ERROR al revisar el proyecto tras aplicar el cambio. No lo detectó
+ninguna prueba propia.
+
+**Corregido** en `20260717021430_fix_security_invoker_vista_vehiculos_dentro.sql`; el archivo de la
+migración anterior ya lleva la cláusula para que un `db reset` desde cero no lo reproduzca.
+Verificado: las dos vistas del proyecto tienen `security_invoker = true`.
+
+**Lección para el equipo:** todo `CREATE OR REPLACE VIEW` en este proyecto debe repetir
+`with (security_invoker = true)`. Conviene pasar los advisors después de cada cambio de esquema.

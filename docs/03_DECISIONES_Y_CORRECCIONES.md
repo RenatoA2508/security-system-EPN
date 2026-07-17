@@ -385,6 +385,60 @@ validando accesos en tiempo real — eso era el dispositivo, no una persona.*
   permanente. La cuenta sigue existiendo para que la bitácora y los eventos históricos conserven
   su FK — que es justo lo que la regla persigue.
 
+### D30 — El estado de la propia cuenta no lo cambia uno mismo
+- **Problema:** `admin` era el **único** usuario con `ADM_USUARIO_DESBLOQUEAR`, `ADM_USUARIO_UPDATE`
+  y `ADM_USUARIO_INSERT` (verificado contra el remoto). Bloquearse a sí mismo dejaba el sistema sin
+  nadie que pudiera desbloquearlo. Mientras `estado_usuario` era decorativo no se notaba; con §D29
+  aplicado sería un cierre permanente — ni siquiera podría volver a iniciar sesión.
+- **Resuelto** (`20260717020441_guarda_autobloqueo.sql`), con dos triggers `BEFORE`:
+  1. Nadie cambia el `estado_usuario` de su propia cuenta (`auth.uid() = new.id_usuario`).
+  2. No se puede sacar de `ACTIVO` al último `ADMINISTRADOR_SISTEMA` activo, ni revocarle el rol.
+- **En la BD, no en la interfaz:** esconder el botón no impide el mismo `UPDATE` por la API REST.
+  La pantalla de ADM también lo explica, pero eso es cortesía, no la guarda.
+- **`BEFORE` a propósito:** tiene que abortar antes de que `trg_sincronizar_estado_auth` (`AFTER`,
+  §D29) escriba `banned_until` y borre las sesiones.
+- **La regla mira roles, no permisos:** `ADMINISTRADOR_SISTEMA` es quien tiene por definición la
+  gestión de usuarios (doc 01 §3); comprobarlo por rol es estable aunque se reasignen permisos.
+- `auth.uid()` es nulo en migraciones, seed y Edge Functions con `service_role`: ahí no aplica la
+  regla (1), que es lo correcto — el bootstrap del sistema no es un autobloqueo.
+
+### D31 — Alta de usuarios: Edge Function sobre una persona existente
+- **Problema:** no había forma de crear una cuenta desde el sistema; había que sembrarla con
+  `scripts/seed_remoto.mjs`. Caso real: un encargado de módulo deja la EPN y entra su reemplazo.
+- **Resuelto:** Edge Function `crear-usuario-sistema` (Auth Admin API), mismo patrón que
+  `resetear-password-usuario`. `auth.users` está fuera del alcance de RLS: no hay `INSERT` posible.
+- **Sobre persona existente e INTERNA:** `persona` es la maestra única propiedad de ADM (CLAUDE.md)
+  y su alta es de GPI. La función se apoya en ella, no la duplica. Rechaza personas externas, no
+  activas, o que ya tengan cuenta (una persona, una cuenta: si no, la bitácora no podría atribuir
+  una acción a un humano concreto).
+- **Verifica `ADM_USUARIO_INSERT` con el JWT de quien llama**, no con `service_role`.
+- **Rollback explícito:** si falla la asignación del rol, se borra el usuario de auth recién creado.
+  Una cuenta sin rol no tiene ningún permiso y quedaría huérfana.
+- **Sobre añadir un módulo nuevo:** no es una operación de la interfaz. Un módulo es un prefijo de
+  permisos (`ADM`/`GPI`/`GPE`/`PCO`/`CAC`) presente en `es_codigo_permiso()`, en `allowed_modules()`
+  y en las políticas RLS de cada tabla. Añadir uno es una migración, no un alta de datos.
+
+### D32 — La ortografía de la interfaz se resuelve al mostrar, no en la BD
+- **Problema:** el usuario leía `DADO_DE_BAJA`, `DANO_FISICO` y `AUTENTICACION` (sin tilde) en
+  pantalla, porque `Badge` pintaba el valor crudo de la BD y `humanizar()` solo bajaba a minúsculas.
+- **Resuelto:** mapa `ETIQUETA` en `web/src/lib/catalogos.ts` con los 80 valores de catálogo que
+  devuelven los CHECK reales (consultados desde `pg_constraint`), y `Badge` pasa por `humanizar()`.
+- **Los valores de la BD NO cambian.** La convención de CLAUDE.md (catálogos en MAYÚSCULAS y sin
+  tildes) es el contrato del backend: `AUTENTICACION` se guarda así y se muestra "Autenticación".
+- Un valor nuevo que no esté en el mapa cae a la conversión automática: se verá aceptable aunque
+  sin tildes, nunca como el código crudo.
+
+### D33 — `sesion.ip_origen` estaba de adorno → oculto en la interfaz
+- **Hallazgo:** 1 de 171 filas de `sesion` tenía IP (y era de un seed); 0 de 565 en
+  `bitacora_sistema`. El frontend llamaba a `registrar_sesion()` sin pasar nunca `p_ip_origen`.
+- **Decisión del usuario:** ocultar el campo de la interfaz (sesiones y bitácora). La columna se
+  conserva: `sesion` y `bitacora_sistema` son históricos y el modelo de datos tiene 25 entidades
+  cerradas.
+- **Fallo de diseño anotado, no corregido:** la firma `registrar_sesion(p_ip_origen text)` deja que
+  **el cliente declare su propia IP**, lo que para un campo de auditoría de seguridad no vale nada.
+  Si algún día se quiere poblar, debe leerse en el servidor con
+  `current_setting('request.headers')::json ->> 'x-forwarded-for'`, no recibirse por parámetro.
+
 ---
 
 ## Conflictos resueltos entre documentos
