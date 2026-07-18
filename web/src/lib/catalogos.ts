@@ -178,6 +178,11 @@ export const ETIQUETA: Record<string, string> = {
   EXITO: 'Éxito',
   ERROR: 'Error',
 
+  // Estado mostrado cuando la cuenta tiene un bloqueo TEMPORAL por intentos
+  // fallidos. No es un valor de la base: lo compone la interfaz combinando
+  // estado_usuario con bloqueado_hasta (ver estadoEfectivo en UsuariosScreen).
+  BLOQUEO_TEMPORAL: 'Bloqueo temporal',
+
   // Motivos de cierre de sesión (sesion.motivo_cierre)
   LOGOUT: 'Cierre de sesión',
   CIERRE_MANUAL: 'Cierre manual',

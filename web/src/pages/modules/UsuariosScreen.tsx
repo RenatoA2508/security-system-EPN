@@ -29,6 +29,19 @@ function bloqueoVigente(u: { bloqueado_hasta: string | null }): boolean {
 }
 
 /**
+ * Estado que se MUESTRA, combinando los dos bloqueos que existen en el modelo:
+ * el administrativo (`estado_usuario`, permanente) y el temporal por intentos
+ * fallidos (`bloqueado_hasta`, que caduca solo).
+ *
+ * Son columnas distintas a propósito — si el temporal cambiara `estado_usuario`
+ * dejaría de desbloquearse automáticamente —, pero para quien mira la pantalla
+ * una cuenta que no puede entrar no puede aparecer como "Activo".
+ */
+function estadoEfectivo(u: { estado_usuario: string; bloqueado_hasta: string | null }): string {
+  return u.estado_usuario === 'ACTIVO' && bloqueoVigente(u) ? 'BLOQUEO_TEMPORAL' : u.estado_usuario
+}
+
+/**
  * Gestión de usuarios (feedback ADM §5.3/§7.2): la pantalla genérica de CRUD no alcanza para
  * esto porque cada transición de estado tiene su propio permiso granular (bloquear/desbloquear/
  * activar/dar de baja) en vez de un solo ADM_USUARIO_UPDATE — y "restablecer contraseña" no es
@@ -190,7 +203,7 @@ export function UsuariosScreen() {
                     <td className="px-4 py-2.5 font-medium text-navy">{u.nombre_usuario}</td>
                     <td className="px-4 py-2.5">{u.correo_electronico}</td>
                     <td className="px-4 py-2.5">{u.persona ? `${u.persona.nombres} ${u.persona.apellidos}` : '—'}</td>
-                    <td className="px-4 py-2.5"><Badge value={u.estado_usuario} /></td>
+                    <td className="px-4 py-2.5"><Badge value={estadoEfectivo(u)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -204,7 +217,7 @@ export function UsuariosScreen() {
         {sel && (
           <div>
             <div className="mb-4 flex flex-wrap gap-2">
-              <Badge value={sel.estado_usuario} />
+              <Badge value={estadoEfectivo(sel)} />
               {sel.requiere_cambio_password && <Badge value="CAMBIO_PENDIENTE" />}
             </div>
             <dl className="mb-5 divide-y divide-slate-100">
@@ -236,7 +249,10 @@ export function UsuariosScreen() {
               )}
               {tiene('ADM_USUARIO_BLOQUEAR') && sel.estado_usuario === 'ACTIVO' && !esMiCuenta && (
                 <Button variant="danger" className="w-full" loading={accionando} onClick={() => cambiarEstado('BLOQUEADO')}>
-                  <Lock className="h-4 w-4" /> Bloquear usuario
+                  {/* Si ya hay un bloqueo temporal, se aclara que este es el permanente:
+                      son acciones distintas y "Bloquear usuario" a secas confundía. */}
+                  <Lock className="h-4 w-4" />
+                  {bloqueoVigente(sel) ? 'Bloquear permanentemente' : 'Bloquear usuario'}
                 </Button>
               )}
               {tiene('ADM_USUARIO_DESBLOQUEAR') && sel.estado_usuario === 'BLOQUEADO' && (

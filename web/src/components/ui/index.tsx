@@ -40,7 +40,7 @@ export function Card({ className, children }: { className?: string; children: Re
 /* ---------- Badge de estado ---------- */
 const OK = new Set(['ACTIVO', 'ACTIVA', 'VIGENTE', 'AUTORIZADO', 'OPERATIVO', 'EXITO', 'ATENDIDA', 'EPN', 'REALIZADO', 'VALIDO'])
 const BAD = new Set(['DADO_DE_BAJA', 'REVOCADA', 'REVOCADO', 'DENEGADO', 'BLOQUEADO', 'BLOQUEADA', 'DANO_FISICO', 'ERROR', 'VENCIDO', 'VENCIDA', 'CRITICO', 'ALTO', 'INVALIDO'])
-const WARN = new Set(['INACTIVO', 'INACTIVA', 'SUSPENDIDO', 'SUSPENDIDA', 'FALLA', 'FALLA_DE_RED', 'MANTENIMIENTO', 'PENDIENTE', 'FINALIZADA', 'EXPIRADA', 'CERRADA', 'CERRADA_CAMBIO_PASSWORD', 'MEDIO', 'BAJO', 'NO_VERIFICADO'])
+const WARN = new Set(['INACTIVO', 'INACTIVA', 'SUSPENDIDO', 'SUSPENDIDA', 'FALLA', 'FALLA_DE_RED', 'MANTENIMIENTO', 'PENDIENTE', 'FINALIZADA', 'EXPIRADA', 'CERRADA', 'CERRADA_CAMBIO_PASSWORD', 'MEDIO', 'BAJO', 'NO_VERIFICADO', 'BLOQUEO_TEMPORAL'])
 
 export function Badge({ value, className }: { value?: string | null; className?: string }) {
   const v = value ?? ''
