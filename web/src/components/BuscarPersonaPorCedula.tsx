@@ -28,6 +28,7 @@ export function BuscarPersonaPorCedula({
   validar = true,
   autoFocus = false,
   id = 'buscar-persona-cedula',
+  soloTipo,
 }: {
   onSelect: (persona: PersonaCedula | null) => void
   label?: string
@@ -39,6 +40,9 @@ export function BuscarPersonaPorCedula({
   /** Identificador del campo, para asociarlo con su etiqueta. Solo hace falta cambiarlo
    *  si hay dos buscadores en la misma pantalla. */
   id?: string
+  /** Restringe el resultado al ámbito del módulo: GPI trabaja con personal interno y GPE con
+   *  externo. Sin esto, desde GPI se puede acabar vinculando por error a un visitante. */
+  soloTipo?: 'INTERNA' | 'EXTERNA'
 }) {
   const [cedula, setCedula] = useState('')
   const [buscando, setBuscando] = useState(false)
@@ -76,6 +80,13 @@ export function BuscarPersonaPorCedula({
     const p = data as unknown as PersonaCedula
     if (soloActivas && p.estado !== 'ACTIVO') {
       setError(`La persona está ${humanizar(p.estado)}: no se puede seleccionar.`)
+      onSelect(null)
+      return
+    }
+    if (soloTipo && p.tipo_persona !== soloTipo) {
+      const esperado = soloTipo === 'INTERNA' ? 'personal interno' : 'personal externo'
+      const encontrado = p.tipo_persona === 'INTERNA' ? 'personal interno' : 'personal externo'
+      setError(`Esta sección trabaja con ${esperado}, y esa cédula corresponde a ${encontrado}.`)
       onSelect(null)
       return
     }

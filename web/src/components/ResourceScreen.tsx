@@ -355,6 +355,8 @@ function RecordForm({
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [dinamicas, setDinamicas] = useState<Record<string, Opcion[]>>({})
+  /** Cambios en campos sensibles pendientes de confirmar (GPE §5). */
+  const [confirmacion, setConfirmacion] = useState<{ campo: string; antes: string; despues: string }[] | null>(null)
 
   /** Error de formato por campo, mostrado bajo el input mientras se escribe. */
   const [erroresCampo, setErroresCampo] = useState<Record<string, string | null>>({})
@@ -431,6 +433,28 @@ function RecordForm({
   }, [...config.campos.filter((c) => c.derivarSiempreDesde).map((c) => valores[c.derivarSiempreDesde!.campo])])
 
   const bloqueadoEnEdicion = (c: FieldConfig) => esEdicion && c.editable === false
+  /** Deshabilitado en pantalla: por política de edición o por ser un valor que calcula el sistema. */
+  const deshabilitado = (c: FieldConfig) => bloqueadoEnEdicion(c) || c.soloLectura === true
+
+  /** Campos sensibles que el usuario acaba de cambiar (GPE §5). Vacío si no hay ninguno. */
+  const cambiosSensibles = () => {
+    if (!esEdicion || !config.camposSensibles?.length) return []
+    return config.campos
+      .filter((c) => config.camposSensibles!.includes(c.name) && !deshabilitado(c))
+      .map((c) => {
+        const antes = registro?.[c.name]
+        const despues = valores[c.name]
+        const norm = (v: unknown) => (v == null || v === '' ? '' : String(v))
+        if (norm(antes) === norm(despues)) return null
+        const etiquetaValor = (v: unknown) => {
+          if (norm(v) === '') return '(vacío)'
+          const opcion = (opciones[c.name] ?? []).find((o) => o.value === String(v))
+          return opcion?.label ?? String(v)
+        }
+        return { campo: c.label, antes: etiquetaValor(antes), despues: etiquetaValor(despues) }
+      })
+      .filter((x): x is { campo: string; antes: string; despues: string } => x !== null)
+  }
 
   const guardar = async () => {
     setError(null)
@@ -461,6 +485,16 @@ function RecordForm({
       }
     }
 
+    // Antes de escribir nada: si el usuario tocó un campo sensible, se le enseña exactamente
+    // qué va a cambiar y de qué a qué (GPE §5). Confirmar vuelve a entrar aquí con la lista ya
+    // resuelta, así que la comprobación no se repite en bucle.
+    const sensibles = cambiosSensibles()
+    if (sensibles.length > 0 && confirmacion === null) {
+      setConfirmacion(sensibles)
+      return
+    }
+    setConfirmacion(null)
+
     // Selección múltiple (feedback GPE): un INSERT por cada valor elegido, mismo resto de campos.
     const campoMulti = !esEdicion ? config.campos.find((c) => c.multiSelect) : undefined
     if (campoMulti) {
@@ -468,7 +502,7 @@ function RecordForm({
       const seleccionados = valores[campoMulti.name] as string[]
       const base: Row = {}
       for (const c of config.campos) {
-        if (c === campoMulti || c.persistir === false) continue
+        if (c === campoMulti || c.persistir === false || c.soloLectura) continue
         let v = valores[c.name]
         if (c.normalizar && typeof v === 'string' && v !== '') v = c.normalizar(v)
         if (v === '') v = null
@@ -492,7 +526,7 @@ function RecordForm({
     setGuardando(true)
     const payload: Row = {}
     for (const c of config.campos) {
-      if (c.persistir === false) continue
+      if (c.persistir === false || c.soloLectura) continue
       if (esEdicion && (c.insertOnly || bloqueadoEnEdicion(c))) continue
       let v = valores[c.name]
       if (c.normalizar && typeof v === 'string' && v !== '') v = c.normalizar(v)
@@ -525,11 +559,10 @@ function RecordForm({
       <h2 className="mb-1 text-lg font-bold text-navy">
         {esEdicion ? `Editar ${config.singular}` : `Registrar ${config.singular}`}
       </h2>
-      {esEdicion && (
-        <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-          Los campos en gris no son editables por diseño (identidad del registro o política de permisos).
-        </p>
-      )}
+      {/* GPE §7: el aviso "Los campos en gris no son editables por diseño (identidad del
+          registro o política de permisos)" explicaba una decisión de diseño a quien solo
+          quiere rellenar un formulario. Cada campo bloqueado dice ahora por sí mismo por qué
+          lo está, en su propio `hint`. */}
 
       <div className="mb-5"><ErrorBanner message={error} /></div>
 
@@ -538,7 +571,7 @@ function RecordForm({
           .filter((c) => esEdicion || !c.hideOnInsert)
           .filter((c) => !c.visibleSi || c.visibleSi(valores))
           .map((c) => {
-          const disabled = bloqueadoEnEdicion(c)
+          const disabled = deshabilitado(c)
           const span = c.colSpan === 3 ? 'lg:col-span-3' : c.colSpan === 2 ? 'sm:col-span-2' : ''
           return (
             <div key={c.name} className={span}>
@@ -580,6 +613,11 @@ function RecordForm({
                         )
                       })}
                     </div>
+                  ) : c.soloLectura ? (
+                    // Campo en gris con el valor que el sistema calcula (GPE §6). Se pinta como
+                    // texto y no como <select>: ofrecer un desplegable que no se puede abrir
+                    // era justo lo que confundía en "Editar Memorando".
+                    <Input value={c.valorCalculado ? c.valorCalculado(valores) : String(valores[c.name] ?? '')} disabled readOnly />
                   ) : c.type === 'select' ? (
                     <Select
                       value={valores[c.name] ?? ''}
@@ -637,6 +675,39 @@ function RecordForm({
         <Button variant="secondary" onClick={onCancel}>Volver al panel</Button>
         <Button onClick={guardar} loading={guardando}>{esEdicion ? 'Guardar cambios' : 'Registrar'}</Button>
       </div>
+
+      {/* GPE §5: confirmación antes de tocar un dato sensible. Enseña el valor de antes y el
+          de después de cada campo, para que quien confirma sepa qué está aprobando. */}
+      <Modal
+        open={confirmacion !== null}
+        onClose={() => setConfirmacion(null)}
+        title="Confirmar cambios en datos sensibles"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmacion(null)}>Cancelar</Button>
+            <Button onClick={guardar} loading={guardando}>Sí, guardar los cambios</Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-ink-soft">
+            Vas a modificar {confirmacion?.length === 1 ? 'un dato que afecta' : 'datos que afectan'} al
+            control de acceso de esta persona o a su identificación. Revisa antes de continuar:
+          </p>
+          <ul className="space-y-2">
+            {confirmacion?.map((c) => (
+              <li key={c.campo} className="rounded-md border border-slate-200 px-3 py-2 text-sm">
+                <p className="font-medium text-navy">{c.campo}</p>
+                <p className="text-ink-soft">
+                  <span className="line-through">{c.antes}</span>
+                  {' → '}
+                  <span className="font-medium text-navy">{c.despues}</span>
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Modal>
     </Card>
   )
 }
