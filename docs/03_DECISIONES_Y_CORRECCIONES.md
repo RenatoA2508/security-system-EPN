@@ -606,3 +606,63 @@ jerarquía recursiva `id_zona_padre` en `zona`; tabla `autorizacion_visita_diari
 - **Los mensajes que lanzan nuestras propias funciones SQL ya están en español y se dejan pasar**;
   cualquier mensaje desconocido se sustituye por uno genérico y se registra en consola para
   depuración. Nunca se muestra texto en inglés, SQL, tokens ni trazas.
+
+---
+
+# Ronda de mejoras del módulo ADM (2026-07-18) — Requerimientos_ADM
+
+Origen: `docs/New_Req/Requerimientos_ADM.docx`, revisión de admin@epn.edu.ec y
+gary.defas@epn.edu.ec sobre el módulo ya desplegado.
+
+### D41 — Usuarios y roles son un solo apartado
+
+"Asignaciones de rol" desaparece como pantalla. La ficha del usuario muestra y gestiona sus
+roles, con fecha de asignación y fecha de estado (la de revocación si está revocado, la de
+asignación si sigue activo). Se conservan los permisos `ADM_USUARIO_ROL_*`: son los que
+decide la propia pantalla para mostrar u ocultar las acciones de asignar y revocar.
+
+Un usuario puede tener **varios roles activos** — el modelo ya lo permitía y hay una cuenta
+así en la base (`guardia_demo`), así que la pantalla lista todos, no uno.
+
+### D42 — La unidad de medida de un parámetro es una columna, no parte del nombre
+
+`parametro_sistema.unidad_medida` con CHECK sobre 12 valores. Antes la unidad viajaba dentro
+de `nombre_parametro` ("Tiempo de sesion (min)"): dato disfrazado de etiqueta, imposible de
+filtrar o validar. `HORA_DEL_DIA` marca los parámetros cuyo valor es un instante ("06:00"),
+que no son una magnitud.
+
+### D43 — La categoría se explica con una descripción; el ámbito ya existía
+
+`categoria_persona.descripcion`, NOT NULL. `nombre_categoria` se queda en la base como
+etiqueta corta para otras pantallas, pero deja de mostrarse en ADM: repetía el código en
+versión legible ("Docente" para DOCENTE) sin aportar nada.
+
+### D44 — Auditoría se resuelve con una vista, no con columnas nuevas
+
+`v_auditoria` sobre `bitacora_sistema`. Traduce el nombre de la tabla a lenguaje llano,
+resuelve `id_entidad_afectada` contra la tabla que corresponda, distingue **quién ejecutó**
+de **sobre quién recayó**, y trae entrada/salida de la sesión cuando el evento es de sesión.
+
+Se descartó añadir `id_usuario_afectado` y `fecha_salida` a la bitácora: es una tabla
+histórica de solo INSERT (CLAUDE.md), así que columnas nuevas dejarían vacíos los 600+
+registros ya escritos. La vista funciona sobre todo el histórico desde el primer día.
+
+La vista lleva `security_invoker = true`. Cruza `persona`, `usuario_sistema` y `sesion`: como
+SECURITY DEFINER habría sido exactamente la fuga que ya ocurrió una vez (§V7).
+
+**El cambio se expone dos veces**: `datos` (texto plano, para el CSV) y `cambios` (jsonb
+`[{campo, antes, despues}]`, para la interfaz). Traducir los valores en SQL habría obligado a
+duplicar en la base el catálogo de etiquetas de `web/src/lib/catalogos.ts`.
+
+### D45 — Las asociaciones persona-vehículo se gestionan desde la ficha del vehículo
+
+Solo en ADM. GPI y GPE conservan su pantalla de asociaciones: ahí el alta de vínculos es
+parte del trabajo diario, no una excepción administrativa. `ResourceConfig` gana
+`detalleExtra` para esto: el hueco del cuerpo del panel de detalle, frente a `accionDetalle`,
+que es un botón del pie.
+
+### D46 — Biometría: se dice dónde está el rostro, nunca se muestra
+
+"Referencia del rostro" (id corto + nombre del archivo) y "Lugar de almacenamiento" (bucket
+de Storage, y si hay descriptor también el vector en la base). Ambas se derivan de
+`path_storage`; la consulta no pide el archivo ni firma ninguna URL. Doc 02 nota ⁴ intacta.

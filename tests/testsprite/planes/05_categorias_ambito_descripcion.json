@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Categorías — ámbito y descripción, sin columna Nombre",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Categorías'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla tiene las columnas 'Categoría', 'Ámbito', 'Descripción' y 'Estado', y NO tiene una columna titulada 'Nombre'"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila de la categoría 'Docente' indica ámbito 'Interna' y una descripción que menciona al personal docente de la Politécnica"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila de la categoría 'Visitante' indica ámbito 'Externa'"
+    }
+  ]
+}

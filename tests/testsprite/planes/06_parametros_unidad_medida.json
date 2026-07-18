@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Parámetros — columna Unidad de medida junto a Valor",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Parámetros'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla tiene una columna 'Unidad de medida' situada inmediatamente después de la columna 'Valor'"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila del parámetro TIEMPO_SESION_MIN muestra el valor 60 y la unidad 'Minutos', y su nombre es 'Duración máxima de la sesión' — sin '(min)' pegado al nombre"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila de MAX_INTENTOS_LOGIN muestra la unidad 'Intentos' y la de MAX_VEHICULOS_POR_PERSONA muestra 'Vehículos'"
+    }
+  ]
+}

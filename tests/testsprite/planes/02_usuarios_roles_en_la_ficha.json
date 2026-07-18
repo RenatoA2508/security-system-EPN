@@ -1,0 +1,35 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Usuarios — asignar y revocar roles desde la ficha",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir 'Usuarios' y hacer clic en la fila del usuario 'gary.defas'"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel lateral muestra la sección 'Roles asignados' con el rol 'Director Administrativo', su estado y la fecha de asignación"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel ofrece un botón 'Asignar rol' y, junto al rol activo, un control para revocarlo"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar 'Asignar rol'"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece un desplegable de roles que NO incluye 'Director Administrativo', porque el usuario ya lo tiene activo"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Permisos — la columna principal es el permiso, no el código",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Permisos'"
+    },
+    {
+      "type": "assertion",
+      "description": "La primera columna de la tabla se titula 'Permiso' y no 'Código'"
+    },
+    {
+      "type": "assertion",
+      "description": "Cada fila muestra una descripción legible en español (por ejemplo 'Consultar vehículos') y, debajo y en tamaño menor, el código técnico correspondiente (por ejemplo ADM_VEHICULO_SELECT)"
+    },
+    {
+      "type": "assertion",
+      "description": "Las descripciones llevan tildes: existe al menos una fila cuyo texto contiene 'vehículos' y otra que contiene 'parámetros'"
+    }
+  ]
+}

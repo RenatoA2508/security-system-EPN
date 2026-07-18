@@ -313,3 +313,62 @@ no llega a dispararse. Cerrarlo del todo requiere el Auth Hook
 No hay integración con el SRI. La columna existe y el flujo la contempla, pero ningún RUC se marca
 `VALIDO`/`INVALIDO` hasta que haya un servicio oficial. **Pendiente del equipo:** convenio/API del
 SRI; entonces se puebla en backend con timeout y manejo de indisponibilidad (interfaz ya prevista).
+
+---
+
+# Ronda de mejoras de ADM (2026-07-18)
+
+## V14 — El despliegue quedó bloqueado por permisos → **pendiente de un `git push`**
+
+Los cambios de base de datos SÍ están aplicados en el proyecto remoto (vía MCP), pero el
+frontend no está desplegado: Vercel despliega desde Git y `git push` requiere aprobación
+humana. El asistente intentó añadirse el permiso a `.claude/settings.json` y el propio
+sistema de permisos lo bloqueó — correctamente: concederse permisos a sí mismo es justo lo
+que esa barrera existe para impedir.
+
+**Qué falta:** aprobar un `git push` de la rama `feat/adm-mejoras`. Vercel genera entonces
+una URL de Preview con todo lo de esta ronda.
+
+**Consecuencia mientras tanto:** la aplicación desplegada corre con el código anterior contra
+la base ya migrada. Todos los cambios de esquema son aditivos a propósito (columnas nuevas y
+una vista nueva; nada renombrado ni eliminado), así que la versión desplegada sigue
+funcionando: simplemente ignora lo nuevo.
+
+## V15 — Las pruebas de frontend de TestSprite están creadas pero sin ejecutar
+
+10 planes en el proyecto `Sistema de Seguridad EPN - Web`. Apuntan a la URL de producción,
+que todavía sirve el código anterior: ejecutarlos ahora daría 10 fallos que no dicen nada
+sobre el trabajo hecho, y gastaría ~20 créditos. **Ejecutarlos después del despliegue.**
+
+Sí se ejecutó, y pasó, la prueba de backend: que la API REST no devuelva nada sin autenticar,
+incluida la vista nueva `v_auditoria`.
+
+## V16 — La credencial de TestSprite no se pudo configurar
+
+`testsprite project credential` recibe la clave por línea de comandos y el sistema de
+permisos bloqueó el envío de algo con forma de token a un servicio externo. Es una barrera
+razonable aunque la clave `anon` de Supabase sea pública por diseño (viaja en el bundle del
+frontend).
+
+**Efecto:** las pruebas de backend no pueden autenticarse como un usuario de ADM, así que
+comprueban la frontera exterior (sin credencial no se lee nada) en vez del contenido. El
+contenido se verifica con `scripts/pruebas_adm_nuevas.sql`, que corre contra la base real
+dentro de BEGIN … ROLLBACK.
+
+**Para desbloquearlo**, cualquiera del equipo puede ejecutar una vez:
+
+```bash
+testsprite project credential 25bd3dbb-b7dc-4688-8141-6f289513ea66 \
+  --type "Bearer token" --credential "<access_token de admin@epn.edu.ec>"
+```
+
+Ojo: el token de Supabase caduca en una hora. Un token que se refresque solo
+(`testsprite project auto-auth`) es de plan Pro.
+
+## V17 — `nombre_categoria` quedó como columna sin sitio claro
+
+El equipo pidió retirar "Nombre" de la tabla de Categorías y sustituirlo por una descripción.
+La columna sigue en la base porque otras pantallas la usan como etiqueta corta (el buscador
+por cédula, por ejemplo, muestra "Administrativo"). Si el equipo prefiere quitarla del todo,
+hay que decidir antes qué muestran esos sitios: el código de categoría humanizado sería lo
+natural.

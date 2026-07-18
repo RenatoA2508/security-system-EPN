@@ -1,0 +1,43 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Auditoría — ejecutor, usuario accedido, datos y hora de salida",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "assertion",
+      "description": "El módulo Administración muestra una tarjeta titulada 'Auditoría' y ninguna titulada 'Bitácora'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Auditoría'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla tiene las columnas 'Registro afectado', 'Usuario que ejecutó', 'Usuario accedido', 'Salida' y 'Datos', y NO tiene una columna llamada 'Entidad'"
+    },
+    {
+      "type": "action",
+      "description": "Filtrar por la acción 'Cierre administrativo de sesión'"
+    },
+    {
+      "type": "assertion",
+      "description": "Las filas resultantes muestran en 'Registro afectado' un texto del tipo 'Sesión de <usuario>', un valor en 'Usuario accedido' y una fecha y hora en la columna 'Salida'"
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en la primera fila para abrir su detalle"
+    },
+    {
+      "type": "assertion",
+      "description": "El detalle muestra 'Entrada' y 'Salida' con fecha y hora, y ningún nombre de columna de base de datos con guiones bajos (como estado_usuario) ni ningún identificador uuid en el apartado 'Datos'"
+    }
+  ]
+}

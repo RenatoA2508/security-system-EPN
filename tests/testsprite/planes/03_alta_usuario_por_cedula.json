@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Usuarios — el alta busca la persona por cédula",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir 'Usuarios' y pulsar el botón 'Crear usuario'"
+    },
+    {
+      "type": "assertion",
+      "description": "El formulario muestra un campo de texto etiquetado 'Cédula de la persona' con un botón 'Buscar', y NO existe ningún desplegable etiquetado 'Persona'"
+    },
+    {
+      "type": "action",
+      "description": "Escribir la cédula 1750000117 en el campo y pulsar 'Buscar'"
+    },
+    {
+      "type": "assertion",
+      "description": "Se muestra el nombre de la persona encontrada y el campo 'Nombre de usuario' se rellena solo con 'lenin.amangandi'"
+    }
+  ]
+}

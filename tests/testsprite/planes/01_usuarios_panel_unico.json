@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Usuarios — rol, cédula y fechas en un solo panel",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "assertion",
+      "description": "El módulo Administración muestra una tarjeta titulada exactamente 'Usuarios' y NO existe ninguna tarjeta titulada 'Asignaciones de rol'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Usuarios'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla tiene las cabeceras 'Usuario', 'Persona', 'Cédula', 'Rol' y 'Estado de la cuenta'"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila del usuario 'gary.defas' muestra la cédula 1750000109 y el rol 'Director Administrativo' con un texto que empieza por 'desde' seguido de una fecha"
+    }
+  ]
+}

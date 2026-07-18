@@ -1,0 +1,43 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Vehículos — propietario visible y asociaciones en la misma ficha",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "assertion",
+      "description": "El módulo Administración NO muestra ninguna tarjeta titulada 'Asociaciones'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Vehículos'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla incluye una columna 'Propietario' con el nombre de una persona en al menos una fila"
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en la primera fila de la tabla"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel de detalle contiene una sección 'Personas asociadas' con un botón 'Vincular persona'"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar 'Vincular persona'"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece un campo 'Cédula de la persona' con botón 'Buscar' y un desplegable 'Tipo de relación'"
+    }
+  ]
+}

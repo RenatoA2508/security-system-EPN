@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Usuarios — los cuatro estados se distinguen entre sí",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir 'Usuarios' y escribir 'frank' en la caja de búsqueda"
+    },
+    {
+      "type": "assertion",
+      "description": "La fila de 'frank.jumbo' muestra el estado 'Bloqueado' escrito así, en español y con mayúscula inicial, no como BLOQUEADO ni como un código"
+    },
+    {
+      "type": "action",
+      "description": "Hacer clic en la fila de 'frank.jumbo'"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel ofrece la acción 'Desbloquear usuario', distinta de cualquier acción de desbloqueo por intentos fallidos"
+    }
+  ]
+}
