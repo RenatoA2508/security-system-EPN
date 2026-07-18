@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { KeyRound, MonitorSmartphone } from 'lucide-react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
@@ -23,6 +24,7 @@ interface SesionPropia {
 /** Cuenta propia: datos del usuario y cambio de contraseña (reqs 26/27/28). */
 export function CuentaPage() {
   const { perfil, rolLabel } = useAuth()
+  const navigate = useNavigate()
   const [actual, setActual] = useState('')
   const [p1, setP1] = useState('')
   const [p2, setP2] = useState('')
@@ -73,6 +75,9 @@ export function CuentaPage() {
       // Cambio voluntario (req 26): reautentica con la actual, cambia, revoca
       // TODAS las sesiones y cierra sesión. La app vuelve al login con aviso.
       await cambiarPasswordSeguro(p1, { email: perfil?.correo_electronico, actual })
+      // La URL debe dejar de apuntar a /cuenta: si no, al volver a iniciar sesión
+      // el enrutador regresaría aquí en vez de al panel principal.
+      navigate('/', { replace: true })
     } catch (err) {
       setError(mensajeError(err))
       setGuardando(false)

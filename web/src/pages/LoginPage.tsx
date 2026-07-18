@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, ShieldCheck } from 'lucide-react'
 import { supabase, mensajeError, setRecordarSesion } from '../lib/supabase'
 import { consumirAvisoLogin } from '../auth/password'
 import { Button, ErrorBanner, Field, Input } from '../components/ui'
 
 export function LoginPage() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ver, setVer] = useState(false)
@@ -23,7 +24,16 @@ export function LoginPage() {
     // Login real con Supabase Auth (05 §2.1). El AuthProvider reacciona al cambio de sesión.
     const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     setCargando(false)
-    if (error) setError(mensajeError(error))
+    if (error) {
+      setError(mensajeError(error))
+      return
+    }
+    // Tras iniciar sesión SIEMPRE se entra al panel principal. El login se renderiza
+    // con la ruta comodín, así que la URL puede haber quedado en una pantalla previa
+    // (p. ej. /cuenta tras cambiar la contraseña); sin esto, el enrutador volvería
+    // allí en vez de al panel. Si la cuenta tiene cambio de contraseña pendiente,
+    // el guard de App muestra igualmente la pantalla de cambio obligatorio.
+    navigate('/', { replace: true })
   }
 
   return (
