@@ -178,6 +178,14 @@ export const ETIQUETA: Record<string, string> = {
   EXITO: 'Éxito',
   ERROR: 'Error',
 
+  // Motivos de cierre de sesión (sesion.motivo_cierre)
+  LOGOUT: 'Cierre de sesión',
+  CIERRE_MANUAL: 'Cierre manual',
+  EXPIRACION_ABSOLUTA: 'Expiración por tiempo',
+  INACTIVIDAD: 'Inactividad',
+  CAMBIO_PASSWORD: 'Cambio de contraseña',
+  ACCESO_FUERA_DE_TURNO: 'Acceso fuera de turno',
+
   // Contraseña / verificación
   REALIZADO: 'Realizado',
   NO_VERIFICADO: 'No verificado',

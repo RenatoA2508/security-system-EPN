@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './database.types'
+import { traducirError } from './errores'
 
 const url = import.meta.env.VITE_SUPABASE_URL as string
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -108,9 +109,14 @@ export function fromTable(tabla: string) {
   return (supabase as any).from(tabla)
 }
 
-/** Traduce un error de PostgREST/Supabase a texto legible. Un 403/permiso se muestra tal cual (05 §2.6). */
+/**
+ * Mensaje de error listo para mostrar al usuario, SIEMPRE en español (req 25).
+ *
+ * Antes devolvía `error.message` tal cual, así que el usuario veía textos crudos
+ * del proveedor como "Invalid login credentials" o incluso detalle de SQL. La
+ * traducción vive en lib/errores.ts; aquí solo se reexporta para no tocar los
+ * ~40 puntos que ya llaman a esta función.
+ */
 export function mensajeError(error: unknown): string {
-  if (!error) return 'Error desconocido.'
-  const e = error as { message?: string; error_description?: string; hint?: string }
-  return e.message || e.error_description || e.hint || String(error)
+  return traducirError(error)
 }

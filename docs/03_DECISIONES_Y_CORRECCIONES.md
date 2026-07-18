@@ -574,3 +574,16 @@ jerarquía recursiva `id_zona_padre` en `zona`; tabla `autorizacion_visita_diari
   es neutral (no revela si la cuenta existe), pero el ENVÍO queda `NO_VERIFICADO` hasta configurar
   SMTP. Tras el cambio se revocan todas las sesiones y se redirige al login sin iniciar sesión.
 - Sin correo autogenerado (req 38): el visitante externo se guarda con `persona.correo = NULL`.
+
+### D39 — Ningún error crudo del proveedor llega al usuario (req 25)
+- **Hallazgo:** `mensajeError()` devolvía `error.message` tal cual, así que el usuario veía
+  textos en inglés del proveedor ("Invalid login credentials") e incluso detalle de SQL
+  ("violates check constraint ..."), contra el req 25 y su regla de no exponer errores crudos.
+- **Decisión:** toda traducción vive en `web/src/lib/errores.ts`. Se traduce por **código estable**
+  del proveedor primero (`invalid_credentials`, `user_banned`, …), luego por texto, y las
+  restricciones de base se traducen **por nombre de constraint** (`persona_cedula_valida` →
+  "La cédula no es válida"). Las violaciones de RLS se muestran como "No tiene permiso…", sin
+  revelar la tabla.
+- **Los mensajes que lanzan nuestras propias funciones SQL ya están en español y se dejan pasar**;
+  cualquier mensaje desconocido se sustituye por uno genérico y se registra en consola para
+  depuración. Nunca se muestra texto en inglés, SQL, tokens ni trazas.
