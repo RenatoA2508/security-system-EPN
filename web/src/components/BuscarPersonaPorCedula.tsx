@@ -27,6 +27,7 @@ export function BuscarPersonaPorCedula({
   soloActivas = false,
   validar = true,
   autoFocus = false,
+  id = 'buscar-persona-cedula',
 }: {
   onSelect: (persona: PersonaCedula | null) => void
   label?: string
@@ -35,6 +36,9 @@ export function BuscarPersonaPorCedula({
   /** Valida el formato de cédula ecuatoriana antes de buscar. */
   validar?: boolean
   autoFocus?: boolean
+  /** Identificador del campo, para asociarlo con su etiqueta. Solo hace falta cambiarlo
+   *  si hay dos buscadores en la misma pantalla. */
+  id?: string
 }) {
   const [cedula, setCedula] = useState('')
   const [buscando, setBuscando] = useState(false)
@@ -111,11 +115,13 @@ export function BuscarPersonaPorCedula({
   return (
     <Field
       label={label}
+      htmlFor={id}
       error={error ?? (cedula && errorFormato ? errorFormato : null)}
       hint="10 dígitos."
     >
       <div className="flex gap-2">
         <Input
+          id={id}
           inputMode="numeric"
           autoFocus={autoFocus}
           value={cedula}
