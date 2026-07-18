@@ -35,9 +35,25 @@ export function consumirAvisoLogin(): string | null {
  * Requisito del cambio voluntario (req 26).
  */
 export async function reautenticar(email: string, actual: string): Promise<void> {
-  const tmp = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  const tmp = createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      // Clave de almacenamiento propia: evita cualquier interferencia con la
+      // sesión real si el adaptador de almacenamiento cambiara en el futuro.
+      storageKey: 'epn-reauth-temporal',
+    },
+  })
   const { error } = await tmp.auth.signInWithPassword({ email: email.trim(), password: actual })
-  await tmp.auth.signOut().catch(() => {})
+
+  // CRÍTICO: scope 'local'. Por defecto signOut() usa scope 'global', que revoca
+  // TODOS los refresh tokens del usuario en el servidor — incluida la sesión real
+  // de la app. Eso dejaba la sesión muerta y el updateUser() siguiente fallaba con
+  // "Auth session missing!". Con 'local' solo se descarta este cliente desechable.
+  // El refresh token que creó esta verificación se limpia igualmente unas líneas
+  // más abajo, en revocar_mis_sesiones().
+  await tmp.auth.signOut({ scope: 'local' }).catch(() => {})
+
   if (error) throw new Error('La contraseña actual no es correcta.')
 }
 
