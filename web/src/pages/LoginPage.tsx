@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { CheckCircle2, Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { supabase, mensajeError, setRecordarSesion } from '../lib/supabase'
+import { iniciarSesion, setRecordarSesion } from '../lib/supabase'
 import { consumirAvisoLogin } from '../auth/password'
 import { Button, ErrorBanner, Field, Input } from '../components/ui'
 
@@ -21,11 +21,13 @@ export function LoginPage() {
     setCargando(true)
     // "Recordar sesión" decide el almacén del token ANTES de iniciar sesión (req 30).
     setRecordarSesion(recordar)
-    // Login real con Supabase Auth (05 §2.1). El AuthProvider reacciona al cambio de sesión.
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    // Pasa por la Edge Function `iniciar-sesion`, que aplica la política de
+    // intentos fallidos antes de verificar la contraseña. El AuthProvider
+    // reacciona al SIGNED_IN que emite setSession.
+    const fallo = await iniciarSesion(email, password)
     setCargando(false)
-    if (error) {
-      setError(mensajeError(error))
+    if (fallo) {
+      setError(fallo)
       return
     }
     // Tras iniciar sesión SIEMPRE se entra al panel principal. El login se renderiza

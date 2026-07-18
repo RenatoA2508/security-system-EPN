@@ -102,6 +102,71 @@ export const supabase = createClient<Database>(url, anonKey, {
 })
 
 /**
+ * Inicio de sesión a través de la Edge Function `iniciar-sesion`, que aplica la
+ * política de intentos fallidos (MAX_INTENTOS_LOGIN / TIEMPO_BLOQUEO_CUENTA_MIN).
+ *
+ * No se usa `signInWithPassword` directamente porque entonces la base de datos
+ * nunca se entera de un intento fallido y el contador se queda en cero: el
+ * sistema quedaba abierto a fuerza bruta. Cuando la cuenta se bloquea, el backend
+ * escribe además `auth.users.banned_until`, así que GoTrue rechaza el acceso
+ * aunque se llame a su API directamente.
+ *
+ * Devuelve `null` si todo fue bien, o el mensaje de error ya en español.
+ */
+export async function iniciarSesion(email: string, password: string): Promise<string | null> {
+  let respuesta: Response
+  try {
+    respuesta = await fetch(`${url}/functions/v1/iniciar-sesion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+      body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+    })
+  } catch {
+    return 'No se pudo conectar con el servidor. Revise su conexión a internet.'
+  }
+
+  const datos = (await respuesta.json().catch(() => ({}))) as {
+    access_token?: string
+    refresh_token?: string
+    error_code?: string
+    minutos_restantes?: number | null
+    intentos_restantes?: number | null
+    message?: string
+    error?: string
+  }
+
+  if (respuesta.ok && datos.access_token && datos.refresh_token) {
+    // Instala la sesión en el cliente; esto emite SIGNED_IN y dispara el registro
+    // de sesión de auditoría en AuthProvider, igual que un login normal.
+    const { error } = await supabase.auth.setSession({
+      access_token: datos.access_token,
+      refresh_token: datos.refresh_token,
+    })
+    return error ? traducirError(error) : null
+  }
+
+  // El mensaje se compone aquí para garantizar la ortografía en español.
+  if (datos.error_code === 'account_locked') {
+    const min = datos.minutos_restantes
+    return (
+      'Cuenta bloqueada temporalmente por superar el máximo de intentos fallidos. ' +
+      (min
+        ? `Podrá intentarlo de nuevo en ${min} minuto${min === 1 ? '' : 's'}, `
+        : 'Podrá intentarlo más tarde, ') +
+      'o solicitar el desbloqueo al administrador.'
+    )
+  }
+  if (datos.error_code === 'invalid_credentials') {
+    const quedan = datos.intentos_restantes
+    return quedan != null && quedan > 0
+      ? `Correo o contraseña incorrectos. Le quedan ${quedan} intento${quedan === 1 ? '' : 's'} antes de que la cuenta se bloquee.`
+      : 'Correo o contraseña incorrectos.'
+  }
+
+  return traducirError(datos.error ? { message: datos.error } : datos)
+}
+
+/**
  * Acceso a una tabla por nombre dinámico (motor genérico de recursos). El cliente tipado
  * exige un literal de tabla; aquí el nombre viene de la config, así que relajamos el tipo.
  */

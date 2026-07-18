@@ -290,6 +290,25 @@ El endurecimiento de la cédula no cambia esto: las 18 cédulas sintéticas de �
 válidas por estructura pero no corresponden a personas reales. **Pendiente del equipo:** sustituir
 por las cédulas reales desde ADM. (Las nuevas reglas no las rechazan: no son relleno.)
 
+## V13 — Bloqueo por intentos fallidos: hueco residual del plan gratuito
+El bloqueo (5 intentos → 15 min) funciona y es efectivo: al dispararse se escribe
+`auth.users.banned_until`, así que GoTrue rechaza el acceso **aunque se llame a su API
+directamente**. Verificado en `scripts/prueba_bloqueo_intentos.py`.
+
+**Hueco que queda:** el conteo lo hace la Edge Function `iniciar-sesion`. Quien nunca la use y
+ataque `/auth/v1/token` directamente **no incrementa el contador**, así que por esa vía el bloqueo
+no llega a dispararse. Cerrarlo del todo requiere el Auth Hook
+`password_verification_attempt` de GoTrue, que es **de pago** (HTTP 402 al intentar activarlo).
+
+**Mitigaciones y pendientes del equipo:**
+1. Si se contrata plan Pro: activar el hook en Authentication → Hooks apuntando a
+   `pg-functions://postgres/public/hook_password_verification_attempt`. La función ya existe y
+   comparte la misma política; **no hay que tocar código**.
+2. Alternativa sin costo: activar hCaptcha (`security_captcha_enabled`), que sí frena el ataque
+   automatizado contra el endpoint directo.
+3. Supabase no expone un límite de tasa por IP para el *login* en el plan gratuito (`rate_limit_*`
+   cubre correo, OTP y refresh, no el grant de contraseña).
+
 ## V12 — `empresa.estado_verificacion_ruc` siempre NO_VERIFICADO
 No hay integración con el SRI. La columna existe y el flujo la contempla, pero ningún RUC se marca
 `VALIDO`/`INVALIDO` hasta que haya un servicio oficial. **Pendiente del equipo:** convenio/API del

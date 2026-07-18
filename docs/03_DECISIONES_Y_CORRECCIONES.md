@@ -575,6 +575,25 @@ jerarquía recursiva `id_zona_padre` en `zona`; tabla `autorizacion_visita_diari
   SMTP. Tras el cambio se revocan todas las sesiones y se redirige al login sin iniciar sesión.
 - Sin correo autogenerado (req 38): el visitante externo se guarda con `persona.correo = NULL`.
 
+### D40 — Bloqueo por intentos fallidos: proxy de login + `banned_until`
+- **Hallazgo:** `usuario_sistema.intentos_fallidos` era una columna decorativa (nadie la escribía)
+  y los parámetros `MAX_INTENTOS_LOGIN` (5) y `TIEMPO_BLOQUEO_CUENTA_MIN` (15) no los leía nadie.
+  Se podían probar contraseñas de forma ilimitada: vulnerable a fuerza bruta.
+- **Lugar ideal descartado:** el Auth Hook `password_verification_attempt` de GoTrue, que el
+  proveedor invoca en cada verificación y no se puede esquivar. **Requiere plan de pago**
+  (HTTP 402 al activarlo). La función queda escrita y con permisos; activarla el día que se
+  contrate un plan superior no exige tocar código.
+- **Decisión (plan gratuito):** la política vive en `registrar_intento_login()` y la aplica la
+  Edge Function `iniciar-sesion`, que hace de proxy del login. **La pieza que lo hace real** es
+  que al bloquear se escribe `auth.users.banned_until`: desde ese momento GoTrue rechaza el
+  acceso aunque se llame a `/auth/v1/token` directamente. Como es una marca de tiempo, el
+  desbloqueo a los 15 minutos es automático, sin tarea programada.
+- **Dos bloqueos distintos a propósito:** `estado_usuario = 'BLOQUEADO'` es administrativo y
+  permanente (ban de 100 años, §D29); `bloqueado_hasta` es temporal y caduca solo. Nunca se
+  acorta un ban administrativo al aplicar el temporal.
+- Desbloqueo manual: `desbloquear_intentos_login()` (exige `ADM_USUARIO_DESBLOQUEAR`), con su
+  propio botón en ADM → Usuarios, y también al reactivar la cuenta.
+
 ### D39 — Ningún error crudo del proveedor llega al usuario (req 25)
 - **Hallazgo:** `mensajeError()` devolvía `error.message` tal cual, así que el usuario veía
   textos en inglés del proveedor ("Invalid login credentials") e incluso detalle de SQL

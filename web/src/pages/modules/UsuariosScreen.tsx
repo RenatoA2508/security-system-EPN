@@ -18,7 +18,14 @@ interface Usuario {
   requiere_cambio_password: boolean
   fecha_ultimo_login: string | null
   intentos_fallidos: number
+  /** Bloqueo TEMPORAL por intentos fallidos; distinto de estado_usuario = BLOQUEADO. */
+  bloqueado_hasta: string | null
   persona?: { nombres: string; apellidos: string; cedula: string } | null
+}
+
+/** ¿La cuenta está bloqueada AHORA por intentos fallidos? El bloqueo caduca solo. */
+function bloqueoVigente(u: { bloqueado_hasta: string | null }): boolean {
+  return !!u.bloqueado_hasta && new Date(u.bloqueado_hasta) > new Date()
 }
 
 /**
@@ -45,7 +52,7 @@ export function UsuariosScreen() {
     setCargando(true)
     const { data, error } = await supabase
       .from('usuario_sistema')
-      .select('id_usuario, nombre_usuario, correo_electronico, estado_usuario, requiere_cambio_password, fecha_ultimo_login, intentos_fallidos, persona:persona!usuario_sistema_id_persona_fkey(nombres, apellidos, cedula)')
+      .select('id_usuario, nombre_usuario, correo_electronico, estado_usuario, requiere_cambio_password, fecha_ultimo_login, intentos_fallidos, bloqueado_hasta, persona:persona!usuario_sistema_id_persona_fkey(nombres, apellidos, cedula)')
       .order('nombre_usuario')
     if (error) setError(mensajeError(error))
     setUsuarios((data as Usuario[] | null) ?? [])
@@ -65,6 +72,21 @@ export function UsuariosScreen() {
         .some((c) => String(c ?? '').toLowerCase().includes(t)),
     )
   }, [usuarios, busqueda])
+
+  /** Reinicia el contador de intentos fallidos y levanta el bloqueo temporal. */
+  const desbloquearIntentos = async () => {
+    if (!sel) return
+    setAccionando(true)
+    const { error } = await supabase.rpc('desbloquear_intentos_login', { p_id_usuario: sel.id_usuario })
+    setAccionando(false)
+    if (error) {
+      toast('error', mensajeError(error))
+      return
+    }
+    toast('ok', 'Cuenta desbloqueada.')
+    setSel((s) => (s ? { ...s, bloqueado_hasta: null, intentos_fallidos: 0 } : s))
+    await cargar()
+  }
 
   const cambiarEstado = async (nuevoEstado: string) => {
     if (!sel) return
@@ -191,7 +213,17 @@ export function UsuariosScreen() {
               <Row label="Cédula" val={sel.persona?.cedula ?? '—'} />
               <Row label="Último login" val={fmtFechaHora(sel.fecha_ultimo_login)} />
               <Row label="Intentos fallidos" val={String(sel.intentos_fallidos)} />
+              {bloqueoVigente(sel) && (
+                <Row label="Bloqueada hasta" val={fmtFechaHora(sel.bloqueado_hasta)} />
+              )}
             </dl>
+
+            {bloqueoVigente(sel) && (
+              <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                Cuenta bloqueada temporalmente por superar el máximo de intentos fallidos. Se desbloquea
+                sola al cumplirse el tiempo, o puede desbloquearla ahora.
+              </p>
+            )}
             <div className="space-y-2">
               {/* La BD ya lo impide (trigger proteger_administracion): esto solo evita que el
                   administrador descubra la regla chocándose con un error. La guarda de verdad no
@@ -210,6 +242,13 @@ export function UsuariosScreen() {
               {tiene('ADM_USUARIO_DESBLOQUEAR') && sel.estado_usuario === 'BLOQUEADO' && (
                 <Button className="w-full" loading={accionando} onClick={() => cambiarEstado('ACTIVO')}>
                   <ShieldCheck className="h-4 w-4" /> Desbloquear usuario
+                </Button>
+              )}
+              {/* Bloqueo TEMPORAL por intentos fallidos: es independiente del estado
+                  administrativo, así que necesita su propia acción. */}
+              {tiene('ADM_USUARIO_DESBLOQUEAR') && bloqueoVigente(sel) && (
+                <Button className="w-full" loading={accionando} onClick={desbloquearIntentos}>
+                  <ShieldCheck className="h-4 w-4" /> Desbloquear intentos fallidos
                 </Button>
               )}
               {tiene('ADM_USUARIO_ACTIVAR') && sel.estado_usuario !== 'ACTIVO' && sel.estado_usuario !== 'BLOQUEADO' && (

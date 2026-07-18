@@ -1055,6 +1055,7 @@ export type Database = {
       }
       usuario_sistema: {
         Row: {
+          bloqueado_hasta: string | null
           correo_electronico: string
           estado_usuario: string
           fecha_cambio_password_inicial: string | null
@@ -1068,6 +1069,7 @@ export type Database = {
           requiere_cambio_password: boolean
         }
         Insert: {
+          bloqueado_hasta?: string | null
           correo_electronico: string
           estado_usuario?: string
           fecha_cambio_password_inicial?: string | null
@@ -1081,6 +1083,7 @@ export type Database = {
           requiere_cambio_password?: boolean
         }
         Update: {
+          bloqueado_hasta?: string | null
           correo_electronico?: string
           estado_usuario?: string
           fecha_cambio_password_inicial?: string | null
@@ -1284,6 +1287,10 @@ export type Database = {
         }
         Returns: Json
       }
+      desbloquear_intentos_login: {
+        Args: { p_id_usuario: string }
+        Returns: undefined
+      }
       enrolar_biometria: {
         Args: {
           p_descriptor: number[]
@@ -1329,6 +1336,10 @@ export type Database = {
           nombre_usuario: string
         }[]
       }
+      hook_password_verification_attempt: {
+        Args: { event: Json }
+        Returns: Json
+      }
       identificar_por_descriptor: {
         Args: { p_descriptor: number[] }
         Returns: {
@@ -1345,6 +1356,10 @@ export type Database = {
       registrar_intento_fuera_de_turno: {
         Args: { p_detalle?: string }
         Returns: undefined
+      }
+      registrar_intento_login: {
+        Args: { p_id_usuario: string; p_valido: boolean }
+        Returns: Json
       }
       registrar_sesion: {
         Args: {
