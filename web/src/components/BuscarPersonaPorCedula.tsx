@@ -29,8 +29,12 @@ export function BuscarPersonaPorCedula({
   autoFocus = false,
   id = 'buscar-persona-cedula',
   soloTipo,
+  onNoEncontrada,
 }: {
   onSelect: (persona: PersonaCedula | null) => void
+  /** Se avisa con la cédula ya validada cuando no existe esa persona, para que quien use el
+   *  buscador pueda ofrecer darla de alta ahí mismo en vez de mandar al usuario a otra pantalla. */
+  onNoEncontrada?: (cedula: string) => void
   label?: string
   /** Si true, una persona no ACTIVA no puede seleccionarse. */
   soloActivas?: boolean
@@ -75,6 +79,7 @@ export function BuscarPersonaPorCedula({
     if (!data) {
       setNoEncontrada(true)
       onSelect(null)
+      onNoEncontrada?.(normal)
       return
     }
     const p = data as unknown as PersonaCedula

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Pencil, Plus, Search, Ban, ArrowLeft, Download } from 'lucide-react'
 import { fromTable, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
+import { useBorrador } from '../lib/useBorrador'
 import type { FieldConfig, Opcion, ResourceConfig } from '../resources/types'
 import {
   Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input, Modal,
@@ -77,10 +79,14 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
   const puedeEditar = !!config.permisos.update?.some(tiene)
   const puedeExportar = !!config.exportarConPermiso?.some(tiene)
 
+  // Un enlace puede llegar con la búsqueda ya puesta (?buscar=EPN-DA-2026-0001-M), que es como
+  // la ficha de una persona externa lleva a "su" memorando sin obligar a teclearlo otra vez.
+  const [searchParams] = useSearchParams()
+
   const [rows, setRows] = useState<Row[]>([])
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(() => searchParams.get('buscar') ?? '')
   const [seleccion, setSeleccion] = useState<Row | null>(null)
   const [vista, setVista] = useState<'lista' | 'form'>('lista')
   const [editando, setEditando] = useState<Row | null>(null)
@@ -328,6 +334,81 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
   )
 }
 
+/* -------------------- Lista de selección múltiple con búsqueda -------------------- */
+/**
+ * GPE §12: "A la hora de vincular persona-memorando o persona-vehículo se podría tener un icono
+ * de búsqueda para buscar por empresa o por cédula o por placa, para facilidad del registro."
+ *
+ * Antes era una lista de casillas con todas las personas externas del sistema, y encontrar a
+ * alguien concreto era cuestión de bajar con la rueda del ratón. El filtro busca sobre la misma
+ * etiqueta que se ve, que ya incluye apellidos, cédula y empresa; e ignora los separadores, para
+ * que una cédula tecleada con guiones encuentre igual.
+ */
+function ListaSeleccionMultiple({
+  opciones, seleccionados, onChange, placeholderBusqueda, id,
+}: {
+  opciones: Opcion[]
+  seleccionados: string[]
+  onChange: (valores: string[]) => void
+  placeholderBusqueda?: string
+  /** Va al campo de búsqueda: es el control que recibe el foco al pulsar la etiqueta. */
+  id?: string
+}) {
+  const [filtro, setFiltro] = useState('')
+
+  const visibles = useMemo(() => {
+    const t = filtro.trim().toLowerCase()
+    if (!t) return opciones
+    const tPlano = t.replace(/[^a-z0-9]/g, '')
+    return opciones.filter((o) => {
+      const l = o.label.toLowerCase()
+      return l.includes(t) || (tPlano.length > 0 && l.replace(/[^a-z0-9]/g, '').includes(tPlano))
+    })
+  }, [opciones, filtro])
+
+  return (
+    <div className="space-y-2">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+        <Input
+          id={id}
+          value={filtro}
+          onChange={(e) => setFiltro(e.target.value)}
+          placeholder={placeholderBusqueda ?? 'Buscar por nombre, cédula o empresa...'}
+          className="pl-9"
+        />
+      </div>
+      <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+        {opciones.length === 0 ? (
+          <p className="p-1 text-xs text-slate-400">Sin opciones disponibles.</p>
+        ) : visibles.length === 0 ? (
+          <p className="p-1 text-xs text-slate-400">Ningún resultado para "{filtro}".</p>
+        ) : (
+          visibles.map((o) => {
+            const marcado = seleccionados.includes(o.value)
+            return (
+              <label key={o.value} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={marcado}
+                  onChange={(e) => onChange(e.target.checked ? [...seleccionados, o.value] : seleccionados.filter((v) => v !== o.value))}
+                  className="h-4 w-4"
+                />
+                {o.label}
+              </label>
+            )
+          })
+        )}
+      </div>
+      {/* Las seleccionadas pueden quedar fuera del filtro actual: sin este recuento, marcar a
+          tres personas y luego buscar a una cuarta daría la sensación de haberlas perdido. */}
+      {seleccionados.length > 0 && (
+        <p className="text-xs text-ink-soft">{seleccionados.length} seleccionada(s).</p>
+      )}
+    </div>
+  )
+}
+
 /* -------------------- Formulario de registro / edición (Patrón B / C) -------------------- */
 function RecordForm({
   config, opciones, registro, onCancel, onSaved,
@@ -357,6 +438,14 @@ function RecordForm({
   const [dinamicas, setDinamicas] = useState<Record<string, Opcion[]>>({})
   /** Cambios en campos sensibles pendientes de confirmar (GPE §5). */
   const [confirmacion, setConfirmacion] = useState<{ campo: string; antes: string; despues: string }[] | null>(null)
+
+  // Borrador del alta. `useBorrador` existía desde la ronda de validaciones pero solo lo usaba
+  // el alta de usuarios: en el resto de formularios, cambiar de pestaña a mitad de un registro
+  // largo (una persona tiene once campos) obligaba a empezar de cero. Solo en el alta: restaurar
+  // sobre una edición pisaría el registro real con datos que quizá ya cambió otra persona.
+  const claveBorrador = !esEdicion && session?.user.id ? `${session.user.id}:${config.tabla}:nuevo` : null
+  const borrador = useBorrador(claveBorrador, valores)
+  const [avisoBorrador, setAvisoBorrador] = useState(borrador.hayBorrador)
 
   /** Error de formato por campo, mostrado bajo el input mientras se escribe. */
   const [erroresCampo, setErroresCampo] = useState<Record<string, string | null>>({})
@@ -519,7 +608,9 @@ function RecordForm({
         setError(mensajeError(res.error))
         return
       }
-      onSaved()
+      borrador.descartar()
+      borrador.descartar()
+    onSaved()
       return
     }
 
@@ -548,6 +639,7 @@ function RecordForm({
       setError(mensajeError(res.error))
       return
     }
+    borrador.descartar()
     onSaved()
   }
 
@@ -564,6 +656,33 @@ function RecordForm({
           quiere rellenar un formulario. Cada campo bloqueado dice ahora por sí mismo por qué
           lo está, en su propio `hint`. */}
 
+      {avisoBorrador && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-navy">
+          <span>Tienes un registro sin terminar de la última vez.</span>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const previo = borrador.restaurar()
+                if (previo) setValores((s) => ({ ...s, ...previo }))
+                setAvisoBorrador(false)
+              }}
+            >
+              Recuperarlo
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                borrador.descartar()
+                setAvisoBorrador(false)
+              }}
+            >
+              Empezar de cero
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-5"><ErrorBanner message={error} /></div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -573,11 +692,16 @@ function RecordForm({
           .map((c) => {
           const disabled = deshabilitado(c)
           const span = c.colSpan === 3 ? 'lg:col-span-3' : c.colSpan === 2 ? 'sm:col-span-2' : ''
+          // Sin `id` en el control y `htmlFor` en la etiqueta, un lector de pantalla no anuncia
+          // de qué campo se trata: lee "cuadro de texto" y nada más. Ningún campo del formulario
+          // genérico los tenía, así que ninguna de estas pantallas era navegable a ciegas.
+          const campoId = `campo-${config.tabla}-${c.name}`
           return (
             <div key={c.name} className={span}>
               {c.type === 'checkbox' ? (
                 <label className="flex items-center gap-2 pt-6 text-sm text-navy">
                   <input
+                    id={campoId}
                     type="checkbox"
                     checked={!!valores[c.name]}
                     disabled={disabled}
@@ -589,37 +713,28 @@ function RecordForm({
               ) : (
                 <Field
                   label={c.label}
+                  htmlFor={campoId}
                   required={c.required && !disabled}
                   hint={c.hint}
                   ayuda={c.ayuda}
                   error={erroresCampo[c.name]}
                 >
                   {c.multiSelect && !esEdicion ? (
-                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
-                      {(opciones[c.name] ?? []).length === 0 && <p className="p-1 text-xs text-slate-400">Sin opciones disponibles.</p>}
-                      {(opciones[c.name] ?? []).map((o) => {
-                        const seleccionados = (valores[c.name] as string[]) ?? []
-                        const marcado = seleccionados.includes(o.value)
-                        return (
-                          <label key={o.value} className="flex items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-slate-50">
-                            <input
-                              type="checkbox"
-                              checked={marcado}
-                              onChange={(e) => set(c.name, e.target.checked ? [...seleccionados, o.value] : seleccionados.filter((v) => v !== o.value))}
-                              className="h-4 w-4"
-                            />
-                            {o.label}
-                          </label>
-                        )
-                      })}
-                    </div>
+                    <ListaSeleccionMultiple
+                      id={campoId}
+                      opciones={opciones[c.name] ?? []}
+                      seleccionados={(valores[c.name] as string[]) ?? []}
+                      onChange={(v) => set(c.name, v)}
+                      placeholderBusqueda={c.placeholder}
+                    />
                   ) : c.soloLectura ? (
                     // Campo en gris con el valor que el sistema calcula (GPE §6). Se pinta como
                     // texto y no como <select>: ofrecer un desplegable que no se puede abrir
                     // era justo lo que confundía en "Editar Memorando".
-                    <Input value={c.valorCalculado ? c.valorCalculado(valores) : String(valores[c.name] ?? '')} disabled readOnly />
+                    <Input id={campoId} value={c.valorCalculado ? c.valorCalculado(valores) : String(valores[c.name] ?? '')} disabled readOnly />
                   ) : c.type === 'select' ? (
                     <Select
+                      id={campoId}
                       value={valores[c.name] ?? ''}
                       disabled={disabled}
                       onChange={(e) => set(c.name, e.target.value)}
@@ -628,6 +743,7 @@ function RecordForm({
                     />
                   ) : c.type === 'textarea' ? (
                     <Textarea
+                      id={campoId}
                       value={valores[c.name] ?? ''}
                       disabled={disabled}
                       placeholder={c.placeholder}
@@ -636,6 +752,7 @@ function RecordForm({
                   ) : c.type === 'timerange' ? (
                     <div className="flex items-center gap-2">
                       <Input
+                        id={campoId}
                         type="time"
                         disabled={disabled}
                         value={String(valores[c.name] ?? '').split('–')[0] ?? ''}
@@ -657,6 +774,7 @@ function RecordForm({
                     </div>
                   ) : (
                     <Input
+                      id={campoId}
                       type={c.type === 'number' ? 'number' : c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : c.type === 'email' ? 'email' : 'text'}
                       value={valores[c.name] ?? ''}
                       disabled={disabled}

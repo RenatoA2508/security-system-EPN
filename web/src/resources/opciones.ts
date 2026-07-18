@@ -45,6 +45,40 @@ export async function optPuntosPorZona(idZona: string): Promise<Opcion[]> {
   return ((data as any[]) ?? []).map((r) => ({ value: r.id_punto_control, label: r.nombre_punto }))
 }
 
+/** Personas externas con su empresa en la etiqueta.
+ *
+ *  GPE §12 pidió poder buscar "por empresa o por cédula" al vincular personas a un memorando.
+ *  El buscador de la lista filtra sobre la etiqueta, así que basta con que la empresa forme
+ *  parte de ella. */
+export async function optPersonasExternasConEmpresa(): Promise<Opcion[]> {
+  const { data } = await fromTable('persona')
+    .select('id_persona, nombres, apellidos, cedula, empresa:empresa(nombre)')
+    .eq('tipo_persona', 'EXTERNA')
+    .eq('estado', 'ACTIVO')
+    .order('apellidos')
+  return ((data as any[]) ?? []).map((p) => ({
+    value: p.id_persona,
+    label: `${p.apellidos} ${p.nombres} · ${p.cedula}${p.empresa?.nombre ? ` · ${p.empresa.nombre}` : ''}`,
+  }))
+}
+
+/** Memorandos que todavía pueden autorizar a alguien: vigentes o aún por empezar.
+ *
+ *  Vincular a una persona con un memorando vencido no le da acceso, pero la lista los ofrecía
+ *  igual y nada avisaba de que ese vínculo no serviría para nada. */
+export async function optMemorandosVigentes(): Promise<Opcion[]> {
+  const hoy = new Date().toISOString().slice(0, 10)
+  const { data } = await fromTable('memorando')
+    .select('id_memorando, numero_memorando, fecha_inicio, fecha_fin, estado_memorando, empresa:empresa(nombre)')
+    .neq('estado_memorando', 'ANULADO')
+    .gte('fecha_fin', hoy)
+    .order('fecha_fin')
+  return ((data as any[]) ?? []).map((m) => ({
+    value: m.id_memorando,
+    label: `${m.numero_memorando}${m.empresa?.nombre ? ` · ${m.empresa.nombre}` : ''} · hasta ${m.fecha_fin.split('-').reverse().join('/')}`,
+  }))
+}
+
 /** Solo cuentas con rol GUARDIA_SEGURIDAD activo (RPC guardias_disponibles — PCO no puede leer
  *  usuario_rol directamente, RLS doc 02). Evita asignar por error a un Responsable de Módulo. */
 export async function optGuardiasDisponibles(): Promise<Opcion[]> {

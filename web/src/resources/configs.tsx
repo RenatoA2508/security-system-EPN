@@ -9,8 +9,9 @@ import { Badge } from '../components/ui'
 import { AsociacionesVehiculo } from '../components/AsociacionesVehiculo'
 import { AnularMemorando } from '../components/AnularMemorando'
 import {
-  opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas, optRoles,
+  opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas,
   opcionesTabla, optZonasPorTipo, optPuntosPorZona, optGuardiasDisponibles,
+  optPersonasExternasConEmpresa, optMemorandosVigentes,
 } from './opciones'
 import { supabase } from '../lib/supabase'
 import { hoyISO } from '../lib/format'
@@ -602,7 +603,7 @@ function DetalleAcceso({ r }: { r: PersonaExternaRow }) {
           {/* Enlace a la ficha del memorando (GPE §10: "puede haber una redirección a este
               para saber si todavía puede entrar o no"). */}
           <Link
-            to={`/modulo/GPE/memorandos?buscar=${encodeURIComponent(m.numero_memorando)}`}
+            to={`/m/GPE/memorandos?buscar=${encodeURIComponent(m.numero_memorando)}`}
             className="font-medium text-navy underline underline-offset-2 hover:text-blue-700"
           >
             {m.numero_memorando}
@@ -788,26 +789,61 @@ export const cfgPersonaMemorando: ResourceConfig = {
   titulo: 'Personas por memorando',
   singular: 'Vínculo persona–memorando',
   idField: 'id_persona_memorando',
-  select: '*, persona:persona(nombres, apellidos, cedula), memorando:memorando(numero_memorando)',
+  select: '*, persona:persona(nombres, apellidos, cedula, empresa:empresa(nombre)), memorando:memorando(id_memorando, numero_memorando, fecha_inicio, fecha_fin, estado_memorando)',
   permisos: { select: ['GPE_PERSONA_MEMORANDO_SELECT'], insert: ['GPE_PERSONA_MEMORANDO_INSERT'], update: ['GPE_PERSONA_MEMORANDO_UPDATE'] },
-  buscarEn: ['persona.cedula', 'persona.apellidos', 'memorando.numero_memorando'],
+  buscarEn: ['persona.cedula', 'persona.apellidos', 'persona.empresa.nombre', 'memorando.numero_memorando'],
   columnas: [
     { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.apellidos} ${r.persona.nombres}` : '—') },
     { key: 'cedula', label: 'Cédula', render: (r) => d(r.persona?.cedula) },
+    { key: 'empresa', label: 'Empresa', render: (r) => d(r.persona?.empresa?.nombre) },
     { key: 'memorando', label: 'Memorando', render: (r) => r.memorando?.numero_memorando ?? '—' },
-    { key: 'estado_acceso', label: 'Acceso', badge: true },
+    // GPE §10: el vínculo por sí solo no dice si la persona puede entrar. Lo que decide es si
+    // el memorando sigue vigente, y eso no se veía en ninguna parte de esta pantalla.
+    {
+      key: 'vigencia', label: '¿Puede entrar?',
+      render: (r) => {
+        if (r.estado_acceso === 'BLOQUEADO') return <><Badge value="BLOQUEADO" /> <span className="text-xs text-ink-soft">acceso retirado</span></>
+        const estado = estadoMemorandoEfectivo(r.memorando ?? {})
+        return estado === 'VIGENTE'
+          ? <span className="text-emerald-700">Sí, hasta el {fmtFecha(r.memorando?.fecha_fin)}</span>
+          : <><span className="text-red">No</span> <Badge value={estado} /></>
+      },
+      valorExport: (r) => (r.estado_acceso === 'BLOQUEADO' ? 'No, acceso bloqueado' : estadoMemorandoEfectivo(r.memorando ?? {}) === 'VIGENTE' ? `Sí, hasta ${r.memorando?.fecha_fin}` : `No, memorando ${humanizar(estadoMemorandoEfectivo(r.memorando ?? {})).toLowerCase()}`),
+    },
   ],
   campoTituloDetalle: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : 'Vínculo'),
+  campoSubtituloDetalle: (r) => <>Memorando {r.memorando?.numero_memorando ?? '—'} · <Badge value={estadoMemorandoEfectivo(r.memorando ?? {})} /></>,
   detalle: [
     { label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-    { label: 'Memorando', render: (r) => r.memorando?.numero_memorando ?? '—' },
+    { label: 'Empresa', render: (r) => d(r.persona?.empresa?.nombre) },
+    {
+      label: 'Memorando',
+      render: (r) => (r.memorando ? (
+        <Link
+          to={`/m/GPE/memorandos?buscar=${encodeURIComponent(r.memorando.numero_memorando)}`}
+          className="font-medium text-navy underline underline-offset-2 hover:text-blue-700"
+        >
+          {r.memorando.numero_memorando}
+        </Link>
+      ) : '—'),
+    },
+    { label: 'Vigencia del memorando', render: (r) => (r.memorando ? `${fmtFecha(r.memorando.fecha_inicio)} → ${fmtFecha(r.memorando.fecha_fin)}` : '—') },
     { label: 'Estado de acceso', render: (r) => <Badge value={r.estado_acceso} /> },
   ],
   campos: [
-    // Selección múltiple (feedback GPE): vincular varias personas al mismo memorando de una vez.
-    { name: 'id_persona', label: 'Personas externas', type: 'select', required: true, editable: false, multiSelect: true, options: opcionesTabla('persona', 'id_persona', (p) => `${p.apellidos} ${p.nombres} · ${p.cedula}`, { tipo_persona: 'EXTERNA' }) },
-    { name: 'id_memorando', label: 'Memorando', type: 'select', required: true, editable: false, options: opcionesTabla('memorando', 'id_memorando', (m) => m.numero_memorando) },
-    { name: 'estado_acceso', label: 'Estado de acceso', type: 'select', options: opcionesCatalogo(CAT.persona_memorando_estado), default: 'ACTIVO' },
+    // El memorando va primero: es el documento que se está tramitando, y saber cuál es ayuda a
+    // decidir a quién vincular. Solo se ofrecen los que todavía autorizan algo — vincular a
+    // alguien a un memorando vencido no le permite entrar, y era fácil hacerlo sin darse cuenta.
+    { name: 'id_memorando', label: 'Memorando', type: 'select', required: true, editable: false, options: optMemorandosVigentes, hint: 'Solo se listan los memorandos vigentes o por empezar.' },
+    // Selección múltiple con buscador (GPE §12): la etiqueta lleva cédula y empresa, que es
+    // justo por lo que el equipo pidió poder buscar.
+    {
+      name: 'id_persona', label: 'Personas externas', type: 'select', required: true, editable: false,
+      multiSelect: true, colSpan: 2, options: optPersonasExternasConEmpresa,
+      placeholder: 'Buscar por apellido, cédula o empresa...',
+      hint: 'Puedes vincular varias personas al mismo memorando de una vez.',
+    },
+    { name: 'estado_acceso', label: 'Estado de acceso', type: 'select', options: opcionesCatalogo(CAT.persona_memorando_estado), default: 'ACTIVO', hideOnInsert: true, hint: 'Bloquear impide entrar a esta persona sin afectar al resto del memorando.' },
   ],
   campoEstado: 'estado_acceso',
   baja: { campoEstado: 'estado_acceso', valorBaja: 'BLOQUEADO', etiqueta: 'Bloquear acceso' },
