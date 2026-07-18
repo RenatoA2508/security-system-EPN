@@ -4,6 +4,8 @@ import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
 import { cambiarPasswordSeguro, LONGITUD_MINIMA_PASSWORD } from '../auth/password'
 import { fmtFechaHora } from '../lib/format'
+import { describirDispositivo } from '../lib/dispositivo'
+import { getIdSesionActual } from '../lib/supabase'
 import { Breadcrumb } from '../components/layout/Shell'
 import { Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input } from '../components/ui'
 
@@ -15,24 +17,7 @@ interface SesionPropia {
   estado_sesion: string
   recordar_sesion: boolean
   user_agent: string | null
-}
-
-/** Descripción legible del dispositivo a partir del user agent. Sin exponer el valor crudo. */
-function describirDispositivo(ua: string | null): string {
-  if (!ua) return 'Dispositivo desconocido'
-  const navegador = /Edg\//.test(ua) ? 'Edge'
-    : /OPR\//.test(ua) ? 'Opera'
-    : /Chrome\//.test(ua) ? 'Chrome'
-    : /Firefox\//.test(ua) ? 'Firefox'
-    : /Safari\//.test(ua) ? 'Safari'
-    : 'Navegador'
-  const sistema = /Windows/.test(ua) ? 'Windows'
-    : /Android/.test(ua) ? 'Android'
-    : /iPhone|iPad|iOS/.test(ua) ? 'iOS'
-    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
-    : /Linux/.test(ua) ? 'Linux'
-    : 'sistema desconocido'
-  return `${navegador} en ${sistema}`
+  dispositivo_nombre: string | null
 }
 
 /** Cuenta propia: datos del usuario y cambio de contraseña (reqs 26/27/28). */
@@ -56,7 +41,7 @@ export function CuentaPage() {
     // sin él un administrador vería aquí las sesiones de TODOS los usuarios.
     const { data } = await supabase
       .from('sesion')
-      .select('id_sesion, fecha_inicio, fecha_ultima_actividad, fecha_expiracion, estado_sesion, recordar_sesion, user_agent')
+      .select('id_sesion, fecha_inicio, fecha_ultima_actividad, fecha_expiracion, estado_sesion, recordar_sesion, user_agent, dispositivo_nombre')
       .eq('id_usuario', perfil.id_usuario)
       .eq('estado_sesion', 'ACTIVA')
       .order('fecha_inicio', { ascending: false })
@@ -168,7 +153,14 @@ export function CuentaPage() {
                 <tbody>
                   {sesiones.map((s) => (
                     <tr key={s.id_sesion} className="border-b border-slate-100 last:border-0">
-                      <td className="py-2 pr-4 text-navy">{describirDispositivo(s.user_agent)}</td>
+                      <td className="py-2 pr-4 text-navy">
+                        {s.dispositivo_nombre || describirDispositivo(s.user_agent)}
+                        {s.id_sesion === getIdSesionActual() && (
+                          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                            Este dispositivo
+                          </span>
+                        )}
+                      </td>
                       <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_inicio)}</td>
                       <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_ultima_actividad)}</td>
                       <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_expiracion)}</td>

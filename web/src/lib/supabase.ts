@@ -62,6 +62,33 @@ const storageRecordar = {
   },
 }
 
+// -----------------------------------------------------------------------------
+// Identificador de la fila de auditoría `sesion` de ESTE dispositivo.
+//
+// Cada dispositivo debe cerrar y refrescar SU propia sesión: sin esto, cerrar
+// sesión en el celular marcaba como cerrada la fila del PC (req 29). Se guarda en
+// el mismo almacén que el token, así que sigue la preferencia de "recordar sesión"
+// y desaparece con ella. No es un secreto: es solo el id de una fila de auditoría.
+// -----------------------------------------------------------------------------
+const ID_SESION_KEY = 'epn.id_sesion'
+
+export function setIdSesionActual(id: string | null): void {
+  try {
+    if (id) storageRecordar.setItem(ID_SESION_KEY, id)
+    else storageRecordar.removeItem(ID_SESION_KEY)
+  } catch {
+    /* almacenamiento no disponible */
+  }
+}
+
+export function getIdSesionActual(): string | undefined {
+  try {
+    return storageRecordar.getItem(ID_SESION_KEY) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
 // Un ÚNICO cliente, anon key pública (nunca service_role). docs/05_API_PARA_FRONTEND.md §1.
 export const supabase = createClient<Database>(url, anonKey, {
   auth: {

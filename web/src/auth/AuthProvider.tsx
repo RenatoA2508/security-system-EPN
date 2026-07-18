@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, getRecordarSesion } from '../lib/supabase'
+import { supabase, getRecordarSesion, setIdSesionActual, getIdSesionActual } from '../lib/supabase'
 import { ROL_LABEL } from '../lib/catalogos'
+import { dispositivoActual } from '../lib/dispositivo'
 
 export type ModuloCodigo = 'ADM' | 'GPI' | 'GPE' | 'PCO' | 'CAC'
 
@@ -107,8 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cerrar la fila de auditoría ANTES de signOut(): después, auth.uid() ya es null dentro de
     // la RPC y no habría forma de saber qué sesión cerrar. Si falla, se sale igual — quedarse
     // dentro por un error de auditoría sería peor; el barrido de pg_cron la marcará EXPIRADA.
-    const { error } = await supabase.rpc('cerrar_sesion')
+    // Se envía el id propio para no cerrar la sesión de otro dispositivo (req 29).
+    const { error } = await supabase.rpc('cerrar_sesion', { p_id_sesion: getIdSesionActual() })
     if (error) console.warn('cerrar_sesion:', error.message)
+    setIdSesionActual(null)
     await supabase.auth.signOut()
   }, [])
 
@@ -133,14 +136,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // renovar el JWT; ninguno de los dos es un login y ninguno debe registrar sesión.
       if (event === 'SIGNED_IN' && sess) {
         // La preferencia "recordar sesión" ya decidió el almacén del token (lib/supabase);
-        // aquí solo se refleja en la auditoría junto con el user agent (reqs 29/30).
+        // aquí solo se refleja en la auditoría junto con el dispositivo (reqs 29/30).
         supabase
           .rpc('registrar_sesion', {
             p_recordar_sesion: getRecordarSesion(),
             p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 500) : undefined,
+            p_dispositivo: dispositivoActual(),
           })
-          .then(({ error }) => {
-            if (error) console.warn('registrar_sesion:', error.message)
+          .then(({ data, error }) => {
+            if (error) {
+              console.warn('registrar_sesion:', error.message)
+              return
+            }
+            // Se recuerda la fila propia para cerrarla y refrescarla sin tocar la
+            // de otros dispositivos del mismo usuario (req 29).
+            const fila = data as { id_sesion?: string } | null
+            if (fila?.id_sesion) setIdSesionActual(fila.id_sesion)
           })
       }
 
@@ -179,7 +190,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const ahora = Date.now()
       if (ahora - ultimoLatido.current < 60_000) return
       ultimoLatido.current = ahora
-      supabase.rpc('tocar_sesion').then(() => {})
+      // Solo la sesión de este dispositivo: si no, la actividad en el PC
+      // mantendría viva la del celular y el timeout de inactividad no serviría.
+      supabase.rpc('tocar_sesion', { p_id_sesion: getIdSesionActual() }).then(() => {})
     }
     latir()
     window.addEventListener('click', latir)

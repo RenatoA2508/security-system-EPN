@@ -1245,7 +1245,7 @@ export type Database = {
     Functions: {
       allowed_modules: { Args: never; Returns: string[] }
       cerrar_sesion: {
-        Args: never
+        Args: { p_id_sesion?: string }
         Returns: {
           dispositivo_nombre: string | null
           estado_sesion: string
@@ -1348,6 +1348,7 @@ export type Database = {
       }
       registrar_sesion: {
         Args: {
+          p_dispositivo?: string
           p_ip_origen?: string
           p_recordar_sesion?: boolean
           p_user_agent?: string
@@ -1390,7 +1391,7 @@ export type Database = {
       tiene_acceso_operativo_cac: { Args: never; Returns: boolean }
       tiene_algun_modulo: { Args: never; Returns: boolean }
       tiene_permiso: { Args: { p_codigo: string }; Returns: boolean }
-      tocar_sesion: { Args: never; Returns: undefined }
+      tocar_sesion: { Args: { p_id_sesion?: string }; Returns: undefined }
       valor_parametro_coherente: {
         Args: { p_tipo_dato: string; p_valor: string }
         Returns: boolean

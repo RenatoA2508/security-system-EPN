@@ -1,6 +1,7 @@
 import type { ResourceConfig } from './types'
 import { fmtFecha, fmtFechaHora } from '../lib/format'
 import { formatearPlaca } from '../lib/validacion'
+import { describirDispositivo } from '../lib/dispositivo'
 import { Badge } from '../components/ui'
 import { opcionesCatalogo } from './opciones'
 import { humanizar } from '../lib/catalogos'
@@ -120,18 +121,27 @@ function duracionSesion(r: any): string {
   return `${horas} h ${minutos % 60} min`
 }
 
+/** Desde dónde se abrió: el nombre guardado al iniciar sesión, o derivado del user agent. */
+function dispositivoSesion(r: any): string {
+  return r.dispositivo_nombre || describirDispositivo(r.user_agent)
+}
+
 export const cfgSesion: ResourceConfig = {
   tabla: 'sesion',
   titulo: 'Sesiones',
   singular: 'Sesión',
   idField: 'id_sesion',
-  select: '*, usuario:usuario_sistema(correo_electronico)',
+  // `sesion` tiene DOS claves foráneas a usuario_sistema (id_usuario y
+  // revocada_por), así que hay que decirle a PostgREST cuál usar: sin el nombre
+  // del constraint responde "more than one relationship was found".
+  select: '*, usuario:usuario_sistema!sesion_id_usuario_fkey(correo_electronico)',
   orderBy: { columna: 'fecha_inicio', ascendente: false },
   permisos: { select: ['ADM_USUARIO_SELECT'] },
   buscarEn: ['usuario.correo_electronico'],
   columnas: [
     { key: 'usuario', label: 'Usuario', render: (r) => r.usuario?.correo_electronico ?? '—' },
-    { key: 'fecha_inicio', label: 'Inicio', render: (r) => fmtFechaHora(r.fecha_inicio) },
+    { key: 'dispositivo', label: 'Dispositivo', render: (r) => dispositivoSesion(r) },
+    { key: 'fecha_inicio', label: 'Apertura', render: (r) => fmtFechaHora(r.fecha_inicio) },
     { key: 'fecha_cierre', label: 'Cierre', render: (r) => fmtFechaHora(r.fecha_cierre) },
     { key: 'duracion', label: 'Duración', render: (r) => duracionSesion(r) },
     { key: 'estado_sesion', label: 'Estado', badge: true },
@@ -145,17 +155,24 @@ export const cfgSesion: ResourceConfig = {
         { value: 'ACTIVA', label: 'Activas' },
         { value: 'CERRADA', label: 'Cerradas' },
         { value: 'EXPIRADA', label: 'Expiradas' },
+        { value: 'REVOCADA', label: 'Revocadas' },
+        { value: 'CERRADA_CAMBIO_PASSWORD', label: 'Cerradas por cambio de contraseña' },
       ],
     },
   ],
   campoTituloDetalle: (r) => r.usuario?.correo_electronico ?? 'Sesión',
   campoSubtituloDetalle: (r) => <Badge value={r.estado_sesion} />,
   detalle: [
-    { label: 'Inicio', render: (r) => fmtFechaHora(r.fecha_inicio) },
+    { label: 'Dispositivo', render: (r) => dispositivoSesion(r) },
+    { label: 'Apertura', render: (r) => fmtFechaHora(r.fecha_inicio) },
+    { label: 'Última actividad', render: (r) => fmtFechaHora(r.fecha_ultima_actividad) },
     { label: 'Expiración', render: (r) => fmtFechaHora(r.fecha_expiracion) },
     { label: 'Cierre', render: (r) => fmtFechaHora(r.fecha_cierre) },
     { label: 'Duración', render: (r) => duracionSesion(r) },
     { label: 'Estado', render: (r) => <Badge value={r.estado_sesion} /> },
+    { label: 'Motivo de cierre', render: (r) => (r.motivo_cierre ? humanizar(r.motivo_cierre) : '—') },
+    { label: 'Recordada', render: (r) => (r.recordar_sesion ? 'Sí' : 'No') },
+    { label: 'Navegador (user agent)', render: (r) => <span className="break-all text-xs">{d(r.user_agent)}</span> },
   ],
   campos: [],
 }
