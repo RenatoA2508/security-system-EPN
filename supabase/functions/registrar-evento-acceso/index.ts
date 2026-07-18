@@ -360,6 +360,30 @@ Deno.serve(async (req) => {
       return errorResponse('JWT invalido o expirado', 401);
     }
     idUsuarioGuardia = userData.user.id;
+
+    // Barrera de turno (req 34): un guardia solo registra eventos dentro de su
+    // turno/hora. Se evalua con la hora del SERVIDOR (esta_en_turno_guardia usa
+    // now() y America/Guayaquil), nunca con la del navegador. Solo afecta a los
+    // guardias; otros roles con permiso pasan (verificar_turno_guardia_actual).
+    // Como esta funcion escribe con service_role (auth.uid() nulo), el trigger
+    // de la BD no cubre este camino: la barrera se aplica aqui.
+    const supabaseGuardia = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: turno, error: turnoError } = await supabaseGuardia.rpc('verificar_turno_guardia_actual');
+    if (turnoError) return errorResponse(turnoError.message, 500);
+    if (turno && (turno as { permitido: boolean }).permitido === false) {
+      // Registrar el intento denegado en bitacora (transaccion propia, persiste).
+      await supabaseGuardia.rpc('registrar_intento_fuera_de_turno', {
+        p_detalle: `Intento de registrar ${tipo_movimiento} en punto_control=${id_punto_control} fuera de turno.`,
+      });
+      return errorResponse(
+        (turno as { motivo: string }).motivo ?? 'Su turno no se encuentra habilitado a esta hora.',
+        403,
+      );
+    }
   }
 
   // ---- Resolver todos los ocupantes antes de escribir nada (todo o nada) ----
