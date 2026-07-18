@@ -72,13 +72,45 @@ Piezas reutilizables añadidas en esta ronda, útiles para lo que venga:
 
 ## Cómo verificar que nada se rompió
 
-```bash
-cd web && npm run typecheck && npm test && npm run build
+Un solo comando comprueba tipos, pruebas y build:
 
-# Contra la base real (no dejan rastro salvo filas de auditoría):
+```bash
+cd web && npm run verificar
+```
+
+Además, **GitHub Actions lo ejecuta solo** en cada push a `main` y en cada PR
+(`.github/workflows/verificar.yml`), así que una regresión se detecta sin depender
+de que alguien recuerde correr los comandos.
+
+Pruebas contra la base real (no dejan rastro salvo filas de auditoría):
+
+```bash
 export SB_URL=... SB_ANON=... SB_PASSWORD=admin1234
 python3 scripts/prueba_multisesion.py
 python3 scripts/prueba_bloqueo_intentos.py
 python3 scripts/prueba_cierre_sesion.py
 psql "$DATABASE_URL" -f scripts/pruebas_validaciones_nuevas.sql   # BEGIN … ROLLBACK
 ```
+
+### Qué cubren las pruebas automáticas (48 casos)
+
+| Archivo | Qué protege |
+|---|---|
+| `lib/validacion.test.ts` | Cédula, RUC, placa, nombres, fechas, correo, teléfono |
+| `lib/errores.test.ts` | Que ningún error del proveedor llegue en inglés al usuario |
+| `auth/password.test.ts` | Que la reautenticación no cierre la sesión real (`scope: 'local'`) |
+| `lib/useBorrador.test.ts` | Persistencia de formularios y que **nunca** se guarden contraseñas ni tokens |
+| `pages/LoginPage.test.tsx` | Que tras iniciar sesión se entre al panel principal |
+
+Para probar componentes hay `@testing-library/react` + `jsdom` ya configurados
+(`vitest.config.ts`, entorno `jsdom`). Escribir una prueba de pantalla nueva es
+montar el componente con `render()` y consultar por etiqueta o rol.
+
+> Al añadir campos, asocie la etiqueta con el campo (`<Field htmlFor="x">` + `<Input id="x">`).
+> Sin eso un lector de pantalla no anuncia la etiqueta, y las pruebas no pueden
+> localizar el campo.
+
+### Limitación del entorno
+
+No hay `gh` CLI ni token de GitHub, y el remoto usa SSH: **los PR se crean desde la
+web**, no por línea de comandos.

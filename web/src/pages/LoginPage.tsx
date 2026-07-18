@@ -55,8 +55,11 @@ export function LoginPage() {
               <span>{aviso}</span>
             </div>
           )}
-          <Field label="Usuario (correo institucional)" required>
+          {/* htmlFor + id: sin ellos la etiqueta no queda asociada al campo, así que
+              un lector de pantalla no la anuncia al enfocarlo. */}
+          <Field label="Usuario (correo institucional)" required htmlFor="login-usuario">
             <Input
+              id="login-usuario"
               type="email"
               autoComplete="username"
               value={email}
@@ -65,9 +68,10 @@ export function LoginPage() {
               required
             />
           </Field>
-          <Field label="Contraseña" required>
+          <Field label="Contraseña" required htmlFor="login-password">
             <div className="relative">
               <Input
+                id="login-password"
                 type={ver ? 'text' : 'password'}
                 autoComplete="current-password"
                 value={password}

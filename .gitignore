@@ -2,3 +2,8 @@ node_modules/
 .env
 .env.local
 *.deb
+
+# Metadatos que Windows/WSL adjunta a los archivos descargados. Aparecian como
+# archivos sin trackear en cada `git status` y ensuciaban el estado del repo.
+# (dist/, .vercel/ y tsconfig.tsbuildinfo ya los cubre web/.gitignore)
+*:Zone.Identifier

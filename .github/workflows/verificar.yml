@@ -1,0 +1,44 @@
+# Verificacion automatica: typecheck, pruebas y build en cada push y PR.
+#
+# Sirve para que un cambio que rompa algo se detecte solo, sin depender de que
+# alguien recuerde ejecutar los comandos a mano.
+name: Verificar
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  web:
+    name: Frontend (typecheck, pruebas, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar tipos
+        run: npm run typecheck
+
+      - name: Pruebas
+        run: npm run test
+
+      # Valores de relleno: el build solo necesita que las variables existan.
+      # Las credenciales reales viven en Vercel, no aqui.
+      - name: Construir
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://ejemplo.supabase.co
+          VITE_SUPABASE_ANON_KEY: clave-de-integracion-continua
