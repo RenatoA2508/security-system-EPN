@@ -244,12 +244,33 @@ Verificado: las dos vistas del proyecto tienen `security_invoker = true`.
 
 # Ronda de validaciones generales (2026-07-17) — reqs 9-38
 
-## V8 — Recuperación de contraseña sin SMTP → **flujo listo, envío NO_VERIFICADO**
-El flujo de "¿Olvidó su contraseña?" usa `resetPasswordForEmail` de Supabase Auth (nativo,
-seguro, respuesta neutral). **No hay SMTP configurado**, así que no llega correo. Todo el resto
-(token, expiración, un solo uso, revocación de sesiones, redirección al login) es real.
-**Pendiente del equipo:** configurar SMTP en el dashboard de Supabase (Auth → Email) para que el
-enlace se entregue. No requiere cambios de código.
+## V8 — Recuperación de contraseña → **RESUELTA: funciona con el servicio integrado (plan gratis)**
+El flujo usa `resetPasswordForEmail` de Supabase Auth (nativo: token, expiración, un solo uso y
+rate limiting los administra el proveedor).
+
+**Hallazgo real (2026-07-18):** el problema NO era el SMTP. La configuración de Auth tenía
+`site_url = http://localhost:3000` (puerto equivocado) y `uri_allow_list` **vacía**, así que el
+`redirectTo` se rechazaba y el enlace apuntaba a un host inexistente.
+
+**Configurado** vía Management API (todo dentro del plan gratuito):
+- `site_url` = `https://security-system-epn.vercel.app`
+- `uri_allow_list` = producción + `http://localhost:5173/**` + previews de Vercel
+- `mailer_otp_exp` = 1800 s (30 min, req 31)
+- `password_min_length` = 8 (alineado con `LONGITUD_MINIMA_PASSWORD` y el frontend)
+
+**Verificado en los logs de auth:** `mail.send` con `mail_type: recovery` desde
+`noreply@mail.app.supabase.io`, sin error.
+
+**Limitaciones del plan gratuito (aceptadas, no bloquean):**
+1. **2 correos por hora** (`rate_limit_email_sent`). Es, de hecho, el rate limiting que pide el req 31.
+2. **No se puede traducir la plantilla del correo** con el proveedor por defecto: la API responde
+   *"Email template modification is not available for free tier projects using the default email
+   provider"*. El asunto sigue en inglés ("Reset your password"). Toda la interfaz propia sí está
+   en español. Se corrige solo, sin código, si algún día se configura un SMTP propio.
+3. El servicio integrado está pensado para pruebas; la entrega a buzones externos arbitrarios no
+   está garantizada. **Pendiente opcional del equipo:** si se quiere entrega fiable a
+   `@epn.edu.ec`, configurar un SMTP propio (Resend/Brevo tienen capa gratuita) en
+   Auth → SMTP Settings; no requiere cambios de código.
 
 ## V9 — La cédula ecuatoriana se exige a TODA persona (incluidos externos)
 El CHECK `persona_cedula_valida` = `es_cedula_ecuatoriana` (ya existía, ahora además rechaza
