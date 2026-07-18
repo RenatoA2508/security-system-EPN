@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, LogOut, ShieldCheck } from 'lucide-react'
+import { ChevronRight, LogOut, ShieldCheck, UserCircle } from 'lucide-react'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../ui'
 import { EncabezadoUsuarioActual } from '../EncabezadoUsuario'
@@ -18,8 +18,17 @@ export function TopBar() {
         </div>
       </Link>
       <div className="flex items-center gap-4">
-        {/* Encabezado usuario/rol unificado (req 33): nombre arriba, rol debajo. */}
-        <EncabezadoUsuarioActual className="hidden sm:block" />
+        {/* Acceso a "Mi cuenta": es la ÚNICA vía para el cambio voluntario de
+            contraseña (req 26) y para ver las sesiones activas (req 29). El
+            encabezado usuario/rol (req 33) hace de disparador. */}
+        <Link
+          to="/cuenta"
+          title="Mi cuenta"
+          className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-gold/60"
+        >
+          <UserCircle className="h-6 w-6 shrink-0 text-white/70" />
+          <EncabezadoUsuarioActual className="hidden sm:block" />
+        </Link>
         <span className="hidden items-center gap-1.5 text-xs text-emerald-300 md:flex">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /> En línea
         </span>

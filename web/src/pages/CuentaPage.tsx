@@ -1,10 +1,39 @@
-import { useState } from 'react'
-import { KeyRound } from 'lucide-react'
-import { mensajeError } from '../lib/supabase'
+import { useCallback, useEffect, useState } from 'react'
+import { KeyRound, MonitorSmartphone } from 'lucide-react'
+import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
 import { cambiarPasswordSeguro, LONGITUD_MINIMA_PASSWORD } from '../auth/password'
+import { fmtFechaHora } from '../lib/format'
 import { Breadcrumb } from '../components/layout/Shell'
-import { Badge, Button, Card, ErrorBanner, Field, Input } from '../components/ui'
+import { Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input } from '../components/ui'
+
+interface SesionPropia {
+  id_sesion: string
+  fecha_inicio: string
+  fecha_ultima_actividad: string | null
+  fecha_expiracion: string
+  estado_sesion: string
+  recordar_sesion: boolean
+  user_agent: string | null
+}
+
+/** Descripción legible del dispositivo a partir del user agent. Sin exponer el valor crudo. */
+function describirDispositivo(ua: string | null): string {
+  if (!ua) return 'Dispositivo desconocido'
+  const navegador = /Edg\//.test(ua) ? 'Edge'
+    : /OPR\//.test(ua) ? 'Opera'
+    : /Chrome\//.test(ua) ? 'Chrome'
+    : /Firefox\//.test(ua) ? 'Firefox'
+    : /Safari\//.test(ua) ? 'Safari'
+    : 'Navegador'
+  const sistema = /Windows/.test(ua) ? 'Windows'
+    : /Android/.test(ua) ? 'Android'
+    : /iPhone|iPad|iOS/.test(ua) ? 'iOS'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : 'sistema desconocido'
+  return `${navegador} en ${sistema}`
+}
 
 /** Cuenta propia: datos del usuario y cambio de contraseña (reqs 26/27/28). */
 export function CuentaPage() {
@@ -14,6 +43,38 @@ export function CuentaPage() {
   const [p2, setP2] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Sesiones propias (req 29). La política RLS de `sesion` ya limita a
+  // id_usuario = auth.uid(); nunca se selecciona token_hash.
+  const [sesiones, setSesiones] = useState<SesionPropia[] | null>(null)
+  const [cerrandoSesiones, setCerrandoSesiones] = useState(false)
+
+  const cargarSesiones = useCallback(async () => {
+    if (!perfil?.id_usuario) return
+    // Filtro explícito por id_usuario: la política RLS es
+    // `id_usuario = auth.uid() OR tiene_permiso('ADM_USUARIO_SELECT')`, así que
+    // sin él un administrador vería aquí las sesiones de TODOS los usuarios.
+    const { data } = await supabase
+      .from('sesion')
+      .select('id_sesion, fecha_inicio, fecha_ultima_actividad, fecha_expiracion, estado_sesion, recordar_sesion, user_agent')
+      .eq('id_usuario', perfil.id_usuario)
+      .eq('estado_sesion', 'ACTIVA')
+      .order('fecha_inicio', { ascending: false })
+      .limit(20)
+    setSesiones((data as SesionPropia[] | null) ?? [])
+  }, [perfil?.id_usuario])
+
+  useEffect(() => {
+    cargarSesiones()
+  }, [cargarSesiones])
+
+  const cerrarTodas = async () => {
+    setCerrandoSesiones(true)
+    // Revoca en el proveedor (GoTrue) y marca la auditoría; incluye esta sesión,
+    // así que el usuario deberá iniciar sesión de nuevo.
+    await supabase.rpc('revocar_mis_sesiones', { p_motivo: 'CIERRE_MANUAL' })
+    await supabase.auth.signOut()
+  }
 
   const cambiar = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,6 +133,55 @@ export function CuentaPage() {
             <ErrorBanner message={error} />
             <Button type="submit" loading={guardando}>Actualizar contraseña</Button>
           </form>
+        </Card>
+
+        {/* Sesiones activas del propio usuario (req 29): fecha, dispositivo
+            aproximado y estado, nunca el token. */}
+        <Card className="p-5 lg:col-span-2">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h3 className="flex items-center gap-2 text-base font-semibold text-navy">
+              <MonitorSmartphone className="h-5 w-5" /> Sesiones activas
+            </h3>
+            {sesiones && sesiones.length > 0 && (
+              <Button variant="secondary" loading={cerrandoSesiones} onClick={cerrarTodas}>
+                Cerrar todas mis sesiones
+              </Button>
+            )}
+          </div>
+
+          {sesiones === null ? (
+            <CenterSpinner label="Cargando sesiones..." />
+          ) : sesiones.length === 0 ? (
+            <EmptyState title="No hay sesiones activas registradas" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase text-ink-soft">
+                    <th className="py-2 pr-4 font-medium">Dispositivo</th>
+                    <th className="py-2 pr-4 font-medium">Inicio</th>
+                    <th className="py-2 pr-4 font-medium">Última actividad</th>
+                    <th className="py-2 pr-4 font-medium">Expira</th>
+                    <th className="py-2 font-medium">Recordada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sesiones.map((s) => (
+                    <tr key={s.id_sesion} className="border-b border-slate-100 last:border-0">
+                      <td className="py-2 pr-4 text-navy">{describirDispositivo(s.user_agent)}</td>
+                      <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_inicio)}</td>
+                      <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_ultima_actividad)}</td>
+                      <td className="py-2 pr-4 text-ink-soft">{fmtFechaHora(s.fecha_expiracion)}</td>
+                      <td className="py-2">{s.recordar_sesion ? 'Sí' : 'No'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-3 text-xs text-ink-soft">
+            Al cerrar todas las sesiones se revocan también en el servidor y deberá iniciar sesión nuevamente.
+          </p>
         </Card>
       </div>
     </div>

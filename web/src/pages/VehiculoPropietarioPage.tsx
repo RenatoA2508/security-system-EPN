@@ -85,16 +85,18 @@ export function VehiculoPropietarioPage() {
 
     setGuardando(true)
     // Operación ATÓMICA en el backend: crea vehículo y relación, o ninguno (req 35).
+    // Los campos opcionales se OMITEN (no se envía cadena vacía ni null explícito):
+    // la RPC aplica su DEFAULT null. Coherente con el req 19.
     const { error: err } = await supabase.rpc('crear_vehiculo_con_propietario', {
-      p_placa: placaNormalizada || null,
       p_tipo_vehiculo: form.tipo_vehiculo,
-      p_marca: form.marca.trim() || null,
-      p_modelo: form.modelo.trim() || null,
-      p_color: form.color.trim() || null,
       p_id_persona: persona.id_persona,
+      p_placa: placaNormalizada || undefined,
+      p_marca: form.marca.trim() || undefined,
+      p_modelo: form.modelo.trim() || undefined,
+      p_color: form.color.trim() || undefined,
       p_tipo_relacion: form.tipo_relacion,
       p_fecha_inicio: new Date(`${form.fecha_inicio}T00:00:00`).toISOString(),
-      p_motivo_sin_placa: sinPlaca && !placaNormalizada ? form.motivo_sin_placa.trim() : null,
+      p_motivo_sin_placa: sinPlaca && !placaNormalizada ? form.motivo_sin_placa.trim() : undefined,
     })
     setGuardando(false)
     if (err) { setError(mensajeError(err)); return }
