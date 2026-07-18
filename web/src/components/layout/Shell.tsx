@@ -1,12 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, LogOut, ShieldCheck } from 'lucide-react'
+import { ChevronRight, LogOut, ShieldCheck, UserCircle } from 'lucide-react'
 import { useAuth } from '../../auth/AuthProvider'
 import { Button } from '../ui'
+import { EncabezadoUsuarioActual } from '../EncabezadoUsuario'
 
 /** Barra superior fija (07 §2.3). Sin barra de KPIs. */
 export function TopBar() {
-  const { perfil, rolLabel, cerrarSesion } = useAuth()
+  const { cerrarSesion } = useAuth()
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-navy-700/40 bg-navy px-4 text-white">
       <Link to="/" className="flex items-center gap-2.5">
@@ -17,10 +18,17 @@ export function TopBar() {
         </div>
       </Link>
       <div className="flex items-center gap-4">
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-medium">{perfil?.nombre_completo ?? perfil?.nombre_usuario}</p>
-          <p className="text-[11px] text-white/60">{rolLabel}</p>
-        </div>
+        {/* Acceso a "Mi cuenta": es la ÚNICA vía para el cambio voluntario de
+            contraseña (req 26) y para ver las sesiones activas (req 29). El
+            encabezado usuario/rol (req 33) hace de disparador. */}
+        <Link
+          to="/cuenta"
+          title="Mi cuenta"
+          className="flex items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-gold/60"
+        >
+          <UserCircle className="h-6 w-6 shrink-0 text-white/70" />
+          <EncabezadoUsuarioActual className="hidden sm:block" />
+        </Link>
         <span className="hidden items-center gap-1.5 text-xs text-emerald-300 md:flex">
           <span className="h-2 w-2 rounded-full bg-emerald-400" /> En línea
         </span>

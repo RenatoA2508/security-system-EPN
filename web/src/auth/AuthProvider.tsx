@@ -1,7 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase } from '../lib/supabase'
+import {
+  supabase, getRecordarSesion, setIdSesionActual, getIdSesionActual, cerrarSesionAlSalir,
+} from '../lib/supabase'
+import { ROL_LABEL } from '../lib/catalogos'
+import { dispositivoActual } from '../lib/dispositivo'
 
 export type ModuloCodigo = 'ADM' | 'GPI' | 'GPE' | 'PCO' | 'CAC'
 
@@ -25,6 +29,8 @@ interface AuthState {
   modulos: ModuloCodigo[]
   esGuardia: boolean
   cargando: boolean
+  /** true cuando el usuario llegó por un enlace de recuperación de contraseña (evento PASSWORD_RECOVERY). */
+  recuperacion: boolean
   tiene: (codigo: string) => boolean
   refrescarPerfil: () => Promise<void>
   cerrarSesion: () => Promise<void>
@@ -57,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permisos, setPermisos] = useState<Set<string>>(new Set())
   const [modulos, setModulos] = useState<ModuloCodigo[]>([])
   const [cargando, setCargando] = useState(true)
+  const [recuperacion, setRecuperacion] = useState(false)
 
   /** Carga permisos efectivos, módulos permitidos, roles y el perfil del usuario. */
   const cargarContexto = useCallback(async (uid: string) => {
@@ -103,8 +110,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cerrar la fila de auditoría ANTES de signOut(): después, auth.uid() ya es null dentro de
     // la RPC y no habría forma de saber qué sesión cerrar. Si falla, se sale igual — quedarse
     // dentro por un error de auditoría sería peor; el barrido de pg_cron la marcará EXPIRADA.
-    const { error } = await supabase.rpc('cerrar_sesion')
+    // Se envía el id propio para no cerrar la sesión de otro dispositivo (req 29).
+    const { error } = await supabase.rpc('cerrar_sesion', { p_id_sesion: getIdSesionActual() })
     if (error) console.warn('cerrar_sesion:', error.message)
+    setIdSesionActual(null)
     await supabase.auth.signOut()
   }, [])
 
@@ -118,49 +127,135 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, sess) => {
       setSession(sess)
 
-      // La fila de auditoría se registra SOLO en un inicio de sesión real. Antes esto vivía en
-      // el efecto de abajo, que corre en cada montaje con sesión válida: cada recarga de página
-      // insertaba una fila nueva (55 filas de admin en un solo día, todas ACTIVA). Supabase
-      // emite INITIAL_SESSION al restaurar la sesión de localStorage y TOKEN_REFRESHED al
-      // renovar el JWT; ninguno de los dos es un login y ninguno debe registrar sesión.
+      // Enlace de recuperación de contraseña: la sesión existe pero el usuario
+      // solo debe ver la pantalla de restablecimiento (req 31).
+      if (event === 'PASSWORD_RECOVERY') setRecuperacion(true)
+
+      // OJO: supabase-js emite SIGNED_IN no solo al iniciar sesión, sino también cada vez que
+      // la pestaña recupera visibilidad y revalida la sesión. Por eso `registrar_sesion` es
+      // IDEMPOTENTE en la base (una fila ACTIVA por sesión del proveedor): antes, volver a la
+      // pestaña insertaba una fila nueva y el registro mostraba decenas de sesiones abiertas.
+      // Al repetirse, la llamada solo refresca la última actividad y devuelve la misma fila.
       if (event === 'SIGNED_IN' && sess) {
-        supabase.rpc('registrar_sesion', { p_recordar_sesion: false }).then(({ error }) => {
-          if (error) console.warn('registrar_sesion:', error.message)
-        })
+        // La preferencia "recordar sesión" ya decidió el almacén del token (lib/supabase);
+        // aquí solo se refleja en la auditoría junto con el dispositivo (reqs 29/30).
+        supabase
+          .rpc('registrar_sesion', {
+            p_recordar_sesion: getRecordarSesion(),
+            p_user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 500) : undefined,
+            p_dispositivo: dispositivoActual(),
+          })
+          .then(({ data, error }) => {
+            if (error) {
+              console.warn('registrar_sesion:', error.message)
+              return
+            }
+            // Se recuerda la fila propia para cerrarla y refrescarla sin tocar la
+            // de otros dispositivos del mismo usuario (req 29).
+            const fila = data as { id_sesion?: string } | null
+            if (fila?.id_sesion) setIdSesionActual(fila.id_sesion)
+          })
       }
 
       if (event === 'SIGNED_OUT' || !sess) {
+        // Se olvida la fila de auditoría propia: si entra otra cuenta en este mismo
+        // navegador, no debe reutilizar la sesión de la anterior.
+        setIdSesionActual(null)
         setPerfil(null)
         setRoles([])
         setPermisos(new Set())
         setModulos([])
+        setRecuperacion(false)
         setCargando(false)
       }
     })
     return () => sub.subscription.unsubscribe()
   }, [])
 
+  // El contexto se carga cuando cambia el USUARIO, no cuando cambia el objeto
+  // `session`. supabase-js entrega un objeto nuevo cada vez que revalida la sesión
+  // (p. ej. al volver a la pestaña); si se dependiera de él, este efecto volvería
+  // a correr, pondría `cargando` en true y REMONTARÍA toda la aplicación: eso se
+  // veía como una recarga y, de paso, borraba lo escrito en los formularios.
+  const idUsuario = session?.user.id ?? null
   useEffect(() => {
-    if (!session?.user.id) return
+    if (!idUsuario) return
     let vivo = true
     setCargando(true)
     ;(async () => {
-      await cargarContexto(session.user.id)
+      await cargarContexto(idUsuario)
       if (vivo) setCargando(false)
     })()
     return () => {
       vivo = false
     }
-  }, [session, cargarContexto])
+  }, [idUsuario, cargarContexto])
+
+  // Latido de actividad: renueva sesion.fecha_ultima_actividad para el timeout
+  // de inactividad (req 29). Se limita a una llamada por minuto aunque el usuario
+  // esté muy activo; la hora real la pone el servidor dentro de tocar_sesion().
+  const ultimoLatido = useRef(0)
+  useEffect(() => {
+    if (!session?.user.id) return
+    const latir = () => {
+      const ahora = Date.now()
+      if (ahora - ultimoLatido.current < 60_000) return
+      ultimoLatido.current = ahora
+      // Solo la sesión de este dispositivo: si no, la actividad en el PC
+      // mantendría viva la del celular y el timeout de inactividad no serviría.
+      // Devuelve false si la sesión fue revocada: en ese caso el token todavía no
+      // ha caducado, pero ya no sirve para nada, así que se cierra sesión sola en
+      // vez de dejar al usuario en una pantalla sin datos.
+      supabase.rpc('tocar_sesion', { p_id_sesion: getIdSesionActual() }).then(({ data, error }) => {
+        if (!error && data === false) {
+          setIdSesionActual(null)
+          void supabase.auth.signOut()
+        }
+      })
+    }
+    latir()
+    window.addEventListener('click', latir)
+    window.addEventListener('keydown', latir)
+    document.addEventListener('visibilitychange', latir)
+    return () => {
+      window.removeEventListener('click', latir)
+      window.removeEventListener('keydown', latir)
+      document.removeEventListener('visibilitychange', latir)
+    }
+  }, [session])
+
+  // Cerrar la pestaña debe cerrar la sesión: si no, la fila queda ACTIVA en el
+  // registro hasta que la barra de inactividad la marque, y la pantalla de
+  // sesiones muestra como vivas sesiones que ya no existen (req 29).
+  //
+  // Solo aplica cuando "recordar sesión" está DESACTIVADO: en ese caso el token
+  // vive en sessionStorage (una sesión por pestaña) y cerrarla realmente la
+  // termina. Con "recordar" activado el usuario espera seguir dentro al volver,
+  // así que la sesión debe sobrevivir.
+  useEffect(() => {
+    if (!session?.access_token) return
+    const alSalir = (e: PageTransitionEvent) => {
+      // e.persisted: la página va a la caché de retroceso y puede reaparecer.
+      if (e.persisted || getRecordarSesion()) return
+      const id = getIdSesionActual()
+      if (id) cerrarSesionAlSalir(id, session.access_token)
+    }
+    window.addEventListener('pagehide', alSalir)
+    return () => window.removeEventListener('pagehide', alSalir)
+  }, [session])
 
   const tiene = useCallback((codigo: string) => permisos.has(codigo), [permisos])
   const esGuardia = permisos.has('CAC_EVENTO_INSERT')
-  const rolLabel = roles[0]?.replaceAll('_', ' ').replace(/^\w/, (c) => c.toUpperCase()) || derivarRolLabel(permisos, modulos)
+  // Etiqueta de rol desde el catálogo canónico (ROL_LABEL) — nunca el código crudo
+  // en MAYÚSCULAS. Con varios roles activos se muestran todos (req 33).
+  const rolLabel = roles.length
+    ? roles.map((r) => ROL_LABEL[r] ?? r.replaceAll('_', ' ')).join(' · ')
+    : derivarRolLabel(permisos, modulos)
 
   return (
     <Ctx.Provider
       value={{
-        session, perfil, roles, rolLabel, permisos, modulos, esGuardia, cargando,
+        session, perfil, roles, rolLabel, permisos, modulos, esGuardia, cargando, recuperacion,
         tiene, refrescarPerfil, cerrarSesion,
       }}
     >

@@ -239,3 +239,77 @@ Verificado: las dos vistas del proyecto tienen `security_invoker = true`.
 
 **Lección para el equipo:** todo `CREATE OR REPLACE VIEW` en este proyecto debe repetir
 `with (security_invoker = true)`. Conviene pasar los advisors después de cada cambio de esquema.
+
+---
+
+# Ronda de validaciones generales (2026-07-17) — reqs 9-38
+
+## V8 — Recuperación de contraseña → **RESUELTA: funciona con el servicio integrado (plan gratis)**
+El flujo usa `resetPasswordForEmail` de Supabase Auth (nativo: token, expiración, un solo uso y
+rate limiting los administra el proveedor).
+
+**Hallazgo real (2026-07-18):** el problema NO era el SMTP. La configuración de Auth tenía
+`site_url = http://localhost:3000` (puerto equivocado) y `uri_allow_list` **vacía**, así que el
+`redirectTo` se rechazaba y el enlace apuntaba a un host inexistente.
+
+**Configurado** vía Management API (todo dentro del plan gratuito):
+- `site_url` = `https://security-system-epn.vercel.app`
+- `uri_allow_list` = producción + `http://localhost:5173/**` + previews de Vercel
+- `mailer_otp_exp` = 1800 s (30 min, req 31)
+- `password_min_length` = 8 (alineado con `LONGITUD_MINIMA_PASSWORD` y el frontend)
+
+**Verificado en los logs de auth:** `mail.send` con `mail_type: recovery` desde
+`noreply@mail.app.supabase.io`, sin error.
+
+**Limitaciones del plan gratuito (aceptadas, no bloquean):**
+1. **2 correos por hora** (`rate_limit_email_sent`). Es, de hecho, el rate limiting que pide el req 31.
+2. **No se puede traducir la plantilla del correo** con el proveedor por defecto: la API responde
+   *"Email template modification is not available for free tier projects using the default email
+   provider"*. El asunto sigue en inglés ("Reset your password"). Toda la interfaz propia sí está
+   en español. Se corrige solo, sin código, si algún día se configura un SMTP propio.
+3. El servicio integrado está pensado para pruebas; la entrega a buzones externos arbitrarios no
+   está garantizada. **Pendiente opcional del equipo:** si se quiere entrega fiable a
+   `@epn.edu.ec`, configurar un SMTP propio (Resend/Brevo tienen capa gratuita) en
+   Auth → SMTP Settings; no requiere cambios de código.
+
+## V9 — La cédula ecuatoriana se exige a TODA persona (incluidos externos)
+El CHECK `persona_cedula_valida` = `es_cedula_ecuatoriana` (ya existía, ahora además rechaza
+relleno). Un visitante extranjero con pasaporte **no** puede registrarse con ese documento.
+Es coherente con §D20 (el externo se identifica con "su cédula"), pero si el negocio necesita
+admitir pasaportes habría que añadir un tipo de documento. **Pendiente del equipo:** confirmar si
+se aceptan documentos no ecuatorianos; hoy no.
+
+## V10 — Turno de guardia con dato heterogéneo → **se interpreta, no se normaliza**
+`guardia_punto_control.turno` tiene `MATUTINO`, `06:00–20:00` y `07:00–17:00` (§V4). La función
+`esta_en_turno_guardia` entiende ambos formatos, así que no se fuerza una migración del dato. Un
+turno que no se pueda interpretar **no habilita** el acceso (conservador). **Pendiente del equipo:**
+decidir si `turno` pasa a catálogo cerrado (`MATUTINO/VESPERTINO/NOCTURNO`) y migrar los rangos.
+
+## V11 — 18 cédulas ficticias siguen pendientes (arrastre de §V1)
+El endurecimiento de la cédula no cambia esto: las 18 cédulas sintéticas de §V1 siguen siendo
+válidas por estructura pero no corresponden a personas reales. **Pendiente del equipo:** sustituir
+por las cédulas reales desde ADM. (Las nuevas reglas no las rechazan: no son relleno.)
+
+## V13 — Bloqueo por intentos fallidos: hueco residual del plan gratuito
+El bloqueo (5 intentos → 15 min) funciona y es efectivo: al dispararse se escribe
+`auth.users.banned_until`, así que GoTrue rechaza el acceso **aunque se llame a su API
+directamente**. Verificado en `scripts/prueba_bloqueo_intentos.py`.
+
+**Hueco que queda:** el conteo lo hace la Edge Function `iniciar-sesion`. Quien nunca la use y
+ataque `/auth/v1/token` directamente **no incrementa el contador**, así que por esa vía el bloqueo
+no llega a dispararse. Cerrarlo del todo requiere el Auth Hook
+`password_verification_attempt` de GoTrue, que es **de pago** (HTTP 402 al intentar activarlo).
+
+**Mitigaciones y pendientes del equipo:**
+1. Si se contrata plan Pro: activar el hook en Authentication → Hooks apuntando a
+   `pg-functions://postgres/public/hook_password_verification_attempt`. La función ya existe y
+   comparte la misma política; **no hay que tocar código**.
+2. Alternativa sin costo: activar hCaptcha (`security_captcha_enabled`), que sí frena el ataque
+   automatizado contra el endpoint directo.
+3. Supabase no expone un límite de tasa por IP para el *login* en el plan gratuito (`rate_limit_*`
+   cubre correo, OTP y refresh, no el grant de contraseña).
+
+## V12 — `empresa.estado_verificacion_ruc` siempre NO_VERIFICADO
+No hay integración con el SRI. La columna existe y el flujo la contempla, pero ningún RUC se marca
+`VALIDO`/`INVALIDO` hasta que haya un servicio oficial. **Pendiente del equipo:** convenio/API del
+SRI; entonces se puebla en backend con timeout y manejo de indisponibilidad (interfaz ya prevista).

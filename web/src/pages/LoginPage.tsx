@@ -1,24 +1,41 @@
 import { useState } from 'react'
-import { Eye, EyeOff, ShieldCheck } from 'lucide-react'
-import { supabase, mensajeError } from '../lib/supabase'
+import { Link, useNavigate } from 'react-router-dom'
+import { CheckCircle2, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { iniciarSesion, setRecordarSesion } from '../lib/supabase'
+import { consumirAvisoLogin } from '../auth/password'
 import { Button, ErrorBanner, Field, Input } from '../components/ui'
 
 export function LoginPage() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [ver, setVer] = useState(false)
   const [recordar, setRecordar] = useState(false)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aviso] = useState<string | null>(() => consumirAvisoLogin())
 
   const entrar = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setCargando(true)
-    // Login real con Supabase Auth (05 §2.1). El AuthProvider reacciona al cambio de sesión.
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
+    // "Recordar sesión" decide el almacén del token ANTES de iniciar sesión (req 30).
+    setRecordarSesion(recordar)
+    // Pasa por la Edge Function `iniciar-sesion`, que aplica la política de
+    // intentos fallidos antes de verificar la contraseña. El AuthProvider
+    // reacciona al SIGNED_IN que emite setSession.
+    const fallo = await iniciarSesion(email, password)
     setCargando(false)
-    if (error) setError(mensajeError(error))
+    if (fallo) {
+      setError(fallo)
+      return
+    }
+    // Tras iniciar sesión SIEMPRE se entra al panel principal. El login se renderiza
+    // con la ruta comodín, así que la URL puede haber quedado en una pantalla previa
+    // (p. ej. /cuenta tras cambiar la contraseña); sin esto, el enrutador volvería
+    // allí en vez de al panel. Si la cuenta tiene cambio de contraseña pendiente,
+    // el guard de App muestra igualmente la pantalla de cambio obligatorio.
+    navigate('/', { replace: true })
   }
 
   return (
@@ -32,6 +49,12 @@ export function LoginPage() {
         </div>
 
         <form onSubmit={entrar} className="space-y-4 px-6 py-6">
+          {aviso && (
+            <div className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>{aviso}</span>
+            </div>
+          )}
           <Field label="Usuario (correo institucional)" required>
             <Input
               type="email"
@@ -63,13 +86,13 @@ export function LoginPage() {
           </Field>
 
           <div className="flex items-center justify-between text-sm">
-            <label className="flex items-center gap-2 text-ink-soft" title="Decorativo: recordar_sesion está deshabilitado a nivel de proyecto (01 §5)">
+            <label className="flex items-center gap-2 text-ink-soft" title="Mantiene la sesión iniciada en este navegador. Nunca guarda la contraseña.">
               <input type="checkbox" checked={recordar} onChange={(e) => setRecordar(e.target.checked)} className="h-4 w-4" />
               Recordar sesión
             </label>
-            <span className="cursor-not-allowed text-slate-400" title="Flujo nativo de Supabase Auth (fuera de alcance de este prototipo)">
+            <Link to="/olvido" className="text-navy hover:underline">
               ¿Olvidó su contraseña?
-            </span>
+            </Link>
           </div>
 
           <ErrorBanner message={error} />

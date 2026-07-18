@@ -18,7 +18,27 @@ interface Usuario {
   requiere_cambio_password: boolean
   fecha_ultimo_login: string | null
   intentos_fallidos: number
+  /** Bloqueo TEMPORAL por intentos fallidos; distinto de estado_usuario = BLOQUEADO. */
+  bloqueado_hasta: string | null
   persona?: { nombres: string; apellidos: string; cedula: string } | null
+}
+
+/** ¿La cuenta está bloqueada AHORA por intentos fallidos? El bloqueo caduca solo. */
+function bloqueoVigente(u: { bloqueado_hasta: string | null }): boolean {
+  return !!u.bloqueado_hasta && new Date(u.bloqueado_hasta) > new Date()
+}
+
+/**
+ * Estado que se MUESTRA, combinando los dos bloqueos que existen en el modelo:
+ * el administrativo (`estado_usuario`, permanente) y el temporal por intentos
+ * fallidos (`bloqueado_hasta`, que caduca solo).
+ *
+ * Son columnas distintas a propósito — si el temporal cambiara `estado_usuario`
+ * dejaría de desbloquearse automáticamente —, pero para quien mira la pantalla
+ * una cuenta que no puede entrar no puede aparecer como "Activo".
+ */
+function estadoEfectivo(u: { estado_usuario: string; bloqueado_hasta: string | null }): string {
+  return u.estado_usuario === 'ACTIVO' && bloqueoVigente(u) ? 'BLOQUEO_TEMPORAL' : u.estado_usuario
 }
 
 /**
@@ -45,7 +65,7 @@ export function UsuariosScreen() {
     setCargando(true)
     const { data, error } = await supabase
       .from('usuario_sistema')
-      .select('id_usuario, nombre_usuario, correo_electronico, estado_usuario, requiere_cambio_password, fecha_ultimo_login, intentos_fallidos, persona:persona!usuario_sistema_id_persona_fkey(nombres, apellidos, cedula)')
+      .select('id_usuario, nombre_usuario, correo_electronico, estado_usuario, requiere_cambio_password, fecha_ultimo_login, intentos_fallidos, bloqueado_hasta, persona:persona!usuario_sistema_id_persona_fkey(nombres, apellidos, cedula)')
       .order('nombre_usuario')
     if (error) setError(mensajeError(error))
     setUsuarios((data as Usuario[] | null) ?? [])
@@ -65,6 +85,21 @@ export function UsuariosScreen() {
         .some((c) => String(c ?? '').toLowerCase().includes(t)),
     )
   }, [usuarios, busqueda])
+
+  /** Reinicia el contador de intentos fallidos y levanta el bloqueo temporal. */
+  const desbloquearIntentos = async () => {
+    if (!sel) return
+    setAccionando(true)
+    const { error } = await supabase.rpc('desbloquear_intentos_login', { p_id_usuario: sel.id_usuario })
+    setAccionando(false)
+    if (error) {
+      toast('error', mensajeError(error))
+      return
+    }
+    toast('ok', 'Cuenta desbloqueada.')
+    setSel((s) => (s ? { ...s, bloqueado_hasta: null, intentos_fallidos: 0 } : s))
+    await cargar()
+  }
 
   const cambiarEstado = async (nuevoEstado: string) => {
     if (!sel) return
@@ -168,7 +203,7 @@ export function UsuariosScreen() {
                     <td className="px-4 py-2.5 font-medium text-navy">{u.nombre_usuario}</td>
                     <td className="px-4 py-2.5">{u.correo_electronico}</td>
                     <td className="px-4 py-2.5">{u.persona ? `${u.persona.nombres} ${u.persona.apellidos}` : '—'}</td>
-                    <td className="px-4 py-2.5"><Badge value={u.estado_usuario} /></td>
+                    <td className="px-4 py-2.5"><Badge value={estadoEfectivo(u)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -182,7 +217,7 @@ export function UsuariosScreen() {
         {sel && (
           <div>
             <div className="mb-4 flex flex-wrap gap-2">
-              <Badge value={sel.estado_usuario} />
+              <Badge value={estadoEfectivo(sel)} />
               {sel.requiere_cambio_password && <Badge value="CAMBIO_PENDIENTE" />}
             </div>
             <dl className="mb-5 divide-y divide-slate-100">
@@ -191,25 +226,43 @@ export function UsuariosScreen() {
               <Row label="Cédula" val={sel.persona?.cedula ?? '—'} />
               <Row label="Último login" val={fmtFechaHora(sel.fecha_ultimo_login)} />
               <Row label="Intentos fallidos" val={String(sel.intentos_fallidos)} />
+              {bloqueoVigente(sel) && (
+                <Row label="Bloqueada hasta" val={fmtFechaHora(sel.bloqueado_hasta)} />
+              )}
             </dl>
+
+            {bloqueoVigente(sel) && (
+              <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-600/20">
+                Cuenta bloqueada por intentos fallidos.
+              </p>
+            )}
             <div className="space-y-2">
               {/* La BD ya lo impide (trigger proteger_administracion): esto solo evita que el
                   administrador descubra la regla chocándose con un error. La guarda de verdad no
                   puede vivir aquí — la API REST está expuesta y no pasa por esta pantalla. */}
               {esMiCuenta && (
                 <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-600/20">
-                  Es tu propia cuenta: no puedes bloquearla ni darla de baja. Si necesitas hacerlo, pídeselo a
-                  otro administrador — así el sistema nunca se queda sin nadie que pueda entrar.
+                  Es su propia cuenta: no puede bloquearla ni darla de baja.
                 </p>
               )}
               {tiene('ADM_USUARIO_BLOQUEAR') && sel.estado_usuario === 'ACTIVO' && !esMiCuenta && (
                 <Button variant="danger" className="w-full" loading={accionando} onClick={() => cambiarEstado('BLOQUEADO')}>
-                  <Lock className="h-4 w-4" /> Bloquear usuario
+                  {/* Si ya hay un bloqueo temporal, se aclara que este es el permanente:
+                      son acciones distintas y "Bloquear usuario" a secas confundía. */}
+                  <Lock className="h-4 w-4" />
+                  {bloqueoVigente(sel) ? 'Bloquear permanentemente' : 'Bloquear usuario'}
                 </Button>
               )}
               {tiene('ADM_USUARIO_DESBLOQUEAR') && sel.estado_usuario === 'BLOQUEADO' && (
                 <Button className="w-full" loading={accionando} onClick={() => cambiarEstado('ACTIVO')}>
                   <ShieldCheck className="h-4 w-4" /> Desbloquear usuario
+                </Button>
+              )}
+              {/* Bloqueo TEMPORAL por intentos fallidos: es independiente del estado
+                  administrativo, así que necesita su propia acción. */}
+              {tiene('ADM_USUARIO_DESBLOQUEAR') && bloqueoVigente(sel) && (
+                <Button className="w-full" loading={accionando} onClick={desbloquearIntentos}>
+                  <ShieldCheck className="h-4 w-4" /> Desbloquear intentos fallidos
                 </Button>
               )}
               {tiene('ADM_USUARIO_ACTIVAR') && sel.estado_usuario !== 'ACTIVO' && sel.estado_usuario !== 'BLOQUEADO' && (

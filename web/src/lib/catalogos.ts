@@ -173,9 +173,30 @@ export const ETIQUETA: Record<string, string> = {
 
   // Sesiones y bitácora
   CERRADA: 'Cerrada',
+  CERRADA_CAMBIO_PASSWORD: 'Cerrada por cambio de contraseña',
   EXPIRADA: 'Expirada',
   EXITO: 'Éxito',
   ERROR: 'Error',
+
+  // Estado mostrado cuando la cuenta tiene un bloqueo TEMPORAL por intentos
+  // fallidos. No es un valor de la base: lo compone la interfaz combinando
+  // estado_usuario con bloqueado_hasta (ver estadoEfectivo en UsuariosScreen).
+  BLOQUEO_TEMPORAL: 'Bloqueo temporal',
+
+  // Motivos de cierre de sesión (sesion.motivo_cierre)
+  LOGOUT: 'Cierre de sesión',
+  CIERRE_MANUAL: 'Cierre manual',
+  EXPIRACION_ABSOLUTA: 'Expiración por tiempo',
+  INACTIVIDAD: 'Inactividad',
+  CAMBIO_PASSWORD: 'Cambio de contraseña',
+  ACCESO_FUERA_DE_TURNO: 'Acceso fuera de turno',
+
+  // Contraseña / verificación
+  REALIZADO: 'Realizado',
+  NO_VERIFICADO: 'No verificado',
+  VALIDO: 'Válido',
+  INVALIDO: 'Inválido',
+  SERVICIO_NO_DISPONIBLE: 'Servicio no disponible',
 
   // Parámetros del sistema
   AUTENTICACION: 'Autenticación',
