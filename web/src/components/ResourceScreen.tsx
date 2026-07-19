@@ -142,6 +142,9 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
     return out
   }, [rows, busqueda, config.buscarEn, filtrosValor])
 
+  /** ¿Hay algo escondiendo filas? Distingue "no hay datos" de "los has filtrado tú". */
+  const hayFiltroActivo = !!busqueda.trim() || Object.values(filtrosValor).some((v) => !!v)
+
   const exportarCsv = () => {
     const encabezados = config.columnas.map((c) => c.label)
     const filas = filtradas.map((r) =>
@@ -231,7 +234,30 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
         {cargando ? (
           <CenterSpinner label="Cargando..." />
         ) : filtradas.length === 0 ? (
-          <EmptyState title={busqueda ? 'Sin resultados' : `No hay ${config.titulo.toLowerCase()} registrados`} />
+          /* "No hay X registrados" solo cuando de verdad no hay ninguno. Antes ese mensaje
+             salía también con un filtro puesto que no casaba con nada, así que la pantalla
+             afirmaba que no existían datos mientras los ocultaba ella misma — pasó de verdad:
+             con un filtro de zona aplicado, "Puntos de control" decía estar vacío teniendo seis.
+             Si algo está filtrando, se dice cuántos hay y se ofrece quitar el filtro. */
+          hayFiltroActivo ? (
+            <EmptyState
+              title="Sin resultados"
+              hint={`Ninguno de los ${rows.length} ${config.titulo.toLowerCase()} coincide con lo que has filtrado.`}
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setBusqueda('')
+                    setFiltrosValor({})
+                  }}
+                >
+                  Quitar filtros
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState title={`No hay ${config.titulo.toLowerCase()} registrados`} />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -913,3 +913,19 @@ PCO sepa que a ese guardia hay que reasignarlo a otro punto.
 
 Los estados de `punto_control` siguen siendo manuales: nada los cambia solo. Que un punto entre en
 mantenimiento y deje a su guardia sin poder trabajar es una consecuencia visible, no automática.
+
+## §D61 — Una lista vacía por un filtro no puede decir que no hay datos
+
+**Conflicto:** el mensaje de lista vacía solo contemplaba la barra de búsqueda. Con un filtro de
+columna aplicado que no casaba con nada, la pantalla mostraba *"No hay puntos de control
+registrados"* — afirmando que no existían datos mientras los ocultaba ella misma. Había seis.
+
+Lo detectó TestSprite: el agente aplicó el filtro de zona, leyó ese mensaje y concluyó que la
+lista estaba vacía. Un usuario real habría concluido lo mismo, y pensaría que perdió los datos.
+
+**Decisión:** el mensaje distingue los dos casos. Si algo está filtrando, dice **"Sin
+resultados"**, cuántos registros hay en total y ofrece un botón para **quitar los filtros** —
+salir del callejón desde donde se ve el problema, sin tener que buscar el desplegable que lo
+causó. "No hay X registrados" queda reservado para cuando de verdad no hay ninguno.
+
+Es un cambio del motor genérico, así que vale para todas las pantallas del sistema, no solo PCO.

@@ -350,6 +350,38 @@ describe('asignaciones de guardia', () => {
   })
 })
 
+describe('lista vacía por un filtro', () => {
+  it('no dice que no hay registros cuando es el filtro el que los oculta', async () => {
+    // Bug detectado por TestSprite: con un filtro de zona aplicado que no casaba con nada, la
+    // pantalla de Puntos de control decía "No hay puntos de control registrados" teniendo seis.
+    // Cualquiera concluiría que se perdieron los datos.
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgPuntoControl)
+
+    // Positiva primero: la lista trae datos antes de filtrar.
+    expect(await screen.findByText(/Puerta Norte/)).toBeInTheDocument()
+
+    await usuario.type(screen.getByPlaceholderText(/Buscar/i), 'zzzzz-no-existe')
+
+    await waitFor(() => expect(screen.getByText(/Sin resultados/i)).toBeInTheDocument())
+    expect(screen.queryByText(/No hay puntos de control registrados/i)).not.toBeInTheDocument()
+    // Y se puede salir del callejón sin buscar el desplegable.
+    expect(screen.getByRole('button', { name: /Quitar filtros/i })).toBeInTheDocument()
+  })
+
+  it('al quitar los filtros vuelven a verse las filas', async () => {
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgPuntoControl)
+
+    await usuario.type(await screen.findByPlaceholderText(/Buscar/i), 'zzzzz-no-existe')
+    await waitFor(() => expect(screen.getByText(/Sin resultados/i)).toBeInTheDocument())
+
+    await usuario.click(screen.getByRole('button', { name: /Quitar filtros/i }))
+
+    await waitFor(() => expect(screen.getByText(/Puerta Norte/)).toBeInTheDocument())
+  })
+})
+
 describe('jornada del guardia', () => {
   it('rechaza un turno de más de 12 horas', async () => {
     const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
