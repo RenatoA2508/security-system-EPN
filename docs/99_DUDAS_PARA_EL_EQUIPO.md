@@ -424,7 +424,14 @@ Dos salidas, ambas de una sola acción en el panel de Vercel (Settings → Deplo
    accesibles para cualquiera que las tenga.
 
 Se intentó generar el token por API y el sistema de permisos lo bloqueó, con razón: es una
-modificación de la configuración de seguridad de un servicio externo.
+modificación de la configuración de seguridad de un servicio externo. También se probó asignar
+al preview un alias con nombre propio (`security-system-epn-preview.vercel.app`), por si
+`all_except_custom_domains` lo eximía: no lo hace, Vercel solo exime dominios con DNS propio. El
+alias se retiró.
+
+**Resuelto el 19/07 desactivando Vercel Authentication** desde el panel para poder ejecutar las
+diez pruebas. **Conviene volver a activarlo** cuando la ronda esté cerrada: mientras esté
+desactivado, cualquier URL de preview es accesible para quien la tenga.
 
 Mientras tanto, lo que sí quedó verificado: 97 pruebas de `@testing-library/react` y vitest,
 `scripts/pruebas_gpe_gpi_nuevas.sql` contra la base real (18 casos), y las 2 pruebas de backend
