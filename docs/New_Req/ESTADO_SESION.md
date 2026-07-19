@@ -6,14 +6,11 @@ Sustituye al documento de la ronda de ADM. La ronda GPE + GPI está cerrada y ve
 
 ## ⚠️ Dos cosas que hacer ANTES de empezar
 
-**1. Fusionar el PR de GPE + GPI.**
-[PR #3](https://github.com/cschavezv03-ops/security-system-EPN/pull/3), rama
-`feat/gpe-gpi-mejoras`. Está verde y listo; solo falta pulsar **Merge**. El merge automático
-quedó bloqueado por el sistema de permisos, que protege lo que despliega a producción.
-
-> **Importante:** las migraciones de esa ronda **ya están aplicadas** en la base. Hasta que se
-> fusione, producción corre el frontend antiguo sobre el esquema nuevo. No rompe nada —los
-> cambios fueron aditivos— pero conviene no dejarlo así.
+**1. ~~Fusionar el PR de GPE + GPI~~ — HECHO.**
+[PR #3](https://github.com/cschavezv03-ops/security-system-EPN/pull/3) fusionado el 19/07.
+`main` va por `93f0f58` y producción sirve ese build: comprobado que el bundle incluye el
+código de la ronda y ya no contiene la jerga antigua. El esquema de la base y el frontend
+vuelven a estar sincronizados.
 
 **2. Volver a proteger los previews.**
 Panel de Vercel → proyecto `security-system-epn` → **Settings → Deployment Protection** →
