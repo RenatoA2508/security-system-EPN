@@ -543,3 +543,33 @@ cambiarla afecta a pantallas de otros módulos que ya se validaron.
 
 Hoy el buscador filtra por cédula, nombres, apellidos y correo desde el primer carácter. Queda
 para la ronda del módulo que sea dueño de esas pantallas.
+
+## V29 — El guardia de demostración no puede operar: su punto está en mantenimiento
+
+Detectado al final de la ronda de PCO, al poder por fin iniciar sesión con
+`guardia.demo@epn.edu.ec` (su contraseña no es `admin1234`, ver el traspaso).
+
+La cuenta entra bien y el sistema ya muestra su nombre correctamente ("Guardia Demo"), pero
+`verificar_turno_guardia_actual()` responde **`permitido: false`** a media mañana, con el guardia
+dentro de su horario. La cadena completa:
+
+| Condición del req 34 | Estado |
+|---|---|
+| Usuario activo | ✅ |
+| Asignación ACTIVA y vigente (01–31 de julio) | ✅ |
+| Hora dentro del turno 07:00–17:00 | ✅ (comprobado a las 11:44 de Ecuador) |
+| **Punto de control en estado ACTIVO** | ❌ **"Puerta - Laboratorio de Suelos" está en MANTENIMIENTO** |
+
+**Esto no lo causó la ronda de PCO.** Ese punto estaba antes en `FALLA` y la migración §D54 lo
+pasó a `MANTENIMIENTO`, pero `esta_en_turno_guardia()` exige `estado_punto = 'ACTIVO'`: ni FALLA
+ni MANTENIMIENTO la cumplen, así que el guardia llevaba deshabilitado desde antes. Lo único que
+cambió es que ahora el motivo se lee mejor.
+
+**Qué hace falta decidir:** si "Puerta - Laboratorio de Suelos" está en mantenimiento a propósito
+—y entonces el guardia de demostración debería estar asignado a otro punto, porque hoy no sirve
+para probar nada de la Garita— o si ese estado es residuo de un dato de prueba y el punto debería
+volver a ACTIVO. **No se ha tocado el dato**: cambiar el estado de un punto de control habilita
+accesos físicos de verdad, y eso no es una decisión que deba tomarse de paso.
+
+La segunda asignación de esa cuenta (turno `MATUTINO`, sin horas) está FINALIZADA y tampoco
+habilita; es la fila cuyo turno en texto libre no se pudo migrar (§D57).

@@ -17,11 +17,13 @@ Panel de Vercel → proyecto `security-system-epn` → **Settings → Deployment
 **Vercel Authentication** → **Enabled**. Sigue desactivado desde el 19/07 para que TestSprite
 pueda entrar; mientras siga así, cualquier URL de preview es accesible para quien la tenga.
 
-**3. Arreglar la contraseña de `guardia.demo@epn.edu.ec`.**
-Descubierto en esta ronda: esa cuenta está `ACTIVO`, sin bloqueos y con `intentos_fallidos = 0`,
-pero **`admin1234` no es su contraseña** — el login devuelve `invalid_credentials`. Cualquier
-plan de TestSprite que quiera probar la Garita fallará en el primer paso. Hay que resetearla
-desde el panel de Supabase Auth.
+**3. La cuenta `guardia.demo@epn.edu.ec` NO usa `admin1234`.**
+Tiene una contraseña propia, que **no se escribe aquí a propósito**: este documento está en un
+repositorio. Pídesela a Sebastián o resetéala desde el panel de Supabase Auth. Verificada el
+19/07: la cuenta entra bien con ella.
+
+Ojo al montar pruebas de la Garita con esa cuenta: aunque el login funcione, **hoy no puede
+operar** — ver §V29.
 
 ---
 
