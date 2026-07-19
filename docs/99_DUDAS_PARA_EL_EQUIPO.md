@@ -591,3 +591,111 @@ En la práctica hoy no afecta a nadie: ningún guardia tiene un turno nocturno c
 Pero si la EPN empieza a usar turnos rotativos con nocturnos, **hay que modelar el día laboral**
 —con fecha y hora de entrada y salida, no solo horas sueltas— para que el descanso se pueda
 calcular bien. Está señalado en el propio código.
+
+---
+
+# Ronda de CAC — §V31 a §V35
+
+## V31 — Dos vehículos sembrados no tienen propietario
+
+RF-CA-018 dice que *"un vehículo no podrá permanecer sin propietario asociado"*. Dos de los cinco
+vehículos sembrados lo incumplen:
+
+| Placa | Situación |
+|---|---|
+| `PDF7777` (Mazda 3) | Sin ninguna persona asociada |
+| `PDF1234` (Hyundai Tucson) | Tiene conductor autorizado, pero ningún PROPIETARIO |
+
+**No se ha inventado un propietario**: no hay forma de saber de quién es cada coche. Quedan
+expuestos en `vista_vehiculo_sin_propietario` para que ADM o GPI los corrija desde la pantalla de
+vehículos.
+
+Sí se añadió el índice único que impide **dos** propietarios activos sobre el mismo vehículo, que
+era la otra mitad de RF-CA-018 y tampoco estaba.
+
+**Decisión consciente:** que falte el propietario **no bloquea el ingreso**. Lo que decide un
+acceso es que la persona esté asociada al vehículo (RF-CA-015); que el vehículo tenga propietario
+es integridad del maestro. Denegarle el paso a un conductor legítimo porque a su coche le falta
+el papeleo sería castigarle por un hueco administrativo que no le corresponde. Si el equipo
+prefiere que sí bloquee, es un cambio de una línea en la Edge Function.
+
+## V32 — Los umbrales biométricos se calibraron con solo tres rostros
+
+§D67 sube el umbral a 0.45 apoyándose en que las personas distintas del banco se separan a partir
+de 0.691 de distancia L2. **Son tres personas**: nueve pares posibles, tres reales.
+
+Ese suelo puede bajar con un banco mayor — cuantas más caras, más probable es encontrar dos que
+se parezcan. **Hay que volver a medir cuando haya 15 o 20 rostros enrolados**, con la consulta que
+está documentada en la migración `20260719204251`. Si el mínimo baja de 0.60, el umbral de 0.45
+se queda corto y hay que subirlo.
+
+También convendría medir lo contrario, que ahora mismo no se puede: la distancia entre **dos
+capturas de la misma persona** en condiciones distintas (con y sin gafas, de día y de noche). Eso
+es lo que fija el techo, y sin ese dato el 0.45 es una estimación prudente, no una medida.
+
+## V33 — El lector de placas en la nube depende de un servicio de terceros
+
+`reconocer-placa` usa Plate Recognizer cuando existe `PLATE_RECOGNIZER_TOKEN`. Sin token cae al
+lector local (Tesseract), que funciona pero acierta bastante menos con placas reales.
+
+Para un prototipo académico es razonable. Para producción hay que decidir: pagar el plan del
+proveedor, montar un modelo propio, o asumir que el guardia teclee la placa cuando el lector
+local falle. **La arquitectura ya contempla las tres**: el motor está aislado tras una sola
+función y el camino manual está siempre disponible.
+
+El plan gratuito son 2500 lecturas al mes. Una garita con tráfico real las agota en días.
+
+## V34 — Las reglas nuevas de categoría se sembraron con horarios inventados
+
+§D62 destapó que DOCENTE, ADMINISTRATIVO, EMPRESA_SERVICIO, CONDUCTOR y PROVEEDOR no tenían
+ninguna regla de acceso activa. Se sembraron cinco reglas para que esas personas puedan entrar,
+con horarios **plausibles pero no acordados con nadie**:
+
+| Categoría | Horario | Memorando |
+|---|---|---|
+| Docente | 05:30 – 23:00 | No |
+| Administrativo | 06:00 – 20:00 | No |
+| Empresa de servicio | 06:00 – 18:00 | No |
+| Conductor externo | 06:00 – 20:00 | Sí |
+| Proveedor | 08:00 – 17:00 | Sí |
+
+**Que el equipo los revise.** Son los horarios en los que de verdad se decide quién entra al
+campus, y ahora mismo salen de una estimación razonable, no de una política. Se cambian desde
+CAC → Reglas de acceso sin tocar código.
+
+## V35 — El texto libre `turno` y el catálogo de alertas siguen creciendo
+
+`alerta_seguridad.tipo_alerta` ha pasado de 9 a 14 valores en esta ronda. Cada motivo de
+denegación nuevo necesita su tipo, porque el trigger deriva uno del otro por el prefijo del
+motivo. Funciona, pero es un acoplamiento por convención de cadena: si alguien escribe un motivo
+sin prefijo canónico, la alerta cae silenciosamente en `PERSONA_NO_AUTORIZADA`.
+
+No se ha cambiado porque rehacerlo implica tocar el trigger, la Edge Function y los datos
+históricos a la vez. Si el catálogo sigue creciendo, conviene pasar el código de motivo a una
+**columna propia** de `evento_acceso` en vez de deducirlo del texto.
+
+## V36 — La cuenta de CAC muestra el nombre de otra persona
+
+Lo encontró TestSprite, no las pruebas locales: el agente inició sesión con
+`carlos.chavez03@epn.edu.ec`, vio "Sebastián Chávez" en el encabezado y lo declaró un fallo de
+inicio de sesión. No lo es — el rol y el módulo son los correctos — pero el dato sí está mal:
+
+| Cuenta | Persona vinculada | Cédula |
+|---|---|---|
+| `carlos.chavez03@epn.edu.ec` | **Sebastián Chávez** | 1750000141 |
+
+La persona 1750000141 se llama "Sebastián Chávez" y tiene como correo `carlos.chavez03@epn.edu.ec`.
+Una de las dos cosas está mal: o esa persona debería llamarse Carlos Chávez, o la cuenta debería
+apuntar a otra persona.
+
+**No se ha tocado.** Cambiar el nombre de una persona real, o reasignar a quién pertenece una
+cuenta con rol de Responsable de Control de Accesos, no es una corrección que deba hacerse de
+paso: son dos personas distintas del equipo y solo ellas saben cuál es la buena.
+
+Mientras tanto, los planes de TestSprite de CAC afirman el **rol**, no el nombre, y llevan una
+nota explicando la discrepancia para que el agente no la interprete como un fallo de login.
+
+**Comprobado: es el único caso.** Las otras siete cuentas del sistema tienen el nombre de la
+persona y el correo de la cuenta en correspondencia (`admin`, `frank.jumbo`, `gary.defas`,
+`guardia.demo`, `heidy.tenelema`, `joel.velastegui`, `lenin.amangandi`). Así que se arregla
+cambiando un solo dato, en cuanto el equipo diga cuál de los dos es el bueno.

@@ -1,0 +1,20 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Garita — el ingreso vehicular es un flujo aparte con lectura de placa",
+  "planSteps": [
+    { "type": "action", "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente guardia.demo@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con la vista operativa de la Garita. Después pulsar 'Ingresar al sistema'." },
+    { "type": "assertion", "description": "La sesión iniciada corresponde a guardia.demo@epn.edu.ec y se muestra la pantalla 'Garita' con el punto asignado 'Garita Principal (demo)'" },
+    { "type": "assertion", "description": "La pantalla muestra dos pestañas: 'Ingreso peatonal' e 'Ingreso vehicular', y la pestaña 'Ingreso peatonal' está seleccionada" },
+    { "type": "assertion", "description": "Estando en 'Ingreso peatonal' se ve el apartado 'Buscar por cédula (externo)' y el apartado 'Identificar por rostro (interno)'" },
+    { "type": "assertion", "description": "Estando en 'Ingreso peatonal' NO se ve ningún apartado llamado 'Placa del vehículo'" },
+    { "type": "action", "description": "Pulsar la pestaña 'Ingreso vehicular'." },
+    { "type": "assertion", "description": "Se muestra el apartado '1. Placa del vehículo' y el apartado '2. Conductor y pasajeros'" },
+    { "type": "assertion", "description": "El apartado de la placa ofrece un campo de texto para escribir la placa a mano, con el texto de ayuda 'O escriba la placa directamente'" },
+    { "type": "action", "description": "En el campo para escribir la placa directamente, escribir PDF1234 y confirmar con el botón que hay junto al campo." },
+    { "type": "assertion", "description": "Se muestra la placa identificada PDF-1234 junto con el estado del vehículo, y aparece la lista 'Personas asociadas a este vehículo'" },
+    { "type": "action", "description": "Escribir la cédula 1750000208 en el campo 'Cédula del pasajero' y pulsar Enter." },
+    { "type": "assertion", "description": "El ocupante 'Jumbo Frank' aparece en la lista de ocupantes con una casilla llamada 'Conduce el vehículo'" },
+    { "type": "assertion", "description": "Como el ocupante se identificó por cédula y no por rostro, se muestra un aviso que indica que el conductor necesita reconocimiento facial además de la placa" }
+  ]
+}

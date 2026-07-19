@@ -1,0 +1,43 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "CAC — la regla nace activa y se puede reactivar",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "El inicio de sesión fue correcto: el encabezado de la cuenta muestra el rol 'Responsable de Control de Accesos' y el Panel Principal muestra el módulo 'Control de Accesos'. NOTA: el nombre que aparece en el encabezado es 'Sebastián Chávez', porque la cuenta carlos.chavez03@epn.edu.ec está vinculada a esa persona en los datos de prueba. Eso es esperado y NO debe considerarse un fallo del inicio de sesión."
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos', entrar en 'Reglas de acceso' y pulsar el botón para registrar una regla nueva."
+    },
+    {
+      "type": "assertion",
+      "description": "El formulario de alta está abierto y muestra los campos 'Nombre de la regla', 'Categoría', 'Horario inicio' y 'Horario fin'"
+    },
+    {
+      "type": "assertion",
+      "description": "En este formulario de alta NO existe ningún campo ni desplegable llamado 'Estado'"
+    },
+    {
+      "type": "assertion",
+      "description": "El campo 'Descripción' está presente y marcado como obligatorio"
+    },
+    {
+      "type": "action",
+      "description": "Cerrar el formulario sin guardar. En el listado, usar el filtro o la búsqueda para localizar una regla cuyo estado sea 'Inactiva' y abrir su ficha."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha de la regla inactiva muestra un botón llamado 'Reactivar regla'"
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha de esa regla inactiva NO muestra el botón 'Inactivar regla'"
+    }
+  ]
+}

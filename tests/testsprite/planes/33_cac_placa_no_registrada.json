@@ -1,0 +1,15 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Garita — una placa que no existe se avisa con claridad",
+  "planSteps": [
+    { "type": "action", "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente guardia.demo@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con la vista operativa de la Garita. Después pulsar 'Ingresar al sistema'." },
+    { "type": "assertion", "description": "La sesión iniciada corresponde a guardia.demo@epn.edu.ec y se muestra la pantalla 'Garita'" },
+    { "type": "action", "description": "Pulsar la pestaña 'Ingreso vehicular'." },
+    { "type": "assertion", "description": "Se muestra el apartado '1. Placa del vehículo'" },
+    { "type": "action", "description": "En el campo para escribir la placa directamente, escribir PBX7412 y confirmar con el botón que hay junto al campo." },
+    { "type": "assertion", "description": "Se muestra un mensaje que indica que la placa PBX-7412 no corresponde a ningún vehículo registrado" },
+    { "type": "action", "description": "Descartar esa lectura y escribir en el mismo campo la placa PDFI234 (con la letra I mayúscula en lugar del número 1), y confirmar." },
+    { "type": "assertion", "description": "El sistema corrige la lectura y muestra la placa PDF-1234, junto con un aviso de que la lectura no fue exacta y debe comprobarse antes de continuar" }
+  ]
+}

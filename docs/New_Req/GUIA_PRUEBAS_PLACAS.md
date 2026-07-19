@@ -1,0 +1,163 @@
+# Cómo probar el reconocimiento de placas y de rostro
+
+Guía para la prueba manual con **placas reales de Ecuador** delante de la cámara. Es la parte
+que ninguna prueba automática puede cubrir: TestSprite no puede acercar una matrícula a un
+objetivo, y el navegador de las pruebas no tiene cámara.
+
+---
+
+## Antes de empezar: tres cosas de cinco minutos
+
+### 1. La placa tiene que existir en la base de datos
+
+Es el motivo número uno por el que la prueba "falla" sin que nada esté roto: el lector acierta,
+la placa se lee perfecta, y el sistema responde *"no corresponde a ningún vehículo registrado"*
+— porque efectivamente no está.
+
+Las placas sembradas hoy son ficticias: `PDF1234`, `ECU593`, `PDF7777`, `PGF593`, `PCI514`.
+
+**Para registrar la tuya**, entra con `admin@epn.edu.ec` (o `lenin.amangandi@epn.edu.ec` para
+un vehículo de personal interno) → **Vehículos** → Registrar. Necesitas placa, tipo y, desde la
+propia ficha del vehículo, **asociar a una persona**. Sin esa asociación la placa se identifica
+pero el ingreso se deniega con `PLACA_NO_RECONOCIDA`, que es el comportamiento correcto de
+RF-CA-015: la placa tiene que corresponder a quien la conduce.
+
+Si vas a probar la **doble autenticación** (RF-CA-016), asocia el vehículo a una persona que
+además tenga el **rostro enrolado**.
+
+### 2. Enrolar tu rostro
+
+Hoy solo hay tres rostros enrolados —Frank Jumbo, Cecilia Jaramillo y Alexander Guerra— y
+**ninguno tiene vehículo con propietario**. Para probar el flujo completo necesitas enrolarte:
+
+`lenin.amangandi@epn.edu.ec` → **Personal Interno** → **Biometría** → registrar el rostro de la
+persona que vaya a conducir.
+
+### 3. El token del lector en la nube (opcional)
+
+Sin token, el sistema **funciona igual**: lee la placa con Tesseract en el propio navegador. Con
+token, acierta bastante más, porque un lector de matrículas localiza la placa dentro de la foto
+antes de leerla en vez de hacer OCR sobre la imagen entera.
+
+Para activarlo: registro gratuito en `platerecognizer.com` (2500 lecturas/mes), y el token va
+como variable de entorno **`PLATE_RECOGNIZER_TOKEN`** en el proyecto de Supabase
+(*Edge Functions → Secrets*). No hace falta desplegar nada más: la función lo lee en caliente.
+
+> El token vive en el servidor, nunca en el bundle del navegador. Una clave de API en el
+> frontend es una clave pública.
+
+---
+
+## Cómo se usa
+
+Entra con **`guardia.demo@epn.edu.ec` / `admin1234`** (asignado a "Garita Principal (demo)",
+turno 06:00–18:00 — fuera de esa franja el sistema no deja registrar nada, y es correcto).
+
+Pestaña **Ingreso vehicular**:
+
+1. **Activar cámara.** En un móvil abre la trasera; en un portátil, la que haya.
+2. **Encuadrar la placa dentro del marco verde.** El marco no es decoración: marca exactamente
+   la región que se recorta para leer. Todo lo que quede fuera (capó, calle, otros coches) es
+   ruido que solo empeora la lectura.
+3. **Capturar placa.**
+4. **Añadir al conductor** (por rostro) y a los pasajeros (por rostro o cédula).
+5. **Registrar ingreso.**
+
+### Si la lectura falla
+
+Tres salidas, en orden de preferencia:
+
+- **Repetir la captura** más cerca y con mejor luz.
+- **Subir una foto** con el botón de la imagen, junto a "Capturar placa". Sirve también para
+  probar sin vehículo delante.
+- **Escribir la placa a mano** en el campo de abajo. Siempre está disponible a propósito: si la
+  placa está sucia, doblada o a contraluz, el guardia la lee con sus ojos. Un sistema de garita
+  que solo funciona cuando el OCR acierta deja al guardia sin salida justo cuando más falta le
+  hace.
+
+### Qué esperar de cada motor
+
+| | Lector en la nube | Lector local (Tesseract) |
+|---|---|---|
+| Placa limpia, buena luz, de frente | Casi siempre bien | Suele acertar |
+| Ángulo, sombra o placa sucia | Aguanta bastante | Falla a menudo |
+| Distancia > 3 m | Aguanta | Casi nunca lee |
+| Necesita internet | Sí | No |
+
+En los dos casos, **una lectura con erratas se corrige antes de rendirse**: ver más abajo.
+
+---
+
+## Qué comprobar (y qué debería pasar)
+
+### El corrector de erratas
+
+Prueba a escribir a mano estas placas, que simulan lo que devuelve un OCR sucio:
+
+| Escribe | Debería resolver a | Por qué |
+|---|---|---|
+| `PDFI234` | PDF-1234 | La `I` está en zona de dígitos: es un `1` |
+| `PDF1Z34` | PDF-1234 | La `Z` está en zona de dígitos: es un `2` |
+| `P0F1234` | PDF-1234 | El `0` está en zona de letras: es una `O`, y de ahí a `D` por tolerancia |
+| `PCI5I4` | PCI-514 | Igual que el primero |
+| `PBX7412` | **No registrada** | Placa con formato válido que no existe en la base |
+
+En los casos corregidos, la pantalla avisa de que **la lectura no fue exacta** y pide comprobar
+la placa antes de continuar. El sistema propone; tú confirmas.
+
+### Los umbrales del rostro
+
+| Confianza | Qué debe pasar |
+|---|---|
+| ≥ 0.45 | Se autoriza sin más |
+| 0.35 – 0.45 | Pide confirmación visual del guardia |
+| < 0.35 | **Persona desconocida**, con botón para registrar el intento |
+
+La confianza se muestra en pantalla junto al nombre. Si al ponerte tú delante sale por debajo de
+0.45 de forma consistente, no subas la exposición: **vuelve a enrolar el rostro** con la misma
+cámara y luz con la que vas a usarlo. Un enrolamiento hecho con otra cámara arrastra un sesgo
+que ningún umbral arregla.
+
+Si quieres ver el otro extremo, ponte delante de la cámara **con otra persona ya enrolada** y
+comprueba que **no** te reconoce como ella. Es la prueba que justifica haber subido el umbral:
+con el valor anterior (0.38) el margen contra el impostor más parecido del banco era de 0.07.
+
+### La doble autenticación (RNF-CA-005)
+
+1. Añade al conductor **solo por cédula** y marca "Conduce el vehículo".
+   → La pantalla avisa de que le falta el rostro, y al registrar sale
+   **"Falta la segunda verificación del conductor"**.
+2. Ahora añádelo **por rostro**.
+   → Se autoriza.
+
+Es el caso que impide entrar con la placa de otro simplemente conduciendo su coche.
+
+### Los pasajeros (RF-CA-017)
+
+Añade dos o tres ocupantes y registra el ingreso. **Cada uno recibe su propio veredicto**: uno
+puede pasar y otro no, y los dos resultados se muestran por separado con el nombre delante.
+
+### Lo que queda registrado
+
+Todo lo anterior deja rastro. Con `carlos.chavez03@epn.edu.ec`:
+
+- **Historial de accesos** → el evento, con tipo de acceso, placa leída, confianza y el motivo
+  del rechazo en castellano.
+- **Alertas de seguridad** → la alerta correspondiente. Persona desconocida y placa no
+  reconocida entran como riesgo **ALTO**; fuera de horario, como **BAJO** (nadie ha hecho nada
+  malo, llega tarde).
+- **Errores de reconocimiento** → si la cámara no abrió o no se distinguió ninguna placa. Este
+  registro es el que permite saber que una garita lleva días con la cámara estropeada, en vez de
+  que el fallo desaparezca al recargar la página.
+
+---
+
+## Si algo no funciona
+
+| Síntoma | Causa habitual |
+|---|---|
+| "No se pudo abrir la cámara" | `getUserMedia` exige **https o localhost**. En el preview de Vercel va; en una IP local, no. |
+| El botón de registrar está gris | Fuera del turno del guardia (06:00–18:00) o sin ocupantes añadidos. |
+| "No hay ninguna regla de acceso para su categoría" | La categoría de esa persona no tiene regla activa. Se ve en CAC → Reglas de acceso. |
+| Todo se deniega por horario | Comprueba la hora **de Ecuador**, no la del servidor: el sistema usa `America/Guayaquil`. |
+| La placa se lee bien pero "no corresponde a esta persona" | El vehículo existe pero esa persona no está asociada a él. Es RF-CA-015 funcionando. |

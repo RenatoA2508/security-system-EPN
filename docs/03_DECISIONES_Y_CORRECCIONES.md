@@ -929,3 +929,138 @@ salir del callejón desde donde se ve el problema, sin tener que buscar el despl
 causó. "No hay X registrados" queda reservado para cuando de verdad no hay ninguno.
 
 Es un cambio del motor genérico, así que vale para todas las pantallas del sistema, no solo PCO.
+
+---
+
+# Ronda de CAC (Control de Accesos) — §D62 a §D69
+
+## §D62 — La cadena de validación se separa en pasos con motivo propio
+
+**Conflicto:** `evaluarReglaAcceso` resolvía categoría, garita y horario en una sola consulta a
+PostgREST. Cuando no encontraba ninguna regla, no había forma de saber cuál de las tres
+condiciones había fallado, y la función devolvía siempre `FUERA_DE_HORARIO`. RNF-CA-004 pide
+justo lo contrario: *"el motivo correspondiente sin utilizar mensajes ambiguos o genéricos"*.
+
+**Decisión:** tres pasos separados, en el orden que fija RF-CA-019, con cortocircuito:
+
+1. ¿Existe alguna regla ACTIVA para la categoría? → `SIN_REGLA_ACCESO` (RF-CA-005)
+2. ¿Alguna de ellas autoriza esta garita? → `GARITA_NO_AUTORIZADA` (RF-CA-007)
+3. ¿Alguna está vigente a esta hora? → `FUERA_DE_HORARIO` (RF-CA-006)
+
+**Lo que ese fallo escondía:** seis docentes y seis administrativos no tenían **ninguna regla de
+acceso activa** y por tanto no podían entrar al campus. Con el mensaje antiguo, el síntoma era
+"fuera de horario" a cualquier hora del día, y se leía como un problema de horarios. Las reglas
+que faltaban se sembraron en `20260719223310`, y la vista `vista_categoria_sin_regla` deja el
+hueco a la vista de CAC antes de que alguien se quede fuera de la garita.
+
+## §D63 — `requiere_memorando` deja de ser decorativo
+
+**Conflicto:** RF-CA-001 lo dice con todas las letras: *"si es que requiere memorando hay que
+validar que realmente esté ligado a un memorando, no tiene que ser un campo de decoración"*.
+La validación solo comprobaba el memorando en la rama de personas **externas**. Una regla que
+declaraba exigir memorando dejaba pasar a cualquier persona interna sin mirar si lo tenía.
+
+**Decisión:** la comprobación depende de la REGLA, no del ámbito de la persona. Y se distingue
+"no tiene ninguno" de "lo tiene vencido" (RF-CA-009 frente a RF-CA-010), porque son dos
+problemas con dos soluciones distintas: al primero hay que tramitarle un memorando, al segundo
+renovárselo. Decirle "memorando vencido" a quien nunca tuvo uno manda al guardia y a la persona
+a buscar un papel que no existe.
+
+## §D64 — El estado de la persona se comprueba en los dos ámbitos
+
+RF-CA-008 no distingue interno de externo: *"únicamente los usuarios con estado Activo podrán
+continuar"*. La validación solo miraba `persona.estado` en la rama interna, así que **una
+persona externa bloqueada entraba** si su memorando seguía vigente. Ahora es el primer paso de
+la cadena, antes de mirar reglas.
+
+## §D65 — Una regla de acceso puede aplicar en varias garitas
+
+**Conflicto:** RF-CA-002 y RF-CA-007 hablan de "garitas" en plural, pero `regla_acceso` tenía
+una sola FK a `punto_control`. Autorizar a los docentes por las tres garitas del campus obligaba
+a crear tres reglas iguales y a mantenerlas sincronizadas a mano.
+
+**Decisión:** tabla N:M `regla_acceso_punto_control` y se retira la columna. La semántica de
+"sin filas" se conserva exactamente igual que la de la columna a NULL:
+
+> **Sin ninguna garita asociada, la regla aplica en TODAS.**
+
+Es la parte que hay que tener presente al leer la pantalla: cero filas no es "esta regla no vale
+en ninguna parte", es lo contrario. Por eso el listado dice "Todas las garitas" y no un guion.
+
+## §D66 — Persona desconocida es un evento, no un error de pantalla
+
+**Conflicto:** RF-CA-021 exige registrar el intento cuando el rostro no coincide con nadie. Era
+**imposible**: `evento_acceso.id_persona` era NOT NULL, y la Edge Function devolvía 404 sin
+escribir nada. El caso que más interesa registrar era el único que no se registraba; en la
+garita se veía como un texto rojo que desaparecía al recargar la página.
+
+**Decisión:** `id_persona` pasa a nullable, con un CHECK que ata ese hueco a su único caso
+legítimo (`resultado = DENEGADO` y motivo `PERSONA_DESCONOCIDA%`). En las pantallas, un evento
+sin persona se lee **"Persona desconocida"**, nunca "—": pintarlo como un dato que falta lo
+convierte en una fila que nadie mira.
+
+## §D67 — Dos umbrales biométricos en vez de uno, calibrados con caras reales
+
+**Conflicto:** el umbral era 0.38 de confianza (= 0.62 de distancia L2). Medido sobre el banco
+real, las personas **distintas** se separan a partir de **0.691**:
+
+| Par | Distancia L2 |
+|---|---|
+| Guerra ↔ Jumbo | 0.6910 |
+| Guerra ↔ Jaramillo | 0.6949 |
+| Jumbo ↔ Jaramillo | 0.7423 |
+
+Es decir: **0.071 de margen** entre el umbral y el impostor más parecido del banco. Un cambio de
+luz o de ángulo mueve un descriptor bastante más que eso. El sistema estaba a un mal reflejo de
+autorizar a la persona equivocada, y un umbral "de manual" (el 0.6 clásico de dlib) no lo revela
+hasta que se prueba con caras de verdad.
+
+**Decisión:** dos umbrales, que es lo que hace un control de acceso real:
+
+| Confianza | Qué ocurre |
+|---|---|
+| ≥ 0.45 (`UMBRAL_BIOMETRIA`) | Se autoriza sin intervención |
+| 0.35 – 0.45 (`UMBRAL_BIOMETRIA_REVISION`) | El guardia confirma visualmente |
+| < 0.35 | `PERSONA_DESCONOCIDA` (RF-CA-021) |
+
+Margen contra el impostor más cercano: **0.141**, el doble que antes. Y el impostor más parecido
+(0.309) ni siquiera llega a la banda de revisión.
+
+**Por qué no se sube más:** por encima de 0.50 empiezan a caerse capturas legítimas con
+mascarilla, gafas o contraluz. Un guardia al que el rostro le falla tres de cada diez veces deja
+de usarlo y teclea la cédula, y un umbral que nadie usa no protege nada.
+
+**Recalibrar cuando haya más rostros enrolados.** Tres personas son pocas para fijar el suelo de
+"personas distintas"; el número puede bajar con un banco mayor.
+
+## §D68 — El OCR de placas se corrige por posición antes de por parecido
+
+**Conflicto:** un OCR sobre una placa metálica no falla al azar: confunde siempre los mismos
+caracteres (O/0, I/1, S/5, B/8, Z/2, G/6). Una comparación exacta rechaza `PDF1Z34` cuando la
+placa es `PDF1234`, y el guardia acaba tecleándolo todo a mano.
+
+**Decisión:** dos correcciones, en este orden, y la segunda es deliberadamente cobarde.
+
+1. **Posicional** (`corregir_placa_ocr`, espejo en `web/src/lib/placas.ts`). La placa ecuatoriana
+   tiene forma fija: tres letras y luego tres o cuatro dígitos. Un dígito leído en las tres
+   primeras posiciones es necesariamente un error, y una letra en la parte numérica también. Se
+   corrige por posición, sin mirar la base de datos. **No puede convertir una placa en otra placa
+   válida distinta**, porque solo toca caracteres que estaban en la clase equivocada.
+2. **Tolerancia difusa** (`identificar_placa`, `levenshtein` ≤ `TOLERANCIA_PLACA_CARACTERES`).
+   Aquí sí se puede confundir un vehículo con otro, así que **solo se aplica cuando UNA sola
+   placa registrada queda a esa distancia**. Con dos candidatas la función devuelve
+   `ambigua = true` y no elige ninguna. Escoger "la más parecida" entre dos sería autorizar un
+   vehículo por parecido, que es exactamente lo que RF-CA-015 prohíbe.
+
+Cualquier lectura que haya hecho falta corregir se le enseña al guardia antes de usarla: el
+sistema propone, la persona confirma.
+
+## §D69 — Un horario de regla puede cruzar la medianoche
+
+`regla_acceso` nunca exigió `fin > inicio`, a propósito: el turno nocturno es legítimo. Pero la
+validación comparaba `inicio <= hora <= fin` en la propia consulta, así que **una regla nocturna
+no casaba nunca**: a las 23:00 fallaba `hora <= 06:00` y a las 02:00 fallaba `22:00 <= hora`.
+
+Es el mismo error que ya apareció en los turnos del guardia (§D59). La comparación se parte en
+dos tramos cuando `fin < inicio`. En el formulario, teclear un horario que cruza la medianoche
+muestra un **aviso** (no bloquea): es válido, pero se teclea por error con demasiada facilidad.
