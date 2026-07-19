@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ResourceConfig } from './types'
 import { CAT, humanizar } from '../lib/catalogos'
-import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp } from '../lib/format'
+import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp, estaEnTurno, duracionTurnoMin } from '../lib/format'
 import {
   diasDeVigencia, estadoAutorizacionEfectivo, estadoMemorandoEfectivo, vigenteHastaTexto,
 } from '../lib/vigencia'
@@ -10,8 +10,8 @@ import { AsociacionesVehiculo } from '../components/AsociacionesVehiculo'
 import { AnularMemorando } from '../components/AnularMemorando'
 import {
   opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas,
-  opcionesTabla, optZonasPorTipo, optPuntosPorZona, optGuardiasDisponibles,
-  optPersonasExternasConEmpresa, optMemorandosVigentes,
+  opcionesTabla, optZonasPorTipo, optZonasPadrePara, optPuntosPorZona, optGuardiasDisponibles,
+  optPersonasExternasConEmpresa, optMemorandosVigentes, humanizarNombreCuenta,
 } from './opciones'
 import { supabase } from '../lib/supabase'
 import { hoyISO } from '../lib/format'
@@ -325,6 +325,64 @@ export function cfgVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfig {
    PCO — infraestructura física
    ========================================================================= */
 
+/** Nombre legible del guardia de una asignación.
+ *
+ *  Prefiere el nombre de la persona; si RLS no lo deja ver, cae al nombre de la cuenta
+ *  humanizado ("guardia_demo" → "Guardia Demo") antes que al correo, y solo en último caso al
+ *  correo. Nunca se muestra un identificador crudo (feedback PCO). */
+function nombreGuardia(r: Record<string, any>): string {
+  const p = r.guardia?.persona
+  if (p?.nombres || p?.apellidos) return `${p.nombres ?? ''} ${p.apellidos ?? ''}`.trim()
+  if (r.guardia?.nombre_usuario) return humanizarNombreCuenta(r.guardia.nombre_usuario)
+  return r.guardia?.correo_electronico ?? '—'
+}
+
+/** El turno y, si la asignación está vigente, si el guardia está en él ahora mismo.
+ *
+ *  PCO pidió que los guardias solo puedan operar durante su turno; la regla ya existía en la
+ *  base (`esta_en_turno_guardia`, req 34) pero desde la pantalla de asignaciones no había forma
+ *  de ver a quién le toca ahora. El cálculo usa la hora de Ecuador, no la del navegador. */
+function TurnoConEstado({ fila }: { fila: Record<string, any> }) {
+  const dentro = estaEnTurno(fila.hora_inicio, fila.hora_fin)
+  const texto = fila.turno ? String(fila.turno) : '—'
+  if (dentro === null || fila.estado_asignacion !== 'ACTIVA') return <>{texto}</>
+  return (
+    <span className="inline-flex items-center gap-2">
+      {texto}
+      <span className={dentro ? 'text-[11px] font-medium text-emerald-700' : 'text-[11px] text-ink-soft'}>
+        {dentro ? 'En turno ahora' : 'Fuera de turno'}
+      </span>
+    </span>
+  )
+}
+
+/* Jornada del guardia. En la base viven en `parametro_sistema`
+   (JORNADA_MAXIMA_GUARDIA_HORAS y el descanso), porque son política laboral y pueden cambiar;
+   aquí se repiten como constantes solo para adelantar el aviso en el formulario.
+   Código del Trabajo del Ecuador: 8 h ordinarias (art. 47), hasta 12 con extras (art. 55). */
+const JORNADA_ORDINARIA_MIN = 8 * 60
+const JORNADA_MAXIMA_MIN = 12 * 60
+
+/** El punto de la asignación y, si no está operativo, por qué ese guardia no puede trabajar.
+ *
+ *  Caso real detectado en esta ronda (§V29): la asignación de "Guardia Demo" se veía impecable
+ *  —vigente, en horario— pero el guardia no podía operar, porque `esta_en_turno_guardia()` exige
+ *  que el punto esté ACTIVO y el suyo estaba en mantenimiento. Nada en pantalla lo decía, así que
+ *  desde PCO no había forma de saber que había que reasignarlo a otro punto. */
+function PuntoConAviso({ fila }: { fila: Record<string, any> }) {
+  const nombre = fila.punto?.nombre_punto ?? '—'
+  const operativo = fila.punto?.estado_punto === 'ACTIVO'
+  if (operativo || fila.estado_asignacion !== 'ACTIVA') return <>{nombre}</>
+  return (
+    <span className="inline-flex flex-col">
+      {nombre}
+      <span className="text-[11px] text-amber-700">
+        {humanizar(fila.punto?.estado_punto)}: el guardia no puede operar aquí
+      </span>
+    </span>
+  )
+}
+
 export const cfgZona: ResourceConfig = {
   tabla: 'zona',
   titulo: 'Zonas',
@@ -353,12 +411,22 @@ export const cfgZona: ResourceConfig = {
   campos: [
     { name: 'nombre_zona', label: 'Nombre', required: true, colSpan: 2, validar: validarNoVacio },
     { name: 'tipo_zona', label: 'Tipo', type: 'select', required: true, options: opcionesCatalogo(CAT.zona_tipo), alCambiarLimpiar: ['id_zona_padre'] },
-    // Solo tiene sentido una jerarquía dentro de un parqueadero o un edificio (feedback PCO #2).
-    { name: 'id_zona_padre', label: 'Zona padre', type: 'select', options: optZonas, visibleSi: (v) => v.tipo_zona === 'PARQUEADERO' || v.tipo_zona === 'EDIFICIO' },
-    { name: 'estado_zona', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.zona_estado), default: 'ACTIVA' },
+    // Jerarquía CAMPUS -> EDIFICIO -> PARQUEADERO (feedback PCO): el combo ofrecía todas las
+    // zonas, así que un parqueadero podía colgar de otro parqueadero. Ahora solo se ofrece el
+    // nivel inmediatamente superior. El trigger validar_jerarquia_zona lo vuelve a comprobar.
+    {
+      name: 'id_zona_padre', label: 'Zona padre', type: 'select', required: true,
+      opcionesDependientes: (v) => optZonasPadrePara(v.tipo_zona),
+      visibleSi: (v) => v.tipo_zona === 'PARQUEADERO' || v.tipo_zona === 'EDIFICIO',
+      hint: 'Un edificio pertenece a un campus; un parqueadero, a un edificio.',
+    },
+    // Sin combo de Estado al registrar (feedback PCO): una zona nueva nace en servicio. Cambiarlo
+    // es una decisión posterior, y para eso está la ficha —con Inactivar y Reactivar—.
+    { name: 'estado_zona', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.zona_estado), default: 'ACTIVA', hideOnInsert: true },
   ],
   campoEstado: 'estado_zona',
   baja: { campoEstado: 'estado_zona', valorBaja: 'INACTIVA', etiqueta: 'Inactivar' },
+  reactivar: { valorActivo: 'ACTIVA', etiqueta: 'Reactivar' },
 }
 
 /** Siguiente nombre sugerido para un punto de control tipo CAMPUS (feedback PCO #7):
@@ -405,11 +473,36 @@ export const cfgPuntoControl: ResourceConfig = {
   ],
   campos: [
     // Cascada (feedback PCO #5): primero el tipo de zona, luego se despliegan solo esas zonas.
-    { name: '_filtro_tipo_zona', label: 'Tipo de zona', type: 'select', required: true, persistir: false, options: opcionesCatalogo(CAT.zona_tipo), alCambiarLimpiar: ['id_zona'] },
+    //
+    // `derivarDeRegistro` arregla el bug de "en la parte de Zona no aparece nada": al editar un
+    // punto de control este filtro arrancaba vacío —no es una columna de la tabla— y dejaba el
+    // combo Zona sin ninguna opción, con lo que ni siquiera se podía guardar el registro.
+    {
+      name: '_filtro_tipo_zona', label: 'Tipo de zona', type: 'select', required: true, persistir: false,
+      // "Campus" no se ofrece al registrar (feedback PCO: un punto de control está en un sitio
+      // concreto, no en toda la universidad), pero sí tiene que seguir apareciendo cuando el
+      // punto que se está editando ya cuelga del campus — las garitas de entrada, §V25. Sin esta
+      // excepción el desplegable se quedaba en "— Seleccionar —" al abrir una de esas seis filas
+      // y, al ser obligatorio, obligaba a mover el punto a otra zona para poder guardar.
+      opcionesDependientes: (v) =>
+        opcionesCatalogo(CAT.zona_tipo).filter((o) => o.value !== 'CAMPUS' || v._filtro_tipo_zona === 'CAMPUS'),
+      alCambiarLimpiar: ['id_zona'],
+      derivarDeRegistro: async (registro) => {
+        const { data } = await (supabase as any).from('zona').select('tipo_zona').eq('id_zona', registro.id_zona).maybeSingle()
+        return (data as { tipo_zona: string } | null)?.tipo_zona ?? ''
+      },
+      hint: 'Un punto de control pertenece a un edificio o a un parqueadero concreto.',
+    },
+    // Las opciones de Zona sí incluyen las de tipo campus cuando se está EDITANDO uno de los
+    // puntos que ya cuelgan del campus (las garitas de entrada a la universidad). Quitar CAMPUS
+    // del alta era lo pedido; quitarlo también de la edición habría dejado esas seis filas sin
+    // poder abrirse. Anotado en §V25 para que el equipo decida qué hacer con ellas.
     { name: 'id_zona', label: 'Zona', type: 'select', required: true, opcionesDependientes: (v) => optZonasPorTipo(v._filtro_tipo_zona) },
     // Autonumerado (feedback PCO #7): "Acceso A/B/C..." según cuántos ya existen en esa zona campus.
     { name: 'nombre_punto', label: 'Nombre', required: true, colSpan: 2, validar: validarNoVacio, autoSugerenciaDesde: { campo: 'id_zona', calcular: sugerirNombrePuntoCampus } },
-    { name: 'estado_punto', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.punto_estado), default: 'ACTIVO' },
+    // Todo punto de control nace activo (feedback PCO): no tiene sentido registrar uno que ya
+    // esté en mantenimiento. FALLA desapareció del catálogo: un lugar no falla.
+    { name: 'estado_punto', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.punto_estado), default: 'ACTIVO', hideOnInsert: true },
   ],
   campoEstado: 'estado_punto',
 }
@@ -448,9 +541,24 @@ export const cfgDispositivo: ResourceConfig = {
     // Cascada (feedback PCO #10): zona → punto de control, ya filtrada por compatibilidad
     // tecnología↔zona (LPR_PLACAS solo PARQUEADERO). El trigger validar_asignacion_dispositivo
     // en la base de datos es la garantía real; esto es solo para no ofrecer opciones inválidas.
-    { name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false, opcionesDependientes: (v) => v.tipo_tecnologia === 'LPR_PLACAS' ? optZonasPorTipo('PARQUEADERO') : optZonas(), alCambiarLimpiar: ['id_punto_control'] },
+    //
+    // `derivarDeRegistro` arregla el bug de "el campo Punto de control no tiene nada para
+    // seleccionar": al editar un dispositivo este filtro de zona arrancaba vacío y el combo de
+    // puntos se quedaba sin opciones, bloqueando el guardado.
+    {
+      name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false,
+      opcionesDependientes: (v) => v.tipo_tecnologia === 'LPR_PLACAS' ? optZonasPorTipo('PARQUEADERO') : optZonas(),
+      alCambiarLimpiar: ['id_punto_control'],
+      derivarDeRegistro: async (registro) => {
+        const { data } = await (supabase as any).from('punto_control').select('id_zona').eq('id_punto_control', registro.id_punto_control).maybeSingle()
+        return (data as { id_zona: string } | null)?.id_zona ?? ''
+      },
+    },
     { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, opcionesDependientes: (v) => optPuntosPorZona(v._filtro_zona) },
-    { name: 'estado_dispositivo', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.dispositivo_estado), default: 'OPERATIVO' },
+    // Un dispositivo nuevo se instala funcionando (feedback PCO). A diferencia del punto de
+    // control, aquí el estado SÍ se conserva en el catálogo: un lector sí puede quedarse sin red
+    // o romperse, y esa avería hay que poder registrarla desde la ficha.
+    { name: 'estado_dispositivo', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.dispositivo_estado), default: 'OPERATIVO', hideOnInsert: true },
   ],
   campoEstado: 'estado_dispositivo',
 }
@@ -460,23 +568,31 @@ export const cfgAsignacionGuardia: ResourceConfig = {
   titulo: 'Asignaciones de guardia',
   singular: 'Asignación',
   idField: 'id_asignacion',
-  select: '*, guardia:usuario_sistema!guardia_punto_control_id_usuario_fkey(nombre_usuario, correo_electronico), punto:punto_control(nombre_punto)',
+  // El embed de `persona` es lo que por fin da un nombre humano al guardia. Antes solo se
+  // traían campos de la cuenta y, además, RLS devolvía `guardia: null` a PCO sin dar error,
+  // así que la columna se veía como "—" (feedback PCO: "no aparece el nombre del guardia").
+  select: '*, guardia:usuario_sistema!guardia_punto_control_id_usuario_fkey(nombre_usuario, correo_electronico, persona:persona(nombres, apellidos, cedula)), punto:punto_control(nombre_punto, estado_punto)',
   // Solo PCO asigna (feedback CAC: "quitar asignación de guardia" — ya revocado en rol_permiso).
   // CAC conserva SELECT únicamente, para supervisión.
   permisos: { select: ['PCO_ASIGNACION_SELECT', 'CAC_ASIGNACION_SELECT'], insert: ['PCO_ASIGNACION_INSERT'], update: ['PCO_ASIGNACION_UPDATE'] },
   autoUsuarioRegistro: ['id_usuario_registro'],
   buscarEn: ['guardia.correo_electronico', 'punto.nombre_punto', 'turno'],
   columnas: [
-    { key: 'guardia', label: 'Guardia', render: (r) => r.guardia?.correo_electronico ?? '—' },
-    { key: 'punto', label: 'Punto', render: (r) => r.punto?.nombre_punto ?? '—' },
-    { key: 'turno', label: 'Turno', render: (r) => d(r.turno) },
+    { key: 'guardia', label: 'Guardia', render: (r) => nombreGuardia(r), valorExport: (r) => nombreGuardia(r) },
+    // El identificador visible de una persona es siempre la cédula (RF de PCO), nunca un código
+    // interno ni el correo.
+    { key: 'cedula', label: 'Cédula', render: (r) => r.guardia?.persona?.cedula ?? '—' },
+    { key: 'punto', label: 'Punto', render: (r) => <PuntoConAviso fila={r} />, valorExport: (r) => r.punto?.nombre_punto ?? '' },
+    { key: 'turno', label: 'Turno', render: (r) => <TurnoConEstado fila={r} /> },
     { key: 'estado_asignacion', label: 'Estado', badge: true },
   ],
-  campoTituloDetalle: (r) => r.guardia?.correo_electronico ?? 'Asignación',
+  campoTituloDetalle: (r) => nombreGuardia(r),
   campoSubtituloDetalle: (r) => <>Punto {r.punto?.nombre_punto ?? '—'} · <Badge value={r.estado_asignacion} /></>,
   detalle: [
+    { label: 'Cédula', render: (r) => r.guardia?.persona?.cedula ?? '—' },
+    { label: 'Correo', render: (r) => d(r.guardia?.correo_electronico) },
     { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? '—' },
-    { label: 'Turno', render: (r) => d(r.turno) },
+    { label: 'Turno', render: (r) => <TurnoConEstado fila={r} /> },
     { label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${r.fecha_fin ? fmtFecha(r.fecha_fin) : 'indefinida'}` },
   ],
   campos: [
@@ -484,13 +600,45 @@ export const cfgAsignacionGuardia: ResourceConfig = {
     // Módulo no debe poder ser asignado como guardia).
     { name: 'id_usuario', label: 'Guardia', type: 'select', required: true, editable: false, options: optGuardiasDisponibles },
     // Cascada (feedback PCO #13): primero la zona, luego solo sus puntos de control.
-    { name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false, options: optZonas, alCambiarLimpiar: ['id_punto_control'] },
+    {
+      name: '_filtro_zona', label: 'Zona', type: 'select', required: true, persistir: false, options: optZonas,
+      alCambiarLimpiar: ['id_punto_control'],
+      derivarDeRegistro: async (registro) => {
+        const { data } = await (supabase as any).from('punto_control').select('id_zona').eq('id_punto_control', registro.id_punto_control).maybeSingle()
+        return (data as { id_zona: string } | null)?.id_zona ?? ''
+      },
+    },
     { name: 'id_punto_control', label: 'Punto de control', type: 'select', required: true, opcionesDependientes: (v) => optPuntosPorZona(v._filtro_zona) },
-    { name: 'turno', label: 'Turno', type: 'timerange' },
+    // El turno deja de ser texto libre (§V10). Se guardaba "07:00–17:00" y también "MATUTINO",
+    // así que no se podía comparar contra un reloj; ahora son dos horas y el texto se deriva de
+    // ellas en la BD. Con esto `esta_en_turno_guardia` deja de depender de una expresión regular
+    // y se puede avisar de si el guardia está en turno ahora mismo.
+    { name: 'hora_inicio', label: 'Entrada', type: 'time', required: true, hint: 'Hora local de Ecuador.' },
+    {
+      name: 'hora_fin', label: 'Salida', type: 'time', required: true,
+      hint: 'Puede cruzar la medianoche (22:00 → 06:00).',
+      // Espejo de validar_jornada_guardia(). La base es la que manda; esto solo adelanta el
+      // aviso para que no se descubra al guardar.
+      validar: (v, todos) => {
+        const dur = duracionTurnoMin(todos.hora_inicio, v)
+        if (dur === null) return null
+        if (dur === 0) return 'La entrada y la salida no pueden ser la misma hora.'
+        return dur > JORNADA_MAXIMA_MIN
+          ? `Un turno no puede durar ${(dur / 60).toFixed(1)} horas: el máximo son ${JORNADA_MAXIMA_MIN / 60}.`
+          : null
+      },
+      aviso: (v, todos) => {
+        const dur = duracionTurnoMin(todos.hora_inicio, v)
+        if (dur === null || dur <= JORNADA_ORDINARIA_MIN || dur > JORNADA_MAXIMA_MIN) return null
+        // Legal, pero conviene que quien lo registra sepa lo que está firmando.
+        return `Turno de ${(dur / 60).toFixed(1)} h: supera la jornada ordinaria de ${JORNADA_ORDINARIA_MIN / 60} h, el resto son horas extra.`
+      },
+    },
     { name: 'fecha_inicio', label: 'Inicio', type: 'date', required: true },
     // Obligatoria (feedback PCO #12): todos los guardias cumplen contrato con fecha de fin.
     { name: 'fecha_fin', label: 'Fin', type: 'date', required: true },
-    { name: 'estado_asignacion', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.asignacion_estado), default: 'ACTIVA' },
+    // Una asignación nueva nace vigente; se finaliza desde la ficha, no al crearla.
+    { name: 'estado_asignacion', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.asignacion_estado), default: 'ACTIVA', hideOnInsert: true },
   ],
   campoEstado: 'estado_asignacion',
   baja: { campoEstado: 'estado_asignacion', valorBaja: 'FINALIZADA', etiqueta: 'Finalizar asignación' },

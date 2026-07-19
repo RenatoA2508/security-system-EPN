@@ -182,11 +182,14 @@ export function CenterSpinner({ label }: { label?: string }) {
   )
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
+export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-300 py-14 text-center">
       <p className="text-sm font-medium text-ink-soft">{title}</p>
       {hint && <p className="max-w-md text-xs text-slate-400">{hint}</p>}
+      {/* Salida del callejón sin salida: una lista vacía por culpa de un filtro debe poder
+          deshacerse desde donde se ve el problema, no obligando a buscar el desplegable. */}
+      {action && <div className="mt-3">{action}</div>}
     </div>
   )
 }

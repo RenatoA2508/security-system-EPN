@@ -473,3 +473,121 @@ arrancaba en blanco (el cliente de Supabase falla al crearse sin URL).
 
 No se había detectado nunca porque hasta esta ronda ningún preview llegaba a compilar (§V21):
 los dos fallos se tapaban mutuamente. Ya están añadidas al entorno `preview`.
+
+## V24 — El "Parqueadero Subsuelo EARME" cuelga del campus, no de un edificio
+
+La ronda de PCO fijó la jerarquía **Campus → Edificio → Parqueadero**: un parqueadero depende
+de un edificio, no del campus. La única fila de tipo `PARQUEADERO` que hay sembrada cuelga
+directamente del campus, y **no existe ningún edificio EARME** al que reasignarla.
+
+No se ha tocado el dato. `validar_jerarquia_zona()` exige la regla al insertar y al cambiar el
+vínculo, pero no revalida una edición que no toca ni el tipo ni el padre, así que la fila se
+puede seguir editando con normalidad.
+
+**Qué hace falta decidir:** o se crea el edificio EARME y se reasigna el parqueadero, o se
+acepta que un parqueadero pueda colgar del campus (y entonces hay que relajar el trigger). No es
+una decisión de implementación: depende de cómo esté organizado el campus de verdad.
+
+## V25 — Los puntos de control que cuelgan del campus
+
+PCO pidió que al registrar un punto de control **no se ofrezca "Campus" como tipo de zona**,
+porque un punto de control está en un sitio concreto y no "en toda la universidad".
+
+Pero seis de los puntos sembrados —las garitas de entrada, "Acceso A/B/C…"— **sí cuelgan del
+campus**, y son precisamente las entradas a la universidad: no pertenecen a ningún edificio.
+
+Solución de compromiso: el tipo "Campus" desapareció del **alta**, pero se mantiene al **editar**,
+porque quitarlo también ahí habría dejado esas seis filas sin poder abrirse ni corregirse.
+
+**Qué hace falta decidir:** si las garitas de entrada al campus son un caso legítimo —y entonces
+"Campus" debería volver al alta— o si hay que modelarlas de otra forma. El autonumerado
+"Acceso A/B/C" (§D7) solo funciona sobre zonas de tipo campus, así que hoy depende de esto.
+
+## V26 — Dos asignaciones de guardia solapadas ✅ RESUELTO
+
+La cuenta `frank.jumbo` tiene **dos asignaciones ACTIVAS que se pisan**: 06:00–20:00 en la
+"Garita - Subsuelo EARME" y 14:00–20:00 en otro punto, con vigencias que también se solapan
+(17–31 y 18–31 de julio). Un guardia no puede estar en dos garitas a la vez.
+
+Resuelto el 19/07. Al mirarlo con detalle, las dos asignaciones eran sobre el **mismo** punto,
+no sobre dos garitas distintas: la de 14:00–20:00 se creó un día después de la de 06:00–20:00 y
+encaja dentro de ella, así que todo apunta a que se registró para corregirla y nadie finalizó la
+original. Se conservó la de 14:00–20:00 —la única de las dos que cabe en una jornada legal— y la
+de catorce horas pasó a FINALIZADA, sin borrarla.
+
+Además de `validar_solapamiento_turno_guardia()`, ahora hay reglas de jornada (§D59).
+
+## V27 — El "Código único" enfrenta a PCO con GPI
+
+El documento de PCO pide eliminar el concepto: *"Se elimina cualquier concepto de Código de
+Estudiante, ID de Usuario o Código de Profesor. El único identificador será la cédula. No debe
+existir un campo llamado Código, Matrícula o ID_Usuario."*
+
+**GPI pidió justo lo contrario en la ronda anterior** y ya está implementado y probado: *"Ahora
+el campo de Código Único solo es utilizado por los estudiantes; para el resto de personas este
+campo permanece bloqueado"*, con el trigger `validar_codigo_unico_estudiante` respaldándolo.
+
+Los dos requisitos no pueden cumplirse a la vez. **No se ha tocado GPI**: quitar el campo habría
+deshecho trabajo ya aprobado de otro módulo y roto sus pruebas, y la regla del proyecto es no
+resolver una contradicción entre documentos en silencio.
+
+Lo que sí se hizo, dentro de PCO: el identificador visible de una persona en las pantallas de
+PCO es **siempre la cédula** (la lista y la ficha de asignaciones muestran nombre y cédula, no
+el nombre de cuenta ni el correo).
+
+**Qué hace falta decidir:** si el código único de estudiante sobrevive o no. Está relacionado
+con §V18/§V19, también abiertas. Mientras tanto, GPI se queda como estaba.
+
+## V28 — La búsqueda "solo con 10 dígitos o por apellido" no se ha implementado
+
+PCO pide que *"el motor de búsqueda principal de usuarios se active únicamente al ingresar los
+10 dígitos de la cédula o por el apellido"*. Esa búsqueda vive en ADM y GPI, no en PCO, y
+cambiarla afecta a pantallas de otros módulos que ya se validaron.
+
+Hoy el buscador filtra por cédula, nombres, apellidos y correo desde el primer carácter. Queda
+para la ronda del módulo que sea dueño de esas pantallas.
+
+## V29 — El guardia de demostración no puede operar: su punto está en mantenimiento
+
+Detectado al final de la ronda de PCO, al poder por fin iniciar sesión con
+`guardia.demo@epn.edu.ec` (su contraseña no es `admin1234`, ver el traspaso).
+
+La cuenta entra bien y el sistema ya muestra su nombre correctamente ("Guardia Demo"), pero
+`verificar_turno_guardia_actual()` responde **`permitido: false`** a media mañana, con el guardia
+dentro de su horario. La cadena completa:
+
+| Condición del req 34 | Estado |
+|---|---|
+| Usuario activo | ✅ |
+| Asignación ACTIVA y vigente (01–31 de julio) | ✅ |
+| Hora dentro del turno 07:00–17:00 | ✅ (comprobado a las 11:44 de Ecuador) |
+| **Punto de control en estado ACTIVO** | ❌ **"Puerta - Laboratorio de Suelos" está en MANTENIMIENTO** |
+
+**Esto no lo causó la ronda de PCO.** Ese punto estaba antes en `FALLA` y la migración §D54 lo
+pasó a `MANTENIMIENTO`, pero `esta_en_turno_guardia()` exige `estado_punto = 'ACTIVO'`: ni FALLA
+ni MANTENIMIENTO la cumplen, así que el guardia llevaba deshabilitado desde antes. Lo único que
+cambió es que ahora el motivo se lee mejor.
+
+**Qué hace falta decidir:** si "Puerta - Laboratorio de Suelos" está en mantenimiento a propósito
+—y entonces el guardia de demostración debería estar asignado a otro punto, porque hoy no sirve
+para probar nada de la Garita— o si ese estado es residuo de un dato de prueba y el punto debería
+volver a ACTIVO. **No se ha tocado el dato**: cambiar el estado de un punto de control habilita
+accesos físicos de verdad, y eso no es una decisión que deba tomarse de paso.
+
+La segunda asignación de esa cuenta (turno `MATUTINO`, sin horas) está FINALIZADA y tampoco
+habilita; es la fila cuyo turno en texto libre no se pudo migrar (§D57).
+
+## V30 — El descanso entre jornadas no se comprueba con turnos nocturnos
+
+`validar_jornada_guardia()` (§D59) comprueba el descanso mínimo midiendo la ventana que ocupan
+todos los turnos activos de un guardia en un día, de punta a punta: lo que sobra hasta las 24 h
+es su descanso.
+
+Ese cálculo **no está definido cuando alguno de los turnos cruza medianoche**, porque entonces la
+jornada pisa dos días naturales y "la ventana del día" deja de significar algo. En ese caso se
+aplican solo las otras dos reglas: la duración máxima del turno (12 h) y el solapamiento.
+
+En la práctica hoy no afecta a nadie: ningún guardia tiene un turno nocturno combinado con otro.
+Pero si la EPN empieza a usar turnos rotativos con nocturnos, **hay que modelar el día laboral**
+—con fecha y hora de entrada y salida, no solo horas sueltas— para que el descanso se pueda
+calcular bien. Está señalado en el propio código.

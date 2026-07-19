@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Pencil, Plus, Search, Ban, ArrowLeft, Download } from 'lucide-react'
+import { Pencil, Plus, Search, Ban, ArrowLeft, Download, RotateCcw } from 'lucide-react'
 import { fromTable, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
 import { useBorrador } from '../lib/useBorrador'
@@ -11,6 +11,13 @@ import {
 } from './ui'
 
 type Row = Record<string, any>
+
+/** ¿La fila está dada de baja? Decide cuál de los dos botones —Inactivar o Reactivar— tiene
+ *  sentido ofrecer en la ficha. */
+function estaDadoDeBaja(config: ResourceConfig, row: Row | null): boolean {
+  if (!config.baja || !row) return false
+  return row[config.baja.campoEstado] === config.baja.valorBaja
+}
 
 /** Resuelve opciones (estáticas o async) de todos los campos select, una vez. */
 function useFieldOptions(campos: FieldConfig[]) {
@@ -91,6 +98,7 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
   const [vista, setVista] = useState<'lista' | 'form'>('lista')
   const [editando, setEditando] = useState<Row | null>(null)
   const [bajaOpen, setBajaOpen] = useState(false)
+  const [reactivando, setReactivando] = useState(false)
   const [filtrosValor, setFiltrosValor] = useState<Record<string, string>>({})
 
   const opciones = useFieldOptions(config.campos)
@@ -133,6 +141,9 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
     }
     return out
   }, [rows, busqueda, config.buscarEn, filtrosValor])
+
+  /** ¿Hay algo escondiendo filas? Distingue "no hay datos" de "los has filtrado tú". */
+  const hayFiltroActivo = !!busqueda.trim() || Object.values(filtrosValor).some((v) => !!v)
 
   const exportarCsv = () => {
     const encabezados = config.columnas.map((c) => c.label)
@@ -223,7 +234,30 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
         {cargando ? (
           <CenterSpinner label="Cargando..." />
         ) : filtradas.length === 0 ? (
-          <EmptyState title={busqueda ? 'Sin resultados' : `No hay ${config.titulo.toLowerCase()} registrados`} />
+          /* "No hay X registrados" solo cuando de verdad no hay ninguno. Antes ese mensaje
+             salía también con un filtro puesto que no casaba con nada, así que la pantalla
+             afirmaba que no existían datos mientras los ocultaba ella misma — pasó de verdad:
+             con un filtro de zona aplicado, "Puntos de control" decía estar vacío teniendo seis.
+             Si algo está filtrando, se dice cuántos hay y se ofrece quitar el filtro. */
+          hayFiltroActivo ? (
+            <EmptyState
+              title="Sin resultados"
+              hint={`Ninguno de los ${rows.length} ${config.titulo.toLowerCase()} coincide con lo que has filtrado.`}
+              action={
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setBusqueda('')
+                    setFiltrosValor({})
+                  }}
+                >
+                  Quitar filtros
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState title={`No hay ${config.titulo.toLowerCase()} registrados`} />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -282,9 +316,35 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
                   <Pencil className="h-4 w-4" /> Editar
                 </Button>
               )}
-              {config.baja && puedeEditar && (
+              {/* Inactivar y Reactivar son excluyentes: se ofrece el que corresponda al estado
+                  actual de la fila. Antes solo existía el de baja, así que inactivar una zona
+                  no tenía vuelta atrás desde la ficha (feedback PCO). */}
+              {config.baja && puedeEditar && !estaDadoDeBaja(config, seleccion) && (
                 <Button variant="danger" className="flex-1" onClick={() => setBajaOpen(true)}>
                   <Ban className="h-4 w-4" /> {config.baja.etiqueta ?? 'Dar de baja'}
+                </Button>
+              )}
+              {config.baja && config.reactivar && puedeEditar && estaDadoDeBaja(config, seleccion) && (
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  disabled={reactivando}
+                  onClick={async () => {
+                    setReactivando(true)
+                    const { error } = await fromTable(config.tabla)
+                      .update({ [config.baja!.campoEstado]: config.reactivar!.valorActivo })
+                      .eq(config.idField, seleccion[config.idField])
+                    setReactivando(false)
+                    if (error) {
+                      toast('error', mensajeError(error))
+                      return
+                    }
+                    toast('ok', `${config.singular} reactivado.`)
+                    setSeleccion(null)
+                    await cargar()
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4" /> {config.reactivar.etiqueta ?? 'Reactivar'}
                 </Button>
               )}
             </>
@@ -478,6 +538,37 @@ function RecordForm({
       return next
     })
   }
+
+  // Al EDITAR, rellena los campos auxiliares de cascada a partir del registro. No son columnas
+  // de la tabla, así que no vienen en `registro` y arrancaban vacíos: eso dejaba sin opciones al
+  // campo que colgaba de ellos ("Zona" en un punto de control, "Punto de control" en un
+  // dispositivo) y, al ser obligatorios, impedía guardar la edición.
+  useEffect(() => {
+    if (!registro) return
+    let vivo = true
+    ;(async () => {
+      const derivados = config.campos.filter((c) => c.derivarDeRegistro)
+      if (derivados.length === 0) return
+      const entries = await Promise.all(
+        derivados.map(async (c) => [c.name, await c.derivarDeRegistro!(registro)] as const),
+      )
+      if (!vivo) return
+      setValores((s) => {
+        const next = { ...s }
+        // Solo se rellena lo que sigue vacío: si el usuario ya eligió otra cosa mientras se
+        // resolvía la consulta, manda lo suyo.
+        for (const [name, valor] of entries) if (!next[name] && valor != null) next[name] = valor
+        // El valor derivado forma parte del punto de partida: si no, el formulario se
+        // consideraría "con cambios" nada más abrirlo y dejaría un borrador espurio.
+        valoresIniciales.current = { ...(valoresIniciales.current ?? {}), ...next }
+        return next
+      })
+    })()
+    return () => {
+      vivo = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registro])
 
   // Recalcula las opciones de los campos con cascada (opcionesDependientes) cada vez que
   // cambian los valores del formulario (ej. "Punto de control" según la "Zona" elegida).
@@ -727,7 +818,9 @@ function RecordForm({
                   label={c.label}
                   htmlFor={campoId}
                   required={c.required && !disabled}
-                  hint={c.hint}
+                  // El aviso no sustituye al error: si hay error, manda el error. Solo se muestra
+                  // cuando el valor es válido pero merece una segunda mirada (ej. horas extra).
+                  hint={(!erroresCampo[c.name] && c.aviso?.(String(valores[c.name] ?? ''), valores)) || c.hint}
                   ayuda={c.ayuda}
                   error={erroresCampo[c.name]}
                 >

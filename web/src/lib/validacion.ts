@@ -396,3 +396,36 @@ export const validarNoVacio: Validador = (v) => (v && !v.trim() ? 'No puede ser 
 export function normalizarEspacios(v: string): string {
   return v.replace(/\s+/g, ' ').trim()
 }
+
+// ---------------------------------------------------------------------------
+// Ubicación física (nomenclatura oficial de la EPN)
+// ---------------------------------------------------------------------------
+
+/** Espejo de `public.es_ubicacion_epn(text)`.
+ *
+ *  Formato oficial: E<edificio>/P<piso>/E<espacio de tres dígitos>, p. ej. E20/P3/E004.
+ *  El edificio no puede ser 0 y el espacio va siempre a tres dígitos, que es lo que distingue
+ *  "E004" de "E4" y evita que el mismo aula se escriba de dos formas. */
+export function esUbicacionEPN(v: string): boolean {
+  return /^E[1-9]\d{0,2}\/P\d{1,2}\/E\d{3}$/.test(v)
+}
+
+/** Espejo de `public.normalizar_ubicacion_epn(text)`. Lleva lo tecleado a la forma canónica:
+ *  mayúsculas, sin espacios y con el espacio rellenado a tres dígitos, de modo que
+ *  "e20 / p3 / e4" acabe siendo "E20/P3/E004" en vez de un error. */
+export function normalizarUbicacionEPN(v: string): string {
+  const limpio = v.replace(/\s/g, '').toUpperCase()
+  const m = /^E(\d+)\/P(\d+)\/E(\d+)$/.exec(limpio)
+  if (!m) return limpio
+  const sinCeros = (s: string) => s.replace(/^0+(?=\d)/, '')
+  return `E${sinCeros(m[1])}/P${sinCeros(m[2])}/E${sinCeros(m[3]).padStart(3, '0')}`
+}
+
+/** Validador para un campo de ubicación. La BD es la que manda (`es_ubicacion_epn`); esto solo
+ *  adelanta el error para que no se descubra al guardar. */
+export const validarUbicacionEPN: Validador = (v) => {
+  if (!v) return null
+  return esUbicacionEPN(normalizarUbicacionEPN(v))
+    ? null
+    : 'Formato de la EPN: edificio/piso/espacio, con el espacio a tres dígitos (ej. E20/P3/E004).'
+}

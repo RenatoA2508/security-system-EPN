@@ -28,8 +28,12 @@ export const CAT = {
   persona_vehiculo_tipo: ['PROPIETARIO', 'CONDUCTOR_AUTORIZADO', 'PASAJERO', 'TEMPORAL'],
   persona_vehiculo_estado: ['ACTIVA', 'SUSPENDIDA', 'VENCIDA', 'REVOCADA'],
   zona_tipo: ['CAMPUS', 'EDIFICIO', 'PARQUEADERO'],
-  zona_estado: ['ACTIVA', 'INACTIVA', 'BLOQUEADA'],
-  punto_estado: ['ACTIVO', 'FALLA', 'MANTENIMIENTO'],
+  // Sin BLOQUEADA: en una zona física no se distinguía de INACTIVA —en ambas no pasa nadie— y
+  // ninguna pantalla las trataba distinto (feedback PCO). Espejo de zona_estado_zona_check.
+  zona_estado: ['ACTIVA', 'INACTIVA'],
+  // Sin FALLA: un punto de control es un lugar, no un aparato. Lo que falla es el `dispositivo`
+  // que hay en él, y ese sí conserva FALLA_DE_RED / DANO_FISICO (feedback PCO).
+  punto_estado: ['ACTIVO', 'MANTENIMIENTO'],
   dispositivo_tecnologia: ['BIOMETRIA_FACIAL', 'LPR_PLACAS'],
   dispositivo_estado: ['OPERATIVO', 'FALLA_DE_RED', 'DANO_FISICO'],
   asignacion_estado: ['ACTIVA', 'FINALIZADA'],

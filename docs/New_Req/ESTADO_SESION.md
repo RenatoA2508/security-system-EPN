@@ -1,21 +1,29 @@
-# Estado del sistema — punto de partida para la sesión de PCO
+# Estado del sistema — punto de partida tras la ronda de PCO
 
-Sustituye al documento de la ronda de ADM. La ronda GPE + GPI está cerrada y verificada.
+La ronda de PCO está cerrada y verificada. Sustituye al documento de la ronda de GPE + GPI.
 
 ---
 
-## ⚠️ Dos cosas que hacer ANTES de empezar
+## ⚠️ Tres cosas que hacer ANTES de empezar
 
-**1. ~~Fusionar el PR de GPE + GPI~~ — HECHO.**
-[PR #3](https://github.com/cschavezv03-ops/security-system-EPN/pull/3) fusionado el 19/07.
-`main` va por `93f0f58` y producción sirve ese build: comprobado que el bundle incluye el
-código de la ronda y ya no contiene la jerga antigua. El esquema de la base y el frontend
-vuelven a estar sincronizados.
+**1. Fusionar el PR de PCO.**
+Rama `feat/pco-mejoras`. Mientras no se fusione, `main` y producción NO tienen los cambios de
+esta ronda, pero **la base de datos SÍ** (las migraciones se aplican por MCP, no por el PR). Es
+la única ventana en la que el esquema va por delante del frontend desplegado: en producción el
+catálogo de estados de zona ya no admite `BLOQUEADA` aunque el bundle antiguo aún lo ofrezca.
 
 **2. Volver a proteger los previews.**
 Panel de Vercel → proyecto `security-system-epn` → **Settings → Deployment Protection** →
-**Vercel Authentication** → **Enabled**. Se desactivó el 19/07 para que TestSprite pudiera
-entrar al preview; mientras siga así, cualquier URL de preview es accesible para quien la tenga.
+**Vercel Authentication** → **Enabled**. Sigue desactivado desde el 19/07 para que TestSprite
+pueda entrar; mientras siga así, cualquier URL de preview es accesible para quien la tenga.
+
+**3. La cuenta `guardia.demo@epn.edu.ec` NO usa `admin1234`.**
+Tiene una contraseña propia, que **no se escribe aquí a propósito**: este documento está en un
+repositorio. Pídesela a Sebastián o resetéala desde el panel de Supabase Auth. Verificada el
+19/07: la cuenta entra bien con ella.
+
+Ojo al montar pruebas de la Garita con esa cuenta: aunque el login funcione, **hoy no puede
+operar** — ver §V29.
 
 ---
 
@@ -42,7 +50,7 @@ git checkout -b feat/pco-mejoras
 2. **Un commit por grupo lógico.** No un commit gigante.
 3. **Verificar antes de dar nada por hecho:**
    ```bash
-   cd web && npm run verificar     # typecheck + 101 pruebas + build
+   cd web && npm run verificar     # typecheck + 131 pruebas + build
    ```
 4. **Push a la rama** → Vercel genera un preview automáticamente. Ya funciona (se arregló en la
    ronda anterior); antes había que desplegar a mano.
@@ -92,26 +100,42 @@ testsprite test run <testId> --target-url <url-del-preview> --wait --timeout 150
 Se pueden lanzar **en paralelo** (`&` y `wait`): 10 pruebas tardan ~15 min en vez de dos horas.
 Cada una tarda entre 5 y 15 minutos.
 
-## Puntos a mirar en PCO
+## Qué se hizo en la ronda de PCO
 
-No hay `Requerimientos_PCO.docx` todavía; cuando llegue, manda ese documento. Mientras tanto,
-lo que se sabe del módulo:
+Todo el feedback del documento está aplicado. Lo que conviene saber para no repetir el análisis:
 
-- **Tablas**: `zona` (5 filas), `punto_control` (6), `dispositivo` (3),
-  `guardia_punto_control` (4). Módulo dueño: PCO (doc 02 §"Infraestructura física").
-- **Ya se hizo en rondas anteriores**: cascada tipo de zona → zona → punto de control,
-  autonumerado "Acceso A/B/C" para puntos de tipo campus, autoformato de MAC e IP, validación
-  de compatibilidad tecnología↔zona por trigger, y turnos de guardia obligatorios con fecha fin.
-- **Datos limpios**: el barrido de ortografía y espacios sobrantes sobre las cuatro tablas no
-  encontró nada pendiente (se corrigieron en la ronda anterior).
-- **Lo que conviene revisar**, por analogía con lo que apareció en GPE/GPI:
-  - `zona.nombre_zona` y `punto_control.nombre_punto` ya se normalizan por trigger, pero
-    `dispositivo` no tiene equivalente.
-  - `guardia_punto_control.turno` es texto con formato `HH:MM–HH:MM` interpretado, no
-    estructurado (§V10). Si PCO pide algo sobre turnos, esto es lo primero que hay que decidir.
-  - Los estados de `punto_control` (ACTIVO/FALLA/MANTENIMIENTO) y `dispositivo`
-    (OPERATIVO/FALLA_DE_RED/DANO_FISICO) **no tienen ningún proceso que los cambie solo**: son
-    manuales. Si se pide "detección automática de fallas", eso no existe hoy.
+- **Estados simplificados** (§D53, §D54): zona queda ACTIVA/INACTIVA, punto de control pierde
+  FALLA. El combo de Estado desapareció de todos los formularios de **alta** y se añadió el
+  botón **Reactivar** (§D56).
+- **Jerarquía de zonas** (§D55): CAMPUS → EDIFICIO → PARQUEADERO, en trigger y en el combo.
+- **Turno estructurado** (§D57): `hora_inicio`/`hora_fin` son la fuente de verdad y el texto
+  `turno` se deriva de ellas. `esta_en_turno_guardia()` (req 34) usa ya las columnas.
+- **Dos bugs que parecían de pantalla y eran de RLS** (§D58). Lee esa decisión antes de
+  investigar cualquier campo que salga vacío o como "—": un embed bloqueado por RLS se ve
+  exactamente igual que un dato que no existe, y no da error.
+
+**Lo que sigue abierto** (todo en `99_DUDAS_PARA_EL_EQUIPO.md`): §V24 el parqueadero que cuelga
+del campus, §V25 las garitas de tipo campus, §V26 dos asignaciones de guardia solapadas en los
+datos sembrados, §V27 el choque entre PCO y GPI por el "código único", §V28 la búsqueda por
+cédula completa o apellido.
+
+**Lo que NO se hizo a propósito:** el requisito de PCO de eliminar el "código único" choca con
+un requisito de GPI ya implementado y probado. No se tocó GPI (§V27). Y "los guardias solo
+entran durante su turno" **no** se convirtió en un bloqueo de inicio de sesión: la restricción
+operativa ya existía (req 34) y dejar a un guardia sin poder entrar al sistema por un turno mal
+tecleado es peor que el problema que resuelve.
+
+## Sobre TestSprite en esta ronda
+
+Los 7 planes de PCO (`tests/testsprite/planes/21_*` a `27_*`) pasan. Confirmado otra vez que la
+receta del apartado de abajo funciona: cuenta explícita en el primer paso y positiva antes de
+negativa.
+
+**TestSprite encontró un bug que las 131 pruebas locales no cogieron:** al retirar "Campus" del
+alta de puntos de control, las seis garitas que sí cuelgan del campus se quedaban con el
+desplegable en "— Seleccionar —" y no se podían guardar. El mock de las pruebas locales solo
+tenía un punto de control en un edificio, así que el caso no existía ahí. Merece la pena correr
+los planes contra el preview aunque la suite local esté verde.
 
 ## Reglas del proyecto que conviene tener presentes
 
@@ -144,7 +168,7 @@ lo que se sabe del módulo:
 > formulario genérico ya lo hace solo; si escribes una pantalla a mano, no lo olvides: sin eso
 > un lector de pantalla no anuncia el campo, y las pruebas no pueden localizarlo.
 
-## Qué cubren las 101 pruebas automáticas
+## Qué cubren las 131 pruebas automáticas
 
 | Archivo | Qué protege |
 |---|---|
@@ -158,6 +182,8 @@ lo que se sabe del módulo:
 | `pages/modules/UsuariosScreen.test.tsx` | Panel único de usuarios, alta por cédula |
 | `components/ResourceScreen.test.tsx` | Campos dinámicos, campo en gris, confirmación, borrador |
 | `resources/configs-lectura.test.tsx` | Auditoría legible; biometría no pinta el rostro |
+| `resources/configs-pco.test.tsx` | PCO: cascadas al editar, Reactivar, jerarquía de zonas, nombre del guardia, borrador |
+| `lib/turnos.test.ts` | Turnos (incluido el nocturno), hora de Ecuador y ubicación E20/P3/E004 |
 
 Pruebas contra la base real (no dejan rastro salvo auditoría):
 
