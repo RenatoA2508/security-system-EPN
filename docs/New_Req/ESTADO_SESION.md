@@ -1,4 +1,4 @@
-# Estado del sistema — punto de partida tras la ronda de PCO
+# Estado del sistema — punto de partida para la sesión de CAC
 
 La ronda de PCO está cerrada y verificada. Sustituye al documento de la ronda de GPE + GPI.
 
@@ -22,8 +22,10 @@ Tiene una contraseña propia, que **no se escribe aquí a propósito**: este doc
 repositorio. Pídesela a Sebastián o resetéala desde el panel de Supabase Auth. Verificada el
 19/07: la cuenta entra bien con ella.
 
-Ojo al montar pruebas de la Garita con esa cuenta: aunque el login funcione, **hoy no puede
-operar** — ver §V29.
+Y ojo al montar pruebas de la Garita: aunque el login funcione, **ese guardia no puede operar**,
+porque su punto ("Puerta - Laboratorio de Suelos") está en MANTENIMIENTO y `esta_en_turno_guardia()`
+exige que el punto esté ACTIVO. Es el comportamiento correcto (§D60), no un fallo: si necesitas
+probar la Garita, reasigna ese guardia a un punto activo desde PCO.
 
 ---
 
@@ -32,10 +34,11 @@ operar** — ver §V29.
 | Qué | Dónde |
 |---|---|
 | Producción | https://security-system-epn.vercel.app (rama `main`) |
-| Decisiones | `docs/03_DECISIONES_Y_CORRECCIONES.md` — §D47-D52 son de la última ronda |
-| Dudas y pendientes | `docs/99_DUDAS_PARA_EL_EQUIPO.md` — §V18-V21 |
+| Decisiones | `docs/03_DECISIONES_Y_CORRECCIONES.md` — §D53-D61 son de la ronda de PCO |
+| Dudas y pendientes | `docs/99_DUDAS_PARA_EL_EQUIPO.md` — §V24-V30 son de la ronda de PCO |
 | Despliegue | `docs/DESPLIEGUE.md` |
 | Revisión manual de GPE/GPI | `docs/New_Req/GUIA_REVISION_GPE_GPI.md` |
+| Feedback de PCO | `docs/New_Req/Requerimientos_PCO.docx` |
 
 ## Cómo trabajar esta sesión (lo que funcionó en la anterior)
 
@@ -50,7 +53,7 @@ git checkout -b feat/pco-mejoras
 2. **Un commit por grupo lógico.** No un commit gigante.
 3. **Verificar antes de dar nada por hecho:**
    ```bash
-   cd web && npm run verificar     # typecheck + 131 pruebas + build
+   cd web && npm run verificar     # typecheck + 142 pruebas + build
    ```
 4. **Push a la rama** → Vercel genera un preview automáticamente. Ya funciona (se arregló en la
    ronda anterior); antes había que desplegar a mano.
@@ -110,14 +113,29 @@ Todo el feedback del documento está aplicado. Lo que conviene saber para no rep
 - **Jerarquía de zonas** (§D55): CAMPUS → EDIFICIO → PARQUEADERO, en trigger y en el combo.
 - **Turno estructurado** (§D57): `hora_inicio`/`hora_fin` son la fuente de verdad y el texto
   `turno` se deriva de ellas. `esta_en_turno_guardia()` (req 34) usa ya las columnas.
+- **Jornada del guardia** (§D59): máximo 12 h por turno, aviso entre 8 y 12 (horas extra) y 12 h
+  de descanso entre jornadas. Los límites viven en `parametro_sistema`, no en el código.
 - **Dos bugs que parecían de pantalla y eran de RLS** (§D58). Lee esa decisión antes de
   investigar cualquier campo que salga vacío o como "—": un embed bloqueado por RLS se ve
   exactamente igual que un dato que no existe, y no da error.
 
+**Tres cosas del motor genérico que ahora existen y sirven para CAC igual que para PCO:**
+
+| Pieza | Para qué |
+|---|---|
+| `FieldConfig.derivarDeRegistro` | Rellenar un filtro de cascada al **editar**. Sin esto, cualquier campo auxiliar (`persistir: false`) arranca vacío en la edición y deja sin opciones al combo que cuelga de él. |
+| `FieldConfig.aviso` | Advertencia bajo el campo que **no** bloquea el guardado. Para lo que es válido pero conviene mirar dos veces. |
+| `ResourceConfig.reactivar` | Botón para deshacer una baja desde la ficha. |
+
+Y un arreglo del motor que afecta a **todas** las pantallas: una lista vacía por culpa de un
+filtro ya no dice "No hay X registrados" (§D61) — decía que no había datos mientras los ocultaba
+ella misma.
+
 **Lo que sigue abierto** (todo en `99_DUDAS_PARA_EL_EQUIPO.md`): §V24 el parqueadero que cuelga
-del campus, §V25 las garitas de tipo campus, §V26 dos asignaciones de guardia solapadas en los
-datos sembrados, §V27 el choque entre PCO y GPI por el "código único", §V28 la búsqueda por
-cédula completa o apellido.
+del campus, §V25 las garitas de tipo campus, §V27 el choque entre PCO y GPI por el "código
+único", §V28 la búsqueda por cédula completa o apellido, §V30 el descanso no se calcula con
+turnos nocturnos combinados. §V26 (turnos solapados) y §V29 (guardia sin punto operativo) ya
+están resueltas.
 
 **Lo que NO se hizo a propósito:** el requisito de PCO de eliminar el "código único" choca con
 un requisito de GPI ya implementado y probado. No se tocó GPI (§V27). Y "los guardias solo
@@ -131,11 +149,43 @@ Los 7 planes de PCO (`tests/testsprite/planes/21_*` a `27_*`) pasan. Confirmado 
 receta del apartado de abajo funciona: cuenta explícita en el primer paso y positiva antes de
 negativa.
 
-**TestSprite encontró un bug que las 131 pruebas locales no cogieron:** al retirar "Campus" del
+**TestSprite encontró un bug que las 142 pruebas locales no cogieron:** al retirar "Campus" del
 alta de puntos de control, las seis garitas que sí cuelgan del campus se quedaban con el
 desplegable en "— Seleccionar —" y no se podían guardar. El mock de las pruebas locales solo
 tenía un punto de control en un edificio, así que el caso no existía ahí. Merece la pena correr
 los planes contra el preview aunque la suite local esté verde.
+
+## Puntos a mirar en CAC
+
+Cuando llegue `Requerimientos_CAC.docx`, manda ese documento. Mientras tanto, lo que se sabe:
+
+- **Tablas**: `regla_acceso` (8 filas), `evento_acceso` (15), `alerta_seguridad` (4),
+  `autorizacion_visita_diaria` (2). Cuenta: `carlos.chavez03@epn.edu.ec`.
+- **Pantallas**: Reglas de acceso, Eventos de acceso y Alertas de seguridad (`AlertasScreen`, que
+  es una pantalla a mano, no el motor genérico). "Asignaciones de guardia" **ya no está en CAC**:
+  se movió a PCO por petición del propio CAC, y sus permisos INSERT/UPDATE están revocados.
+- **`evento_acceso` y `bitacora_sistema` son históricos: solo INSERT.** Nunca UPDATE ni DELETE.
+  Cualquier petición de "corregir un evento" choca con esto y hay que resolverla con un evento
+  nuevo, no editando el anterior.
+
+**Lo que conviene revisar, por analogía con lo que apareció en PCO, GPE y GPI:**
+
+- El combo de **Estado** en el alta de `regla_acceso` sobra, como en todos los módulos anteriores
+  (§D56). El patrón es `hideOnInsert: true` más `reactivar`.
+- `regla_acceso` tiene **horario_inicio/horario_fin** y deliberadamente NO se exige
+  `fin > inicio`, porque el turno nocturno es legítimo (nota en
+  `20260717020325_constraints_validacion.sql`). Si CAC pide algo sobre horarios, reutiliza
+  `esta_en_turno()`, `tramos_turno()` y `duracion_turno_min()`, que ya contemplan el cruce de
+  medianoche — y **no** repitas el fallo de sumar 24 h a un `time`, que envuelve (§D59).
+- Los estados de `alerta_seguridad` y el flujo de atención: comprobar que no haya un combo de
+  estado en el alta y que "atender" sea una acción, no un campo editable.
+- **Todo lo que dependa del calendario se calcula, lo que dependa de una decisión humana se
+  almacena** (`estado_memorando_efectivo()`, `vigencia.ts`). Es el patrón que ya resolvió los
+  estados desincronizados en GPE.
+
+**Antes de tocar RLS en CAC**, mira §D58: dos "bugs de pantalla" de PCO eran políticas que
+filtraban un embed en silencio. CAC lee muchas tablas de otros módulos (persona, vehículo, punto
+de control), así que es el módulo con más probabilidad de repetir ese patrón.
 
 ## Reglas del proyecto que conviene tener presentes
 
@@ -168,7 +218,7 @@ los planes contra el preview aunque la suite local esté verde.
 > formulario genérico ya lo hace solo; si escribes una pantalla a mano, no lo olvides: sin eso
 > un lector de pantalla no anuncia el campo, y las pruebas no pueden localizarlo.
 
-## Qué cubren las 131 pruebas automáticas
+## Qué cubren las 142 pruebas automáticas
 
 | Archivo | Qué protege |
 |---|---|
@@ -207,3 +257,8 @@ python3 scripts/prueba_multisesion.py                          # requiere SB_URL
 6. **18 cédulas ficticias** pendientes de sustituir.
 7. **Historial de migraciones**: sin reconciliar, por eso `supabase db push` no funciona.
 8. **Auto-refresco del token de TestSprite**: es de plan Pro.
+9. **`gh` (GitHub CLI)** está instalado en `~/.local/bin/gh` (v2.96.0, binario oficial verificado
+   por checksum, sin `sudo`). **No está autenticado en WSL**: la sesión que existe es la del `gh`
+   de *Windows*, y su token vive en el Credential Manager, así que el `gh` de Linux no puede
+   usarlo. Para que funcione hay que ejecutar `gh auth login` **dentro de WSL**. Mientras tanto,
+   los PR se abren desde el navegador.
