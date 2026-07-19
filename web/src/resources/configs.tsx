@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import type { ResourceConfig } from './types'
 import { CAT, humanizar } from '../lib/catalogos'
-import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp, estaEnTurno } from '../lib/format'
+import { fmtFecha, fmtFechaHora, fmtHora, formatearMac, formatearIp, estaEnTurno, duracionTurnoMin } from '../lib/format'
 import {
   diasDeVigencia, estadoAutorizacionEfectivo, estadoMemorandoEfectivo, vigenteHastaTexto,
 } from '../lib/vigencia'
@@ -356,6 +356,33 @@ function TurnoConEstado({ fila }: { fila: Record<string, any> }) {
   )
 }
 
+/* Jornada del guardia. En la base viven en `parametro_sistema`
+   (JORNADA_MAXIMA_GUARDIA_HORAS y el descanso), porque son política laboral y pueden cambiar;
+   aquí se repiten como constantes solo para adelantar el aviso en el formulario.
+   Código del Trabajo del Ecuador: 8 h ordinarias (art. 47), hasta 12 con extras (art. 55). */
+const JORNADA_ORDINARIA_MIN = 8 * 60
+const JORNADA_MAXIMA_MIN = 12 * 60
+
+/** El punto de la asignación y, si no está operativo, por qué ese guardia no puede trabajar.
+ *
+ *  Caso real detectado en esta ronda (§V29): la asignación de "Guardia Demo" se veía impecable
+ *  —vigente, en horario— pero el guardia no podía operar, porque `esta_en_turno_guardia()` exige
+ *  que el punto esté ACTIVO y el suyo estaba en mantenimiento. Nada en pantalla lo decía, así que
+ *  desde PCO no había forma de saber que había que reasignarlo a otro punto. */
+function PuntoConAviso({ fila }: { fila: Record<string, any> }) {
+  const nombre = fila.punto?.nombre_punto ?? '—'
+  const operativo = fila.punto?.estado_punto === 'ACTIVO'
+  if (operativo || fila.estado_asignacion !== 'ACTIVA') return <>{nombre}</>
+  return (
+    <span className="inline-flex flex-col">
+      {nombre}
+      <span className="text-[11px] text-amber-700">
+        {humanizar(fila.punto?.estado_punto)}: el guardia no puede operar aquí
+      </span>
+    </span>
+  )
+}
+
 export const cfgZona: ResourceConfig = {
   tabla: 'zona',
   titulo: 'Zonas',
@@ -544,7 +571,7 @@ export const cfgAsignacionGuardia: ResourceConfig = {
   // El embed de `persona` es lo que por fin da un nombre humano al guardia. Antes solo se
   // traían campos de la cuenta y, además, RLS devolvía `guardia: null` a PCO sin dar error,
   // así que la columna se veía como "—" (feedback PCO: "no aparece el nombre del guardia").
-  select: '*, guardia:usuario_sistema!guardia_punto_control_id_usuario_fkey(nombre_usuario, correo_electronico, persona:persona(nombres, apellidos, cedula)), punto:punto_control(nombre_punto)',
+  select: '*, guardia:usuario_sistema!guardia_punto_control_id_usuario_fkey(nombre_usuario, correo_electronico, persona:persona(nombres, apellidos, cedula)), punto:punto_control(nombre_punto, estado_punto)',
   // Solo PCO asigna (feedback CAC: "quitar asignación de guardia" — ya revocado en rol_permiso).
   // CAC conserva SELECT únicamente, para supervisión.
   permisos: { select: ['PCO_ASIGNACION_SELECT', 'CAC_ASIGNACION_SELECT'], insert: ['PCO_ASIGNACION_INSERT'], update: ['PCO_ASIGNACION_UPDATE'] },
@@ -555,7 +582,7 @@ export const cfgAsignacionGuardia: ResourceConfig = {
     // El identificador visible de una persona es siempre la cédula (RF de PCO), nunca un código
     // interno ni el correo.
     { key: 'cedula', label: 'Cédula', render: (r) => r.guardia?.persona?.cedula ?? '—' },
-    { key: 'punto', label: 'Punto', render: (r) => r.punto?.nombre_punto ?? '—' },
+    { key: 'punto', label: 'Punto', render: (r) => <PuntoConAviso fila={r} />, valorExport: (r) => r.punto?.nombre_punto ?? '' },
     { key: 'turno', label: 'Turno', render: (r) => <TurnoConEstado fila={r} /> },
     { key: 'estado_asignacion', label: 'Estado', badge: true },
   ],
@@ -587,7 +614,26 @@ export const cfgAsignacionGuardia: ResourceConfig = {
     // ellas en la BD. Con esto `esta_en_turno_guardia` deja de depender de una expresión regular
     // y se puede avisar de si el guardia está en turno ahora mismo.
     { name: 'hora_inicio', label: 'Entrada', type: 'time', required: true, hint: 'Hora local de Ecuador.' },
-    { name: 'hora_fin', label: 'Salida', type: 'time', required: true, hint: 'Puede cruzar la medianoche (22:00 → 06:00).' },
+    {
+      name: 'hora_fin', label: 'Salida', type: 'time', required: true,
+      hint: 'Puede cruzar la medianoche (22:00 → 06:00).',
+      // Espejo de validar_jornada_guardia(). La base es la que manda; esto solo adelanta el
+      // aviso para que no se descubra al guardar.
+      validar: (v, todos) => {
+        const dur = duracionTurnoMin(todos.hora_inicio, v)
+        if (dur === null) return null
+        if (dur === 0) return 'La entrada y la salida no pueden ser la misma hora.'
+        return dur > JORNADA_MAXIMA_MIN
+          ? `Un turno no puede durar ${(dur / 60).toFixed(1)} horas: el máximo son ${JORNADA_MAXIMA_MIN / 60}.`
+          : null
+      },
+      aviso: (v, todos) => {
+        const dur = duracionTurnoMin(todos.hora_inicio, v)
+        if (dur === null || dur <= JORNADA_ORDINARIA_MIN || dur > JORNADA_MAXIMA_MIN) return null
+        // Legal, pero conviene que quien lo registra sepa lo que está firmando.
+        return `Turno de ${(dur / 60).toFixed(1)} h: supera la jornada ordinaria de ${JORNADA_ORDINARIA_MIN / 60} h, el resto son horas extra.`
+      },
+    },
     { name: 'fecha_inicio', label: 'Inicio', type: 'date', required: true },
     // Obligatoria (feedback PCO #12): todos los guardias cumplen contrato con fecha de fin.
     { name: 'fecha_fin', label: 'Fin', type: 'date', required: true },

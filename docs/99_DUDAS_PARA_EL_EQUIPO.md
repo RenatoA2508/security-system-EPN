@@ -503,16 +503,19 @@ porque quitarlo también ahí habría dejado esas seis filas sin poder abrirse n
 "Campus" debería volver al alta— o si hay que modelarlas de otra forma. El autonumerado
 "Acceso A/B/C" (§D7) solo funciona sobre zonas de tipo campus, así que hoy depende de esto.
 
-## V26 — Dos asignaciones de guardia solapadas en los datos sembrados
+## V26 — Dos asignaciones de guardia solapadas ✅ RESUELTO
 
 La cuenta `frank.jumbo` tiene **dos asignaciones ACTIVAS que se pisan**: 06:00–20:00 en la
 "Garita - Subsuelo EARME" y 14:00–20:00 en otro punto, con vigencias que también se solapan
 (17–31 y 18–31 de julio). Un guardia no puede estar en dos garitas a la vez.
 
-Se añadió `validar_solapamiento_turno_guardia()`, que impide crear solapamientos nuevos y
-contempla el turno nocturno. Las dos filas existentes **no se han tocado**: corregirlas es
-decidir cuál de los dos turnos es el bueno, y eso lo sabe PCO, no el sistema. El trigger no
-revalida ediciones que no tocan horas, fechas ni estado, así que se pueden seguir gestionando.
+Resuelto el 19/07. Al mirarlo con detalle, las dos asignaciones eran sobre el **mismo** punto,
+no sobre dos garitas distintas: la de 14:00–20:00 se creó un día después de la de 06:00–20:00 y
+encaja dentro de ella, así que todo apunta a que se registró para corregirla y nadie finalizó la
+original. Se conservó la de 14:00–20:00 —la única de las dos que cabe en una jornada legal— y la
+de catorce horas pasó a FINALIZADA, sin borrarla.
+
+Además de `validar_solapamiento_turno_guardia()`, ahora hay reglas de jornada (§D59).
 
 ## V27 — El "Código único" enfrenta a PCO con GPI
 
@@ -573,3 +576,18 @@ accesos físicos de verdad, y eso no es una decisión que deba tomarse de paso.
 
 La segunda asignación de esa cuenta (turno `MATUTINO`, sin horas) está FINALIZADA y tampoco
 habilita; es la fila cuyo turno en texto libre no se pudo migrar (§D57).
+
+## V30 — El descanso entre jornadas no se comprueba con turnos nocturnos
+
+`validar_jornada_guardia()` (§D59) comprueba el descanso mínimo midiendo la ventana que ocupan
+todos los turnos activos de un guardia en un día, de punta a punta: lo que sobra hasta las 24 h
+es su descanso.
+
+Ese cálculo **no está definido cuando alguno de los turnos cruza medianoche**, porque entonces la
+jornada pisa dos días naturales y "la ventana del día" deja de significar algo. En ese caso se
+aplican solo las otras dos reglas: la duración máxima del turno (12 h) y el solapamiento.
+
+En la práctica hoy no afecta a nadie: ningún guardia tiene un turno nocturno combinado con otro.
+Pero si la EPN empieza a usar turnos rotativos con nocturnos, **hay que modelar el día laboral**
+—con fecha y hora de entrada y salida, no solo horas sueltas— para que el descanso se pueda
+calcular bien. Está señalado en el propio código.

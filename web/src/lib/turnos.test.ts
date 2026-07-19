@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { estaEnTurno, horaEcuadorHHMM } from './format'
+import { duracionTurnoMin, estaEnTurno, horaEcuadorHHMM } from './format'
 import { esUbicacionEPN, normalizarUbicacionEPN, validarUbicacionEPN } from './validacion'
 import { CAT } from './catalogos'
 
@@ -51,6 +51,27 @@ describe('estaEnTurno', () => {
     vi.setSystemTime(new Date('2026-07-20T03:00:00Z'))
     expect(horaEcuadorHHMM()).toBe('22:00')
     expect(estaEnTurno('22:00', '06:00')).toBe(true)
+  })
+})
+
+describe('duracionTurnoMin', () => {
+  it('mide un turno normal', () => {
+    expect(duracionTurnoMin('07:00', '17:00')).toBe(600)
+    expect(duracionTurnoMin('14:00', '20:00')).toBe(360)
+  })
+
+  it('el turno nocturno dura 8 horas, no menos 16', () => {
+    // Es el fallo que tuvo la versión SQL: sumar 24 h a un `time` lo envuelve en vez de pasarlo
+    // al día siguiente, así que 22:00→06:00 daba -960 minutos. Y una duración negativa nunca
+    // supera el máximo, con lo que TODOS los turnos nocturnos se saltaban la validación de
+    // jornada: uno de 22:00 a 21:00 (23 horas) se habría aceptado.
+    expect(duracionTurnoMin('22:00', '06:00')).toBe(480)
+    expect(duracionTurnoMin('22:00', '21:00')).toBe(1380)
+  })
+
+  it('sin alguna de las dos horas no mide nada', () => {
+    expect(duracionTurnoMin(null, '17:00')).toBeNull()
+    expect(duracionTurnoMin('07:00', null)).toBeNull()
   })
 })
 

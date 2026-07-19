@@ -792,7 +792,9 @@ function RecordForm({
                   label={c.label}
                   htmlFor={campoId}
                   required={c.required && !disabled}
-                  hint={c.hint}
+                  // El aviso no sustituye al error: si hay error, manda el error. Solo se muestra
+                  // cuando el valor es válido pero merece una segunda mirada (ej. horas extra).
+                  hint={(!erroresCampo[c.name] && c.aviso?.(String(valores[c.name] ?? ''), valores)) || c.hint}
                   ayuda={c.ayuda}
                   error={erroresCampo[c.name]}
                 >

@@ -65,6 +65,12 @@ export interface FieldConfig {
    *  resto de valores del formulario, para reglas que dependen de otro campo (ej. el valor de
    *  un parámetro según su tipo_dato). */
   validar?: (valor: string, valores: Record<string, any>) => string | null
+  /** Advertencia que NO impide guardar, mostrada bajo el campo mientras se rellena el formulario.
+   *
+   *  Para lo que es legal pero conviene mirar dos veces. Se usa en el turno del guardia: entre 8
+   *  y 12 horas la jornada es válida, pero son horas extra y quien la registra debería saberlo.
+   *  Distinto de `validar`, que bloquea, y de `hint`, que es un texto fijo. */
+  aviso?: (valor: string, valores: Record<string, any>) => string | null
   /** Normaliza el valor justo antes de enviarlo (ej. teléfono a +593, placa a canónica). Se
    *  aplica después de `validar`. La BD vuelve a normalizar por su cuenta: esto es solo para
    *  que el usuario vea en pantalla lo mismo que se guardó. */

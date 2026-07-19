@@ -864,3 +864,52 @@ Se añadió `persona_select_propia`, y con ella todos los roles muestran ya su n
 **Regla para la próxima vez:** ante un campo que aparece vacío o "—" en una pantalla, comprobar
 la política antes que el componente. Un embed bloqueado por RLS se ve exactamente igual que un
 dato que no existe.
+
+## §D59 — Un turno de guardia tiene límites de jornada y de descanso
+
+**Conflicto:** nada impedía registrar un turno de catorce horas seguidas, ni encadenar dos turnos
+sin descanso entre ellos. Los datos sembrados lo demostraban: había un turno de 14 h y otro de
+10 h, y un guardia con dos asignaciones activas a la vez (§V26). El sistema aceptaba cualquier
+cosa que fuera un par de horas válidas.
+
+**Decisión:** tres reglas, con los límites en `parametro_sistema` y no en el código, porque son
+política laboral y pueden cambiar:
+
+1. **Ningún turno pasa de 12 horas** (`JORNADA_MAXIMA_GUARDIA_HORAS`). Referencia: Código del
+   Trabajo del Ecuador — 8 h ordinarias (art. 47) ampliables con extras hasta 12 (art. 55).
+2. **Entre 8 y 12 horas se avisa sin bloquear.** Es legal, pero son horas extra y quien registra
+   la asignación debería saber lo que está firmando. Para esto se añadió `FieldConfig.aviso`,
+   que hasta ahora no existía: el motor solo tenía errores que bloquean y textos fijos.
+3. **12 horas de descanso continuo entre jornadas** (`DESCANSO_MINIMO_GUARDIA_HORAS`). Se mide
+   sobre la ventana que ocupan todos los turnos activos del guardia ese día, de punta a punta;
+   lo que sobra hasta las 24 h es su descanso.
+
+Consecuencia deliberada de la regla 3: un guardia **no puede tener dos asignaciones cuya suma se
+extienda más de 12 horas al día**. Dos turnos pegados (07:00–17:00 y 17:00–19:00) siguen siendo
+válidos —12 h justas de trabajo y 12 de descanso—, pero repartir la jornada de 06:00 a 21:00 ya
+no. Es lo que se pretendía: en la vida real un guardia tiene un turno, no dos.
+
+Lo que la regla 3 **no** cubre son los turnos que cruzan medianoche, donde "la ventana del día"
+no está definida: ahí se aplican solo las reglas 1 y 2 y el solapamiento (§V30).
+
+**Un fallo que merece quedar escrito.** La primera versión de `duracion_turno_min()` calculaba el
+turno nocturno como `(hora_fin + interval '24 hour') - hora_inicio`, y devolvía **−16 horas** para
+22:00–06:00. En aritmética de `time`, sumar 24 h no lleva al día siguiente: **envuelve**. El
+efecto no era cosmético — una duración negativa nunca supera el máximo, así que *todos* los turnos
+nocturnos se saltaban la validación de jornada, y uno de 22:00 a 21:00 (23 horas) se habría
+aceptado. Ahora se calcula sobre minutos desde medianoche, igual que `tramos_turno()`. **No usar
+aritmética de intervalos sobre `time`.**
+
+## §D60 — Una asignación sobre un punto en mantenimiento se marca en pantalla
+
+**Conflicto:** la asignación de "Guardia Demo" se veía impecable —vigente, dentro de horario— pero
+el guardia no podía operar: `esta_en_turno_guardia()` (req 34) exige que el punto de control esté
+ACTIVO, y el suyo estaba en MANTENIMIENTO. Nada en la pantalla lo decía.
+
+**Decisión:** el comportamiento del sistema es el correcto y no se toca — un guardia no puede
+trabajar en un punto que está en mantenimiento o averiado. Lo que faltaba era **decirlo**: la
+lista y la ficha de asignaciones marcan ahora las que apuntan a un punto no operativo, para que
+PCO sepa que a ese guardia hay que reasignarlo a otro punto.
+
+Los estados de `punto_control` siguen siendo manuales: nada los cambia solo. Que un punto entre en
+mantenimiento y deje a su guardia sin poder trabajar es una consecuencia visible, no automática.

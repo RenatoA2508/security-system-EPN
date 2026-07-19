@@ -50,7 +50,20 @@ const { supabase, updatesHechos } = vi.hoisted(() => {
         correo_electronico: 'guardia.demo@epn.edu.ec',
         persona: { nombres: 'Guardia', apellidos: 'Demo', cedula: '1750000018' },
       },
-      punto: { nombre_punto: 'Puerta Norte' },
+      punto: { nombre_punto: 'Puerta Norte', estado_punto: 'ACTIVO' },
+    }, {
+      // Asignación impecable sobre un punto que está en mantenimiento: el guardia no puede
+      // operar y hasta ahora nada lo decía en pantalla (§V29).
+      id_asignacion: 'a-2', id_usuario: 'u-g2', id_punto_control: 'p-3',
+      turno: '08:00–16:00', hora_inicio: '08:00:00', hora_fin: '16:00:00',
+      fecha_inicio: '2026-07-01T00:00:00Z', fecha_fin: '2026-07-31T00:00:00Z',
+      estado_asignacion: 'ACTIVA',
+      guardia: {
+        nombre_usuario: 'otro_guardia',
+        correo_electronico: 'otro@epn.edu.ec',
+        persona: { nombres: 'Otro', apellidos: 'Guardia', cedula: '1750000209' },
+      },
+      punto: { nombre_punto: 'Puerta en obras', estado_punto: 'MANTENIMIENTO' },
     }],
   }
 
@@ -305,15 +318,89 @@ describe('asignaciones de guardia', () => {
   it('avisa de si el guardia está en turno en este momento', async () => {
     montar(cfgAsignacionGuardia)
 
-    // Son las 12:00 en Ecuador y el turno es 07:00–17:00.
-    expect(await screen.findByText(/En turno ahora/i)).toBeInTheDocument()
+    // Son las 12:00 en Ecuador y el turno de Guardia Demo es 07:00–17:00. Se acota a su fila:
+    // hay más asignaciones en pantalla y algunas también están en turno a esa hora.
+    const fila = (await screen.findByText(/Guardia Demo/)).closest('tr') as HTMLElement
+    expect(within(fila).getByText(/En turno ahora/i)).toBeInTheDocument()
   })
 
   it('fuera del horario, el mismo turno aparece como fuera de turno', async () => {
     vi.setSystemTime(new Date('2026-07-20T22:00:00-05:00'))
     montar(cfgAsignacionGuardia)
 
-    expect(await screen.findByText(/Fuera de turno/i)).toBeInTheDocument()
+    const fila = (await screen.findByText(/Guardia Demo/)).closest('tr') as HTMLElement
+    expect(within(fila).getByText(/Fuera de turno/i)).toBeInTheDocument()
+  })
+
+  it('avisa cuando el punto está en mantenimiento y el guardia no puede operar', async () => {
+    montar(cfgAsignacionGuardia)
+
+    // Positiva primero: la asignación existe y se ve su punto.
+    expect(await screen.findByText(/Puerta en obras/)).toBeInTheDocument()
+    // Y el motivo por el que esa asignación no sirve, que antes no aparecía por ninguna parte.
+    expect(screen.getByText(/no puede operar aquí/i)).toBeInTheDocument()
+  })
+
+  it('el punto operativo no lleva ningún aviso', async () => {
+    montar(cfgAsignacionGuardia)
+
+    const fila = (await screen.findByText(/Puerta Norte/)).closest('tr')
+    expect(fila).not.toBeNull()
+    expect(within(fila as HTMLElement).queryByText(/no puede operar/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('jornada del guardia', () => {
+  it('rechaza un turno de más de 12 horas', async () => {
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgAsignacionGuardia)
+
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Asignación/i }))
+    await usuario.type(screen.getByLabelText(/Entrada/i), '06:00')
+    await usuario.type(screen.getByLabelText(/Salida/i), '20:00')
+
+    // 14 horas: es el turno que tenía registrado frank.jumbo antes de esta ronda.
+    expect(await screen.findByText(/no puede durar 14\.0 horas/i)).toBeInTheDocument()
+  })
+
+  it('avisa de las horas extra sin bloquear entre 8 y 12 horas', async () => {
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgAsignacionGuardia)
+
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Asignación/i }))
+    await usuario.type(screen.getByLabelText(/Entrada/i), '07:00')
+    await usuario.type(screen.getByLabelText(/Salida/i), '17:00')
+
+    // 10 horas: legal, pero son dos de horas extra y quien lo registra debe saberlo.
+    expect(await screen.findByText(/horas extra/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no puede durar/i)).not.toBeInTheDocument()
+  })
+
+  it('una jornada ordinaria no dice nada', async () => {
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgAsignacionGuardia)
+
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Asignación/i }))
+    await usuario.type(screen.getByLabelText(/Entrada/i), '08:00')
+    await usuario.type(screen.getByLabelText(/Salida/i), '16:00')
+
+    // Positiva primero: el campo tiene el valor que se tecleó.
+    expect(screen.getByLabelText(/Salida/i)).toHaveValue('16:00')
+    expect(screen.queryByText(/horas extra/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no puede durar/i)).not.toBeInTheDocument()
+  })
+
+  it('el turno nocturno de 8 horas es válido, no uno de 16', async () => {
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgAsignacionGuardia)
+
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Asignación/i }))
+    await usuario.type(screen.getByLabelText(/Entrada/i), '22:00')
+    await usuario.type(screen.getByLabelText(/Salida/i), '06:00')
+
+    expect(screen.getByLabelText(/Salida/i)).toHaveValue('06:00')
+    expect(screen.queryByText(/no puede durar/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/horas extra/i)).not.toBeInTheDocument()
   })
 })
 
