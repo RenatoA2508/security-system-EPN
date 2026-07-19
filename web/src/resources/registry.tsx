@@ -14,7 +14,7 @@ import {
   cfgVehiculo, cfgZona, cfgPuntoControl, cfgDispositivo, cfgAsignacionGuardia,
   cfgPersonaExterna, cfgMemorando, cfgPersonaMemorando, cfgReglaAcceso, cfgAutorizacion,
 } from './configs'
-import { cfgBitacora, cfgSesion, cfgEventoAcceso, cfgBiometriaADM } from './configs-lectura'
+import { cfgBitacora, cfgSesion, cfgEventoAcceso, cfgBiometriaADM, cfgErrorReconocimiento } from './configs-lectura'
 import { cfgPersonaInterna, cfgPersonaInternaDetalle } from './configs-gpi'
 import { PersonasADMScreen } from '../pages/modules/PersonasADMScreen'
 import { UsuariosScreen } from '../pages/modules/UsuariosScreen'
@@ -95,8 +95,11 @@ export const MODULOS: ModuloDef[] = [
     icono: <Lock className="h-7 w-7" />,
     submodulos: [
       sub('reglas', 'Reglas de acceso', 'Quién puede entrar, por dónde y en qué horario.', <ListChecks className="h-6 w-6" />, cfgReglaAcceso),
-      sub('eventos', 'Eventos de acceso', 'Histórico de ingresos y salidas.', <History className="h-6 w-6" />, cfgEventoAcceso()),
+      sub('eventos', 'Historial de accesos', 'Ingresos, salidas y rechazos, con su motivo.', <History className="h-6 w-6" />, cfgEventoAcceso()),
       { key: 'alertas', titulo: 'Alertas de seguridad', descripcion: 'Atención de alertas automáticas.', icono: <ShieldAlert className="h-6 w-6" />, permisoVer: ['CAC_ALERTA_SELECT'], render: () => <AlertasScreen /> },
+      // RF-CA-022: los fallos de cámara y de lectura de placas dejaban de existir al recargar
+      // la página, así que nadie podía saber que una garita llevaba días sin cámara.
+      sub('errores', 'Errores de reconocimiento', 'Fallos de cámara, rostro y lectura de placas.', <Cctv className="h-6 w-6" />, cfgErrorReconocimiento()),
       // "Asignaciones de guardia" queda exclusivamente en PCO (feedback CAC: "Quitar asignación
       // de guardia"). El permiso INSERT/UPDATE de CAC sobre guardia_punto_control ya fue revocado.
     ],

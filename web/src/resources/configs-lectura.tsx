@@ -5,7 +5,7 @@ import { describirDispositivo } from '../lib/dispositivo'
 import { Badge } from '../components/ui'
 import { BotonCerrarSesion } from '../components/BotonCerrarSesion'
 import { opcionesCatalogo } from './opciones'
-import { etiquetaCampo, humanizar } from '../lib/catalogos'
+import { etiquetaCampo, humanizar, MOTIVO_LEGIBLE, CAT } from '../lib/catalogos'
 
 const d = (v: any) => (v == null || v === '' ? '—' : String(v))
 
@@ -366,33 +366,122 @@ export function cfgEventoAcceso(): ResourceConfig {
     titulo: 'Eventos de acceso',
     singular: 'Evento',
     idField: 'id_evento',
-    select: '*, persona:persona(nombres, apellidos, cedula), punto:punto_control(nombre_punto), vehiculo:vehiculo(placa)',
+    select: '*, persona:persona(nombres, apellidos, cedula, categoria:categoria_persona(codigo_categoria)), punto:punto_control(nombre_punto), vehiculo:vehiculo(placa), salida:evento_acceso!id_evento_ingreso(fecha_hora, punto:punto_control(nombre_punto))',
     orderBy: { columna: 'fecha_hora', ascendente: false },
     permisos: { select: ['CAC_EVENTO_SELECT', 'CAC_EVENTO_SELECT_PUNTO_ASIGNADO'] },
-    buscarEn: ['persona.cedula', 'persona.apellidos', 'punto.nombre_punto', 'fecha_hora'],
+    buscarEn: ['persona.cedula', 'persona.apellidos', 'punto.nombre_punto', 'placa_detectada', 'fecha_hora'],
     filtros: [
       { campo: 'tipo_movimiento', label: 'Movimiento', opciones: [{ value: 'INGRESO', label: 'Ingreso' }, { value: 'SALIDA', label: 'Salida' }] },
+      // RF-CA-024/025: el tipo de acceso es parte de lo que el historial debe mostrar, así
+      // que también debe poder filtrarse por él.
+      { campo: 'tipo_acceso', label: 'Tipo de acceso', opciones: [{ value: 'PEATONAL', label: 'Peatonal' }, { value: 'VEHICULAR', label: 'Vehicular' }] },
       { campo: 'origen_registro', label: 'Origen', opciones: [{ value: 'AUTOMATICA', label: 'Automática' }, { value: 'MANUAL', label: 'Manual' }] },
       { campo: 'resultado', label: 'Resultado', opciones: [{ value: 'AUTORIZADO', label: 'Autorizado' }, { value: 'DENEGADO', label: 'Denegado' }] },
     ],
     columnas: [
       { key: 'fecha_hora', label: 'Fecha', render: (r) => fmtFechaHora(r.fecha_hora) },
-      { key: 'persona', label: 'Persona', render: (r) => (r.persona ? `${r.persona.apellidos} ${r.persona.nombres}` : '—') },
-      { key: 'punto', label: 'Punto', render: (r) => r.punto?.nombre_punto ?? '—' },
+      // "Persona desconocida", no "—": el evento sin persona de RF-CA-021 es un intento de
+      // alguien no identificado, no un dato que falte.
+      { key: 'persona', label: 'Persona', render: (r) => nombrePersona(r), valorExport: (r) => nombrePersona(r) },
+      { key: 'categoria', label: 'Categoría', render: (r) => humanizar(r.persona?.categoria?.codigo_categoria) },
+      { key: 'punto', label: 'Garita', render: (r) => r.punto?.nombre_punto ?? '—' },
+      { key: 'tipo_acceso', label: 'Tipo', badge: true },
       { key: 'tipo_movimiento', label: 'Movimiento', badge: true },
-      { key: 'origen_registro', label: 'Origen' },
       { key: 'resultado', label: 'Resultado', badge: true },
+      // El motivo del rechazo va en el listado, no solo en la ficha: RF-CA-024 lo pide como
+      // columna del historial, y abrir cada fila para saber por qué se denegó un acceso hace
+      // inservible la consulta cuando hay veinte denegaciones seguidas.
+      { key: 'motivo_resultado', label: 'Motivo del rechazo', render: (r) => motivoLegible(r), valorExport: (r) => motivoLegible(r) },
     ],
-    campoTituloDetalle: (r) => (r.persona ? `${r.persona.nombres} ${r.persona.apellidos}` : 'Evento'),
-    campoSubtituloDetalle: (r) => <><Badge value={r.tipo_movimiento} /> <Badge value={r.resultado} /></>,
+    campoTituloDetalle: (r) => nombrePersona(r),
+    campoSubtituloDetalle: (r) => <><Badge value={r.tipo_acceso} /> <Badge value={r.tipo_movimiento} /> <Badge value={r.resultado} /></>,
     detalle: [
       { label: 'Fecha y hora', render: (r) => fmtFechaHora(r.fecha_hora) },
       { label: 'Cédula', render: (r) => d(r.persona?.cedula) },
-      { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? '—' },
+      { label: 'Categoría', render: (r) => humanizar(r.persona?.categoria?.codigo_categoria) },
+      { label: 'Garita', render: (r) => r.punto?.nombre_punto ?? '—' },
+      { label: 'Tipo de acceso', render: (r) => humanizar(r.tipo_acceso) },
+      // RF-CA-013 / RF-CA-024: la salida asociada a este ingreso, cuando exista.
+      { label: 'Hora de salida', render: (r) => horaDeSalida(r) },
       { label: 'Vehículo', render: (r) => (r.vehiculo?.placa ? formatearPlaca(r.vehiculo.placa) : '—') },
+      {
+        label: 'Placa leída',
+        render: (r) => (r.placa_detectada
+          ? `${formatearPlaca(r.placa_detectada)}${r.confianza_placa != null ? ` (confianza ${Number(r.confianza_placa).toFixed(2)})` : ''}`
+          : '—'),
+      },
       { label: 'Conductor', render: (r) => (r.es_conductor ? 'Sí' : 'No') },
+      { label: 'Confianza facial', render: (r) => (r.confianza_biometria != null ? Number(r.confianza_biometria).toFixed(3) : '—') },
       { label: 'Origen', render: (r) => humanizar(r.origen_registro) },
-      { label: 'Motivo', render: (r) => d(r.motivo_resultado) },
+      { label: 'Motivo', render: (r) => motivoLegible(r) },
+    ],
+    campos: [],
+  }
+}
+
+function nombrePersona(r: any): string {
+  if (r.persona) return `${r.persona.apellidos} ${r.persona.nombres}`
+  return 'Persona desconocida'
+}
+
+/** El motivo viaja como `CODIGO: explicación`. Se muestra el titular en castellano y, detrás,
+ *  la explicación concreta — un código en mayúsculas no es un mensaje para nadie (RNF-CA-004). */
+function motivoLegible(r: any): string {
+  if (!r.motivo_resultado) return '—'
+  const [codigo, ...resto] = String(r.motivo_resultado).split(':')
+  const titular = MOTIVO_LEGIBLE[codigo.trim()]
+  const explicacion = resto.join(':').trim()
+  if (!titular) return String(r.motivo_resultado)
+  return explicacion ? `${titular} — ${explicacion}` : titular
+}
+
+function horaDeSalida(r: any): string {
+  const salidas = (r.salida ?? []) as { fecha_hora: string; punto?: { nombre_punto: string } | null }[]
+  if (r.tipo_movimiento !== 'INGRESO') return 'No aplica'
+  if (salidas.length === 0) return r.resultado === 'AUTORIZADO' ? 'Sigue dentro' : '—'
+  const salida = salidas[0]
+  return `${fmtFechaHora(salida.fecha_hora)}${salida.punto ? ` · ${salida.punto.nombre_punto}` : ''}`
+}
+
+/**
+ * Errores de reconocimiento — RF-CA-022, histórico de solo lectura.
+ *
+ * Registra lo que falla del lado técnico: la cámara que el navegador no deja abrir, el modelo
+ * facial que no carga, el servicio de placas que no responde, la imagen en la que no se
+ * distingue nada. Son incidencias que hasta ahora se le mostraban al guardia como un texto
+ * rojo y desaparecían al recargar la página, así que nadie podía saber si una garita llevaba
+ * una semana con la cámara estropeada.
+ */
+export function cfgErrorReconocimiento(): ResourceConfig {
+  return {
+    tabla: 'error_reconocimiento',
+    titulo: 'Errores de reconocimiento',
+    singular: 'Error de reconocimiento',
+    idField: 'id_error',
+    select: '*, punto:punto_control(nombre_punto), dispositivo:dispositivo(nombre_dispositivo)',
+    orderBy: { columna: 'fecha_hora', ascendente: false },
+    permisos: { select: ['CAC_EVENTO_SELECT', 'CAC_EVENTO_SELECT_PUNTO_ASIGNADO'] },
+    buscarEn: ['descripcion', 'punto.nombre_punto'],
+    filtros: [
+      { campo: 'tipo_reconocimiento', label: 'Reconocimiento', opciones: opcionesCatalogo(CAT.error_reconocimiento_tipo) },
+      { campo: 'codigo_error', label: 'Tipo de fallo', opciones: opcionesCatalogo(CAT.error_reconocimiento_codigo) },
+    ],
+    columnas: [
+      { key: 'fecha_hora', label: 'Fecha', render: (r) => fmtFechaHora(r.fecha_hora) },
+      { key: 'tipo_reconocimiento', label: 'Reconocimiento', badge: true },
+      { key: 'codigo_error', label: 'Fallo', render: (r) => humanizar(r.codigo_error) },
+      { key: 'punto', label: 'Garita', render: (r) => r.punto?.nombre_punto ?? '—' },
+      { key: 'descripcion', label: 'Detalle' },
+    ],
+    campoTituloDetalle: (r) => humanizar(r.codigo_error),
+    campoSubtituloDetalle: (r) => <Badge value={r.tipo_reconocimiento} />,
+    detalle: [
+      { label: 'Fecha y hora', render: (r) => fmtFechaHora(r.fecha_hora) },
+      { label: 'Reconocimiento', render: (r) => humanizar(r.tipo_reconocimiento) },
+      { label: 'Tipo de fallo', render: (r) => humanizar(r.codigo_error) },
+      { label: 'Garita', render: (r) => r.punto?.nombre_punto ?? '—' },
+      { label: 'Dispositivo', render: (r) => r.dispositivo?.nombre_dispositivo ?? '—' },
+      { label: 'Detalle', render: (r) => d(r.descripcion) },
     ],
     campos: [],
   }
