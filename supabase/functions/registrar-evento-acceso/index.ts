@@ -462,6 +462,14 @@ async function validarSalidaOcupante(
     };
   }
 
+  // Si no hay ningun ingreso registrado, la salida se AUTORIZA igualmente. No es un descuido:
+  // denegar una salida no impide nada, retiene a una persona dentro del campus. Puede haber
+  // entrado antes de que el sistema existiera, por una garita con el equipo caido, o su
+  // ingreso pudo quedar denegado y colarse igual — y en los tres casos lo que hay que hacer es
+  // dejarla salir y que quede el registro, no discutir con ella en la puerta. El evento se
+  // guarda con id_evento_ingreso nulo, que es la señal de que esa salida no casa con ningun
+  // ingreso y merece una mirada en el historial.
+
   // La regla del "mismo punto" solo aplica a visitantes con autorizacion de visita diaria
   // (§D23), no a externos con memorando ni a internos.
   const esVisitaDiaria = Boolean(ultimoIngreso?.id_autorizacion_visita);

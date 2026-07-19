@@ -25,7 +25,7 @@
     },
     {
       "type": "assertion",
-      "description": "La pantalla está abierta y muestra columnas llamadas 'Reconocimiento', 'Fallo', 'Garita' y 'Detalle'"
+      "description": "La pantalla 'Errores de reconocimiento' está abierta. Si hay al menos un registro, la tabla muestra las columnas 'Reconocimiento', 'Fallo', 'Garita' y 'Detalle'. Si la tabla está vacía, basta con que se muestre el mensaje de que no hay errores registrados junto con la barra de búsqueda y los filtros."
     },
     {
       "type": "assertion",
