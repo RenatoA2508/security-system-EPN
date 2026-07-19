@@ -771,3 +771,96 @@ decisión política, no una constante.
 
 De paso, `vista_vigencia_acceso` pasa a excluir los memorandos **anulados** (§D47): sin eso, un
 memorando anulado seguiría autorizando el ingreso mientras sus fechas siguieran corriendo.
+
+## §D53 — Una zona está en servicio o no lo está: se retira BLOQUEADA
+
+**Conflicto:** el modelo de datos daba a `zona.estado_zona` tres valores —ACTIVA, INACTIVA y
+BLOQUEADA— y PCO preguntó si tenían sentido los tres para una zona física de la EPN.
+
+**Decisión:** quedan **ACTIVA e INACTIVA**. BLOQUEADA no aportaba nada: operativamente era
+indistinguible de INACTIVA —en ambas no pasa nadie—, ninguna pantalla ni ninguna regla de CAC
+las trataba distinto, y obligaba a elegir entre dos palabras para el mismo hecho. Un catálogo
+con una opción que nadie sabe cuándo usar es una fuente de datos inconsistentes.
+
+Si en el futuro hace falta distinguir "fuera de servicio por obra" de "cierre de emergencia",
+eso pide un campo de motivo, no un estado más.
+
+## §D54 — Un punto de control no falla: falla el dispositivo que hay en él
+
+**Conflicto:** `punto_control.estado_punto` admitía FALLA, y PCO preguntó cómo puede fallar un
+punto de control.
+
+**Decisión:** tiene razón, y se retira. Un punto de control es un **lugar** (una puerta, una
+garita); no es un aparato y no se avería. Lo que se avería es el `dispositivo` instalado en él,
+y esa tabla sí conserva `FALLA_DE_RED` y `DANO_FISICO`. Un punto solo puede estar **ACTIVO** o
+en **MANTENIMIENTO** (cerrado a propósito). Las filas que estaban en FALLA pasaron a
+MANTENIMIENTO, que es lo que querían decir.
+
+Corolario: `dispositivo` **conserva** su campo de estado pese a que PCO pedía revisarlo también.
+Ahí sí describe algo real. Lo que se hizo fue sacarlo del formulario de alta: un dispositivo se
+instala funcionando, y la avería se registra después.
+
+## §D55 — La jerarquía de zonas es Campus → Edificio → Parqueadero
+
+**Conflicto:** el combo "Zona padre" ofrecía todas las zonas registradas, así que un parqueadero
+podía colgar de otro parqueadero, y `validar_jerarquia_zona()` solo exigía que el padre fuese un
+CAMPUS, fuera cual fuera el hijo.
+
+**Decisión:** cada tipo tiene un único padre válido — CAMPUS es la raíz, EDIFICIO cuelga de
+CAMPUS y PARQUEADERO de EDIFICIO. Se aplica en el trigger (que es lo que manda) y se refleja en
+el combo, que ahora solo ofrece el nivel inmediatamente superior.
+
+El trigger **no revalida** una edición que no toca ni el tipo ni el padre. Sin esa excepción, las
+zonas anteriores a la regla —hay una, §V24— quedarían congeladas: no se les podría corregir ni
+el nombre.
+
+## §D56 — El estado no se elige al registrar, se cambia después
+
+**Conflicto:** PCO lo señaló en zona, punto de control y dispositivo: *"no tiene sentido marcarla
+como activa o inactiva al registrarla"*. Es el mismo comentario que ya habían hecho ADM y GPE.
+
+**Decisión:** el combo de Estado desaparece de todos los formularios de **alta** de PCO. Todo
+nace en servicio (ACTIVA / ACTIVO / OPERATIVO). Sigue estando en la **edición**, que es donde
+cambiar un estado es una decisión consciente sobre algo que ya existe.
+
+Y como contrapartida obligatoria: se añadió el botón **Reactivar**
+(`ResourceConfig.reactivar`). Inactivar era hasta ahora un viaje de ida — la ficha ofrecía
+"Inactivar" y ninguna forma de deshacerlo salvo editar el registro a mano.
+
+## §D57 — El turno del guardia deja de ser texto libre
+
+**Conflicto:** `guardia_punto_control.turno` era un `varchar` que contenía tanto `"07:00–17:00"`
+como `"MATUTINO"` (§V10). `esta_en_turno_guardia()` (req 34) lo interpretaba con una expresión
+regular y un catálogo de parámetros, y lo que no encajaba no habilitaba a nadie.
+
+**Decisión:** las horas pasan a ser columnas (`hora_inicio`, `hora_fin`) y son la fuente de
+verdad; el texto `turno` se **deriva** de ellas por trigger, así que no pueden discrepar.
+`esta_en_turno_guardia()` usa las columnas cuando existen y solo cae al texto para las filas que
+aún no se han estructurado — no se ha duplicado la regla del req 34, se ha reforzado.
+
+Sobre *"los guardias únicamente podrán entrar a su usuario durante su turno"*: la restricción
+**ya existía** a nivel operativo (barrera dura en `evento_acceso` + `verificar_turno_guardia_actual()`
+en `GuardiaView`). No se ha convertido en un bloqueo del **inicio de sesión**: dejar a un guardia
+sin poder ni entrar al sistema por un turno mal tecleado es peor que el problema que resuelve.
+Lo que se añadió es visibilidad: la pantalla de asignaciones dice quién está en turno ahora.
+
+## §D58 — Dos "bugs de pantalla" de PCO que eran en realidad RLS
+
+Merece quedar escrito porque el síntoma despista y volverá a pasar.
+
+**"En Asignaciones de guardia no aparece el nombre del guardia."** La política
+`usuario_sistema_select` solo permitía leer la propia fila o exigía `ADM_USUARIO_SELECT`, que el
+Responsable de Puntos de Control no tiene. Cuando RLS filtra un **embed** de PostgREST, la
+consulta **no da error**: devuelve `guardia: null`. La columna pintaba "—" y parecía un fallo del
+`render`. Se añadieron dos políticas acotadas: quien gestiona o supervisa asignaciones puede leer
+las cuentas que son guardias, y las personas detrás de ellas. Nada más.
+
+**"Cambiar heidy.tenelema por Heidy Tenelema."** Parecía un dato mal escrito. No lo era: el
+encabezado muestra el nombre de la `persona` vinculada y, si no puede leerla, cae al nombre de
+cuenta (`AuthProvider.tsx:98`). **Ninguna** política dejaba a un usuario leer su propia ficha de
+persona. Renombrar la cuenta habría tapado el síntoma en una fila dejando igual a GPI, GPE y PCO.
+Se añadió `persona_select_propia`, y con ella todos los roles muestran ya su nombre real.
+
+**Regla para la próxima vez:** ante un campo que aparece vacío o "—" en una pantalla, comprobar
+la política antes que el componente. Un embed bloqueado por RLS se ve exactamente igual que un
+dato que no existe.

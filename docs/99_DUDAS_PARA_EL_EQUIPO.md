@@ -473,3 +473,73 @@ arrancaba en blanco (el cliente de Supabase falla al crearse sin URL).
 
 No se había detectado nunca porque hasta esta ronda ningún preview llegaba a compilar (§V21):
 los dos fallos se tapaban mutuamente. Ya están añadidas al entorno `preview`.
+
+## V24 — El "Parqueadero Subsuelo EARME" cuelga del campus, no de un edificio
+
+La ronda de PCO fijó la jerarquía **Campus → Edificio → Parqueadero**: un parqueadero depende
+de un edificio, no del campus. La única fila de tipo `PARQUEADERO` que hay sembrada cuelga
+directamente del campus, y **no existe ningún edificio EARME** al que reasignarla.
+
+No se ha tocado el dato. `validar_jerarquia_zona()` exige la regla al insertar y al cambiar el
+vínculo, pero no revalida una edición que no toca ni el tipo ni el padre, así que la fila se
+puede seguir editando con normalidad.
+
+**Qué hace falta decidir:** o se crea el edificio EARME y se reasigna el parqueadero, o se
+acepta que un parqueadero pueda colgar del campus (y entonces hay que relajar el trigger). No es
+una decisión de implementación: depende de cómo esté organizado el campus de verdad.
+
+## V25 — Los puntos de control que cuelgan del campus
+
+PCO pidió que al registrar un punto de control **no se ofrezca "Campus" como tipo de zona**,
+porque un punto de control está en un sitio concreto y no "en toda la universidad".
+
+Pero seis de los puntos sembrados —las garitas de entrada, "Acceso A/B/C…"— **sí cuelgan del
+campus**, y son precisamente las entradas a la universidad: no pertenecen a ningún edificio.
+
+Solución de compromiso: el tipo "Campus" desapareció del **alta**, pero se mantiene al **editar**,
+porque quitarlo también ahí habría dejado esas seis filas sin poder abrirse ni corregirse.
+
+**Qué hace falta decidir:** si las garitas de entrada al campus son un caso legítimo —y entonces
+"Campus" debería volver al alta— o si hay que modelarlas de otra forma. El autonumerado
+"Acceso A/B/C" (§D7) solo funciona sobre zonas de tipo campus, así que hoy depende de esto.
+
+## V26 — Dos asignaciones de guardia solapadas en los datos sembrados
+
+La cuenta `frank.jumbo` tiene **dos asignaciones ACTIVAS que se pisan**: 06:00–20:00 en la
+"Garita - Subsuelo EARME" y 14:00–20:00 en otro punto, con vigencias que también se solapan
+(17–31 y 18–31 de julio). Un guardia no puede estar en dos garitas a la vez.
+
+Se añadió `validar_solapamiento_turno_guardia()`, que impide crear solapamientos nuevos y
+contempla el turno nocturno. Las dos filas existentes **no se han tocado**: corregirlas es
+decidir cuál de los dos turnos es el bueno, y eso lo sabe PCO, no el sistema. El trigger no
+revalida ediciones que no tocan horas, fechas ni estado, así que se pueden seguir gestionando.
+
+## V27 — El "Código único" enfrenta a PCO con GPI
+
+El documento de PCO pide eliminar el concepto: *"Se elimina cualquier concepto de Código de
+Estudiante, ID de Usuario o Código de Profesor. El único identificador será la cédula. No debe
+existir un campo llamado Código, Matrícula o ID_Usuario."*
+
+**GPI pidió justo lo contrario en la ronda anterior** y ya está implementado y probado: *"Ahora
+el campo de Código Único solo es utilizado por los estudiantes; para el resto de personas este
+campo permanece bloqueado"*, con el trigger `validar_codigo_unico_estudiante` respaldándolo.
+
+Los dos requisitos no pueden cumplirse a la vez. **No se ha tocado GPI**: quitar el campo habría
+deshecho trabajo ya aprobado de otro módulo y roto sus pruebas, y la regla del proyecto es no
+resolver una contradicción entre documentos en silencio.
+
+Lo que sí se hizo, dentro de PCO: el identificador visible de una persona en las pantallas de
+PCO es **siempre la cédula** (la lista y la ficha de asignaciones muestran nombre y cédula, no
+el nombre de cuenta ni el correo).
+
+**Qué hace falta decidir:** si el código único de estudiante sobrevive o no. Está relacionado
+con §V18/§V19, también abiertas. Mientras tanto, GPI se queda como estaba.
+
+## V28 — La búsqueda "solo con 10 dígitos o por apellido" no se ha implementado
+
+PCO pide que *"el motor de búsqueda principal de usuarios se active únicamente al ingresar los
+10 dígitos de la cédula o por el apellido"*. Esa búsqueda vive en ADM y GPI, no en PCO, y
+cambiarla afecta a pantallas de otros módulos que ya se validaron.
+
+Hoy el buscador filtra por cédula, nombres, apellidos y correo desde el primer carácter. Queda
+para la ronda del módulo que sea dueño de esas pantallas.
