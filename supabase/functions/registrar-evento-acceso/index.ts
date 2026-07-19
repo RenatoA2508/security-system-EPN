@@ -365,7 +365,14 @@ async function validarIngresoOcupante(
   }
 
   // --- 8 y 9. Vehiculo y doble autenticacion (RF-CA-015 / RF-CA-016 / RNF-CA-005) -----
-  if (contexto.esVehicular && contexto.idVehiculo) {
+  //
+  // Estas dos comprobaciones se le hacen SOLO AL CONDUCTOR, y es importante que sea asi.
+  // RF-CA-017 dice que los pasajeros cumplen "las mismas reglas de acceso establecidas para un
+  // ingreso peatonal" — ni una mas. Exigirle a un pasajero estar asociado al vehiculo dejaria
+  // sin poder entrar a cualquiera que llegue en el coche de un compañero, que es la mitad de
+  // los ingresos vehiculares de una universidad. La placa autoriza al vehiculo y responsabiliza
+  // a quien lo conduce (§D22); a los pasajeros los autoriza su propia vigencia.
+  if (contexto.esVehicular && contexto.idVehiculo && ocupante.es_conductor === true) {
     const asociada = await supabase.rpc('persona_asociada_a_vehiculo', {
       p_id_persona: persona.id_persona,
       p_id_vehiculo: contexto.idVehiculo,
@@ -375,7 +382,7 @@ async function validarIngresoOcupante(
     if (asociada.data !== true) {
       return {
         autorizado: false,
-        motivo: 'PLACA_NO_RECONOCIDA: la placa no esta asociada a esta persona',
+        motivo: 'PLACA_NO_RECONOCIDA: quien conduce no esta autorizado a usar este vehiculo',
         ...conRegla,
       };
     }
@@ -383,7 +390,7 @@ async function validarIngresoOcupante(
     // RNF-CA-005: al conductor se le exigen LAS DOS validaciones. Un pasajero puede entrar
     // identificado por cedula, pero quien va al volante tiene que haber pasado por el rostro:
     // si no, basta con conducir el coche de otro para entrar con su placa.
-    if (ocupante.es_conductor === true && persona.tipo_persona === 'INTERNA' && !identificadoPorRostro) {
+    if (persona.tipo_persona === 'INTERNA' && !identificadoPorRostro) {
       return {
         autorizado: false,
         motivo: 'DOBLE_AUTENTICACION_FALLIDA: el conductor debe identificarse tambien por reconocimiento facial',

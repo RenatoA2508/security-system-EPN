@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera as CamIcon, Check, Image as ImageIcon, ScanLine, VideoOff, X } from 'lucide-react'
 import { supabase, mensajeError } from '../lib/supabase'
 import {
-  leerPlacaLocal, liberarLectorLocal, normalizarPlacaLeida, prepararImagenParaOcr,
-  type LecturaPlaca,
+  corregirPlacaOcr, leerPlacaLocal, liberarLectorLocal, normalizarPlacaLeida,
+  prepararImagenParaOcr, type LecturaPlaca,
 } from '../lib/placas'
 import { formatearPlaca, validarPlacaTipo } from '../lib/validacion'
 import { Badge, Button, ErrorBanner, Input, Spinner } from './ui'
@@ -215,10 +215,24 @@ export function LectorPlaca({
   }
 
   const usarPlacaManual = async () => {
-    const placa = normalizarPlacaLeida(placaManual)
+    const tecleada = normalizarPlacaLeida(placaManual)
+
+    // La corrección posicional se aplica TAMBIÉN a lo que se teclea, no solo a lo que lee la
+    // cámara. Un guardia confunde la I con el 1 y la O con el 0 exactamente igual que un OCR,
+    // sobre todo copiando una placa a contraluz desde tres metros. Rechazar "PDFI234" con un
+    // error de formato, cuando el sistema sabe de sobra que eso es PDF1234, es hostil sin
+    // ganar nada: la corrección no puede convertir una placa en otra placa válida distinta,
+    // porque solo toca caracteres que estaban en la clase equivocada.
+    const placa = corregirPlacaOcr(tecleada)
     const errorFormato = validarPlacaTipo('AUTOMOVIL')(placa)
     if (errorFormato) { setError(errorFormato); return }
+
     setError(null)
+    setAviso(
+      placa !== tecleada
+        ? `Se interpretó ${formatearPlaca(tecleada)} como ${formatearPlaca(placa)}. Compruebe que coincide con la placa del vehículo.`
+        : null,
+    )
     setLeyendo(true)
     try {
       await resolver({ placa, confianza: 1, motor: 'MANUAL' })

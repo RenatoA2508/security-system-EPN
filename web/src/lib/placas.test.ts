@@ -44,6 +44,19 @@ describe('corrección posicional de la lectura', () => {
   })
 })
 
+describe('lo que teclea el guardia también se corrige', () => {
+  // Lo encontró TestSprite: al escribir 'PDFI234' en el campo manual, la validación de formato
+  // lo rechazaba con "Placa no válida" antes de que el corrector llegara a mirarlo. El sistema
+  // sabía perfectamente que eso era PDF1234 y se negaba a usarlo. Un guardia confunde la I con
+  // el 1 igual que un OCR, sobre todo copiando una placa a contraluz.
+  it('una placa tecleada con la confusión típica queda en forma válida', () => {
+    expect(corregirPlacaOcr('PDFI234')).toBe('PDF1234')
+    expect(pareceePlacaEcuatoriana(corregirPlacaOcr('PDFI234'))).toBe(true)
+    // Y sin corregir no habría pasado la validación de formato, que es lo que ocurría antes.
+    expect(pareceePlacaEcuatoriana('PDFI234')).toBe(false)
+  })
+})
+
 describe('forma de la placa ecuatoriana', () => {
   it('acepta los formatos vigentes', () => {
     expect(pareceePlacaEcuatoriana('PDF1234')).toBe(true)  // 3 letras + 4 dígitos
