@@ -98,6 +98,26 @@ un comando que termina mata los hijos: los procesos mueren y los logs quedan vac
 funciona es lanzar todos con `&` y terminar con `wait` dentro de la misma invocación, en segundo
 plano.
 
+**5. No afirmes columnas de una tabla que puede estar vacía.** Un plan que dice "la tabla muestra
+las columnas X e Y" falla si no hay ni una fila, porque sin filas no se renderizan. Si el plan no
+crea sus propios datos, la aserción tiene que contemplar los dos casos.
+
+**Resultados de la ronda de CAC** (planes `28_*` a `33_*`):
+
+| Plan | Resultado |
+|---|---|
+| `32` Garita peatonal / vehicular | **passed 15/15** |
+| `30` Historial con motivo y tipo de acceso | **passed 22/22** |
+| `29` Regla sin combo de estado + reactivar | **passed 11/11** |
+| `33` Placa no registrada y corrección de erratas | **passed 11/11** |
+| `28` Garitas múltiples por regla | pendiente de cerrar |
+| `31` Errores de reconocimiento | pendiente de cerrar |
+
+TestSprite encontró **dos cosas que las pruebas locales no podían ver**: el desajuste de la
+cuenta de CAC (§V36) y que el campo de placa manual rechazaba `PDFI234` con un error de formato
+antes de que el corrector actuara, cuando el sistema sabía de sobra que eso era `PDF1234`.
+Merece la pena correr los planes contra el preview aunque la suite local esté verde.
+
 ```bash
 testsprite test create --plan-from tests/testsprite/planes/NN_nombre.json
 testsprite test run <testId> --target-url <url-del-preview> --wait --timeout 1800
