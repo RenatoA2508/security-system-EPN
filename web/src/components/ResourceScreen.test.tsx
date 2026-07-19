@@ -279,6 +279,19 @@ describe('persistencia del formulario', () => {
     expect(screen.getByRole('textbox', { name: /Número de memorando/i })).toHaveValue('EPN-DA-2026-0099-M')
   })
 
+  it('no guarda nada si el usuario solo abre el formulario y se va', async () => {
+    // Antes bastaba con abrir "Registrar" y esperar un segundo para dejar un borrador con los
+    // valores por defecto. A partir de ahí el aviso "tienes un registro sin terminar" salía
+    // siempre, aunque nunca se hubiera escrito nada, y dejaba de significar algo.
+    const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    montar(cfgMemorando)
+
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
+    await new Promise((r) => setTimeout(r, 1500))
+
+    expect(window.localStorage.getItem('epn.borrador:u-test:memorando:nuevo')).toBeNull()
+  })
+
   it('"Empezar de cero" descarta el borrador guardado', async () => {
     const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     const { unmount } = montar(cfgMemorando)

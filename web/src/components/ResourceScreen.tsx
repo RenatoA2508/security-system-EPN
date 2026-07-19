@@ -359,10 +359,13 @@ function ListaSeleccionMultiple({
   const visibles = useMemo(() => {
     const t = filtro.trim().toLowerCase()
     if (!t) return opciones
-    const tPlano = t.replace(/[^a-z0-9]/g, '')
+    // Sin quitar las tildes, buscar "amangandi" no encontraría a "Amangandí", que es justo lo
+    // que se teclea cuando se copia una cédula de un papel y el apellido de memoria.
+    const plano = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '')
+    const tPlano = plano(t)
     return opciones.filter((o) => {
       const l = o.label.toLowerCase()
-      return l.includes(t) || (tPlano.length > 0 && l.replace(/[^a-z0-9]/g, '').includes(tPlano))
+      return l.includes(t) || (tPlano.length > 0 && plano(l).includes(tPlano))
     })
   }, [opciones, filtro])
 
@@ -421,6 +424,7 @@ function RecordForm({
 }) {
   const { session } = useAuth()
   const esEdicion = !!registro
+  const valoresIniciales = useRef<Row | null>(null)
   const [valores, setValores] = useState<Row>(() => {
     const init: Row = {}
     for (const c of config.campos) {
@@ -431,6 +435,7 @@ function RecordForm({
       const def = typeof c.default === 'function' ? c.default() : c.default
       init[c.name] = registro ? registro[c.name] ?? '' : def ?? (c.type === 'checkbox' ? false : '')
     }
+    valoresIniciales.current = init
     return init
   })
   const [guardando, setGuardando] = useState(false)
@@ -444,7 +449,15 @@ function RecordForm({
   // largo (una persona tiene once campos) obligaba a empezar de cero. Solo en el alta: restaurar
   // sobre una edición pisaría el registro real con datos que quizá ya cambió otra persona.
   const claveBorrador = !esEdicion && session?.user.id ? `${session.user.id}:${config.tabla}:nuevo` : null
-  const borrador = useBorrador(claveBorrador, valores)
+  // Solo se guarda si el usuario ha escrito algo. Sin esta condición bastaba con abrir el
+  // formulario y esperar un segundo para dejar un borrador con los valores por defecto, y a
+  // partir de ahí el aviso "tienes un registro sin terminar" salía siempre, aunque nunca se
+  // hubiera escrito nada. Un aviso que aparece siempre deja de significar algo.
+  const hayCambios = useMemo(
+    () => JSON.stringify(valores) !== JSON.stringify(valoresIniciales.current),
+    [valores],
+  )
+  const borrador = useBorrador(claveBorrador, valores, { activo: hayCambios })
   const [avisoBorrador, setAvisoBorrador] = useState(borrador.hayBorrador)
 
   /** Error de formato por campo, mostrado bajo el input mientras se escribe. */
@@ -609,8 +622,7 @@ function RecordForm({
         return
       }
       borrador.descartar()
-      borrador.descartar()
-    onSaved()
+      onSaved()
       return
     }
 

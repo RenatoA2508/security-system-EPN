@@ -36,6 +36,10 @@ export function AutorizarVisita({ onListo }: { onListo?: () => void }) {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [yaAutorizada, setYaAutorizada] = useState(false)
+  // `BuscarPersonaPorCedula` guarda por dentro la persona que encontró, así que poner a null la
+  // de aquí no le afecta: seguiría enseñando la tarjeta del visitante anterior mientras el
+  // formulario ya ha desaparecido. Cambiar la clave lo remonta limpio para el siguiente.
+  const [ronda, setRonda] = useState(0)
 
   const puedeAutorizar = tiene('CAC_AUTORIZACION_INSERT') || tiene('GPE_AUTORIZACION_INSERT')
 
@@ -83,6 +87,8 @@ export function AutorizarVisita({ onListo }: { onListo?: () => void }) {
     setPersona(null)
     setMotivo('')
     setCedulaBuscada('')
+    setNoEncontrada(false)
+    setRonda((n) => n + 1)
     onListo?.()
   }
 
@@ -96,6 +102,7 @@ export function AutorizarVisita({ onListo }: { onListo?: () => void }) {
       </p>
 
       <BuscarPersonaPorCedula
+        key={ronda}
         id="autorizar-visita-cedula"
         label="Cédula del visitante"
         soloTipo="EXTERNA"

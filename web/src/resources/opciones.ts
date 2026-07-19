@@ -1,6 +1,7 @@
 import { fromTable, supabase } from '../lib/supabase'
 import type { Opcion } from './types'
 import { humanizar } from '../lib/catalogos'
+import { hoyISO } from '../lib/format'
 
 /** Convierte un arreglo de códigos de catálogo en opciones {value,label} humanizadas. */
 export function opcionesCatalogo(valores: readonly string[]): Opcion[] {
@@ -67,7 +68,10 @@ export async function optPersonasExternasConEmpresa(): Promise<Opcion[]> {
  *  Vincular a una persona con un memorando vencido no le da acceso, pero la lista los ofrecía
  *  igual y nada avisaba de que ese vínculo no serviría para nada. */
 export async function optMemorandosVigentes(): Promise<Opcion[]> {
-  const hoy = new Date().toISOString().slice(0, 10)
+  // `hoyISO()` y no `toISOString()`: en Ecuador son cinco horas menos, así que a partir de las
+  // 19:00 la fecha en UTC ya es la de mañana y un memorando que vence hoy —y que todavía
+  // autoriza el ingreso— desaparecería de esta lista. Mismo motivo que en §D52.
+  const hoy = hoyISO()
   const { data } = await fromTable('memorando')
     .select('id_memorando, numero_memorando, fecha_inicio, fecha_fin, estado_memorando, empresa:empresa(nombre)')
     .neq('estado_memorando', 'ANULADO')
