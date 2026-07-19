@@ -1,0 +1,35 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Vehículos — las asociaciones se gestionan desde la ficha, en GPI y GPE",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Personal Interno'"
+    },
+    {
+      "type": "assertion",
+      "description": "En el módulo Personal Interno existe una tarjeta 'Vehículos' y NO existe ninguna tarjeta titulada 'Asociaciones'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Vehículos' y pulsar sobre la fila de un vehículo para abrir su ficha"
+    },
+    {
+      "type": "assertion",
+      "description": "Dentro de la ficha del vehículo aparece un bloque 'Personas asociadas' con un botón 'Vincular persona'"
+    },
+    {
+      "type": "action",
+      "description": "Volver al Panel Principal y abrir el módulo 'Personal Externo'"
+    },
+    {
+      "type": "assertion",
+      "description": "En el módulo Personal Externo existe una tarjeta 'Vehículos' y NO existe ninguna tarjeta titulada 'Asociaciones'"
+    }
+  ]
+}

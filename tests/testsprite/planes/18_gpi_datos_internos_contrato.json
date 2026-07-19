@@ -1,0 +1,47 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "Datos internos — contrato Fijo o Temporal y unidad para el estudiante",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Personal Interno'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la tarjeta 'Datos internos'"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar el botón 'Registrar Detalle interno'"
+    },
+    {
+      "type": "action",
+      "description": "Elegir en 'Persona interna' una persona cuya categoría sea Docente"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece el campo 'Contrato' como un desplegable con exactamente las opciones 'Fijo' y 'Temporal', y NO como un campo de texto libre"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparecen también los campos 'Unidad', 'Cargo' y 'Categoría / escalafón'"
+    },
+    {
+      "type": "action",
+      "description": "Cambiar la persona por una cuya categoría sea Estudiante"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece el campo 'Unidad' con las opciones 'EPN' y 'CEC'"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparecen los campos 'Carrera' y 'Curso', y NO aparece el campo 'Cargo'"
+    }
+  ]
+}

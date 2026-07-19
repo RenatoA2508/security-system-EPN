@@ -376,3 +376,68 @@ La secuencia importó: primero el frontend desplegado, después el DROP. Al rev�
 aplicación en vivo habría pedido una columna inexistente y PostgREST responde 400 a un embed
 sobre una columna que no existe — las pantallas de personas habrían roto durante los minutos
 que separan un despliegue del otro.
+
+---
+
+## V18 — Un docente sembrado tiene código único de estudiante
+
+GPI dejó claro que *"el campo de Código Único solo es utilizado por los estudiantes"*, y así se
+implementó: el formulario solo lo muestra para estudiantes y el trigger
+`validar_codigo_unico_estudiante` lo impide desde la base.
+
+Pero ya había un dato que incumple la regla:
+
+| Cédula | Nombre | Categoría | Código único |
+|---|---|---|---|
+| 1750000232 | Cecilia (docente) | DOCENTE | 202510725 |
+
+**No se ha tocado.** El trigger valida solo cuando el valor cambia, precisamente para que este
+dato heredado no bloquee cualquier otra edición de esa ficha. Dos posibilidades: que sea un
+error de la carga inicial (y haya que ponerlo a NULL), o que esa persona esté además matriculada
+como estudiante, en cuyo caso la regla del documento tiene una excepción que conviene escribir.
+
+**Decide el equipo.** Si es un error, basta con vaciar el campo desde la ficha.
+
+## V19 — La misma persona tiene `carrera` siendo docente
+
+El mismo registro de §V18 tiene `carrera = 'Sistemas'`, un campo de estudiante. Con el
+formulario nuevo ese campo ya no se ofrece a los docentes, así que el dato no se puede volver a
+introducir, pero el existente sigue ahí y se ve en la ficha de detalle. No se ha borrado: no
+destruimos datos que no creamos.
+
+## V20 — El preview de Vercel está protegido por SSO y TestSprite no puede entrar
+
+Los 10 planes de TestSprite de esta ronda están **creados pero sin ejecutar** (arrastre del
+mismo problema de §V15, por una causa distinta).
+
+El proyecto de Vercel tiene `ssoProtection: all_except_custom_domains`: el dominio de producción
+`security-system-epn.vercel.app` es público, pero las URLs de preview piden iniciar sesión en
+Vercel. Para una revisión manual eso no estorba —quien es dueño de la cuenta entra con su
+sesión—, pero TestSprite recibe un 302 hacia `vercel.com/sso-api` y no puede probar nada.
+
+Dos salidas, ambas de una sola acción en el panel de Vercel (Settings → Deployment Protection):
+
+1. **Protection Bypass for Automation** (recomendada): genera un secreto y se añade a la URL del
+   proyecto de TestSprite como `?x-vercel-protection-bypass=TOKEN&x-vercel-set-bypass-cookie=true`.
+   No expone el preview a internet.
+2. **Desactivar la protección de previews**: más simple, pero deja las URLs de preview
+   accesibles para cualquiera que las tenga.
+
+Se intentó generar el token por API y el sistema de permisos lo bloqueó, con razón: es una
+modificación de la configuración de seguridad de un servicio externo.
+
+Mientras tanto, lo que sí quedó verificado: 97 pruebas de `@testing-library/react` y vitest,
+`scripts/pruebas_gpe_gpi_nuevas.sql` contra la base real (18 casos), y las 2 pruebas de backend
+de TestSprite. Lo que falta es la comprobación de las pantallas en un navegador de verdad.
+
+## V21 — La integración de Vercel con Git nunca había funcionado
+
+`ESTADO_SESION.md` daba por hecho que *"un push a main despliega solo"*. No era así: el Root
+Directory del proyecto apunta a la raíz del repositorio, así que cada despliegue disparado por
+Git instalaba el `package.json` de la raíz (solo la CLI de Supabase) y luego fallaba con
+`vite: command not found`. Los despliegues que funcionaron fueron todos manuales, lanzados con
+`npx vercel --prod` desde dentro de `web/`.
+
+Corregido con un `vercel.json` en la raíz (ver `docs/DESPLIEGUE.md`), que es lo que se puede
+hacer desde el repositorio. **Lo limpio sería poner el Root Directory en `web` desde el panel**;
+si alguien lo hace, hay que borrar ese `vercel.json`, porque entonces los `cd web` sobrarían.
