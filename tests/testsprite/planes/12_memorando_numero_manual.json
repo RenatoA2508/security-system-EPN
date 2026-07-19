@@ -5,15 +5,15 @@
   "planSteps": [
     {
       "type": "action",
-      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
     },
     {
       "type": "action",
-      "description": "Desde el Panel Principal, abrir el módulo 'Personal Externo'"
-    },
-    {
-      "type": "action",
-      "description": "Abrir la tarjeta 'Memorandos'"
+      "description": "Desde el Panel Principal, abrir el módulo 'Personal Externo' y abrir la tarjeta 'Memorandos'"
     },
     {
       "type": "action",
@@ -21,11 +21,15 @@
     },
     {
       "type": "assertion",
+      "description": "Se abre el formulario 'Registrar Memorando' con un campo etiquetado 'Número de memorando'"
+    },
+    {
+      "type": "assertion",
       "description": "El campo 'Número de memorando' está vacío y es editable: NO viene relleno con un código autogenerado que empiece por 'MEM-'"
     },
     {
       "type": "action",
-      "description": "Escribir 'MEMORANDO' en el campo 'Número de memorando' y pulsar 'Registrar'"
+      "description": "Escribir 'MEMORANDO' en el campo 'Número de memorando', rellenar la empresa y las dos fechas de vigencia, y pulsar 'Registrar'"
     },
     {
       "type": "assertion",
@@ -33,11 +37,11 @@
     },
     {
       "type": "action",
-      "description": "Borrar el contenido y escribir 'EPN-DA-2026-0777-M' en el campo 'Número de memorando'"
+      "description": "Borrar el contenido del campo y escribir 'EPN-DA-2026-0777-M'"
     },
     {
       "type": "assertion",
-      "description": "El mensaje de error desaparece y el campo acepta el valor escrito"
+      "description": "El mensaje de error sobre el dígito desaparece"
     }
   ]
 }

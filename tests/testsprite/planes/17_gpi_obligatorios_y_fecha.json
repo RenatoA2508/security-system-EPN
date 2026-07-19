@@ -5,23 +5,27 @@
   "planSteps": [
     {
       "type": "action",
-      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente lenin.amangandi@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Interno. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a lenin.amangandi@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Interno'"
     },
     {
       "type": "action",
-      "description": "Desde el Panel Principal, abrir el módulo 'Personal Interno'"
-    },
-    {
-      "type": "action",
-      "description": "Abrir la tarjeta 'Personal interno'"
+      "description": "Desde el Panel Principal, abrir el módulo 'Personal Interno' y abrir la tarjeta 'Personal interno'"
     },
     {
       "type": "action",
       "description": "Pulsar el botón 'Registrar Persona interna'"
     },
     {
+      "type": "assertion",
+      "description": "El formulario de registro está visible con el campo 'Categoría'"
+    },
+    {
       "type": "action",
-      "description": "Seleccionar la categoría 'Docente', escribir la cédula 1750000232, los nombres 'Cecilia', los apellidos 'Paredes' y el correo cecilia.paredes@epn.edu.ec, dejando el campo 'Sexo' sin elegir"
+      "description": "Seleccionar la categoría 'Docente', escribir la cédula 1710034065, los nombres 'Prueba', los apellidos 'Automatica' y el correo prueba.automatica@epn.edu.ec, dejando el campo 'Sexo' sin elegir"
     },
     {
       "type": "action",
@@ -33,7 +37,7 @@
     },
     {
       "type": "action",
-      "description": "Elegir el sexo 'Femenino' y escribir en 'Fecha de nacimiento' una fecha del año 2030"
+      "description": "Elegir el sexo 'Femenino' y escribir en 'Fecha de nacimiento' la fecha 01/01/2030"
     },
     {
       "type": "action",

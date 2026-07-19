@@ -5,11 +5,19 @@
   "planSteps": [
     {
       "type": "action",
-      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
     },
     {
       "type": "action",
       "description": "Desde el Panel Principal, abrir el módulo 'Personal Externo'"
+    },
+    {
+      "type": "assertion",
+      "description": "El módulo Personal Externo muestra una tarjeta titulada 'Memorandos'"
     },
     {
       "type": "action",
@@ -17,11 +25,15 @@
     },
     {
       "type": "assertion",
+      "description": "La tabla de memorandos muestra al menos un registro y tiene una columna 'Estado'"
+    },
+    {
+      "type": "assertion",
       "description": "El memorando 'EPN-DA-2026-0001-M', cuyo fin de vigencia es el 17/07/2026, aparece con el estado 'Vencido' y NO como 'Vigente'"
     },
     {
       "type": "action",
-      "description": "Pulsar sobre la fila del memorando 'EPN-DA-2026-0001-M' para abrir su ficha"
+      "description": "Pulsar sobre la fila del memorando 'EPN-DA-2026-0001-M' para abrir su ficha de detalle"
     },
     {
       "type": "action",
@@ -29,11 +41,15 @@
     },
     {
       "type": "assertion",
-      "description": "El campo 'Estado' aparece deshabilitado (en gris) y muestra el texto 'Vencido'"
+      "description": "Se abre el formulario 'Editar Memorando' y en él existe un campo etiquetado 'Estado'"
     },
     {
       "type": "assertion",
-      "description": "El campo 'Estado' NO es un desplegable seleccionable: no se puede elegir 'Vigente'"
+      "description": "El campo 'Estado' está deshabilitado (en gris) y su valor es el texto 'Vencido'"
+    },
+    {
+      "type": "assertion",
+      "description": "El campo 'Estado' NO es un desplegable con opciones seleccionables: no se puede elegir 'Vigente'"
     },
     {
       "type": "assertion",

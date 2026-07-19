@@ -5,35 +5,43 @@
   "planSteps": [
     {
       "type": "action",
-      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
     },
     {
       "type": "action",
-      "description": "Desde el Panel Principal, abrir el módulo 'Personal Externo'"
+      "description": "Desde el Panel Principal, abrir el módulo 'Personal Externo' y abrir la tarjeta 'Personal externo'"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla muestra al menos un registro de persona externa"
+    },
+    {
+      "type": "assertion",
+      "description": "La tabla tiene una columna llamada 'Autorización de ingreso'"
+    },
+    {
+      "type": "assertion",
+      "description": "NO existe una columna llamada solamente 'Ingreso' que muestre un número de días suelto"
     },
     {
       "type": "action",
-      "description": "Abrir la tarjeta 'Personal externo'"
+      "description": "Pulsar sobre la fila de una persona externa para abrir su ficha de detalle"
     },
     {
       "type": "assertion",
-      "description": "La tabla tiene una columna llamada 'Autorización de ingreso' y NO una columna llamada solo 'Ingreso' con un número de días suelto"
-    },
-    {
-      "type": "action",
-      "description": "Pulsar sobre la fila de una persona externa para abrir su ficha"
+      "description": "La ficha incluye una fila etiquetada 'Autorización de ingreso'"
     },
     {
       "type": "assertion",
-      "description": "La ficha incluye una fila 'Autorización de ingreso' que dice claramente si la persona puede ingresar o no"
+      "description": "Ese bloque indica de forma explícita si la persona puede ingresar o no puede ingresar"
     },
     {
       "type": "assertion",
-      "description": "Si la persona está vinculada a un memorando, se muestra el número del memorando como un enlace y las fechas entre las que autoriza el ingreso"
-    },
-    {
-      "type": "assertion",
-      "description": "Si la persona no tiene memorando ni autorización, el texto explica que hay que registrar una de las dos cosas"
+      "description": "Si la persona está vinculada a un memorando, se muestra el número del memorando como enlace y las fechas entre las que autoriza el ingreso; si no lo está, el texto explica que hay que registrar un memorando o una autorización de visita"
     }
   ]
 }

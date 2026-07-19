@@ -5,11 +5,19 @@
   "planSteps": [
     {
       "type": "action",
-      "description": "Abrir la aplicación e iniciar sesión con el correo admin@epn.edu.ec y la contraseña de la cuenta de pruebas"
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente lenin.amangandi@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Interno. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a lenin.amangandi@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Interno'"
     },
     {
       "type": "action",
       "description": "Desde el Panel Principal, abrir el módulo 'Personal Interno'"
+    },
+    {
+      "type": "assertion",
+      "description": "El módulo muestra una tarjeta titulada 'Datos internos'"
     },
     {
       "type": "action",
@@ -20,12 +28,16 @@
       "description": "Pulsar el botón 'Registrar Detalle interno'"
     },
     {
+      "type": "assertion",
+      "description": "El formulario muestra un desplegable etiquetado 'Persona interna'"
+    },
+    {
       "type": "action",
       "description": "Elegir en 'Persona interna' una persona cuya categoría sea Docente"
     },
     {
       "type": "assertion",
-      "description": "Aparece el campo 'Contrato' como un desplegable con exactamente las opciones 'Fijo' y 'Temporal', y NO como un campo de texto libre"
+      "description": "Aparece un campo 'Contrato' que es un desplegable con exactamente las opciones 'Fijo' y 'Temporal', y NO un campo de texto libre"
     },
     {
       "type": "assertion",
@@ -33,15 +45,15 @@
     },
     {
       "type": "action",
-      "description": "Cambiar la persona por una cuya categoría sea Estudiante"
+      "description": "Cambiar la selección de 'Persona interna' por una persona cuya categoría sea Estudiante"
     },
     {
       "type": "assertion",
-      "description": "Aparece el campo 'Unidad' con las opciones 'EPN' y 'CEC'"
+      "description": "Aparece un campo 'Unidad' con las opciones 'EPN' y 'CEC'"
     },
     {
       "type": "assertion",
-      "description": "Aparecen los campos 'Carrera' y 'Curso', y NO aparece el campo 'Cargo'"
+      "description": "Aparecen los campos 'Carrera' y 'Curso', y ya NO aparece el campo 'Cargo'"
     }
   ]
 }
