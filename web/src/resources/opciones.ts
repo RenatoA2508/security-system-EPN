@@ -39,6 +39,24 @@ export async function optZonasPorTipo(tipoZona: string): Promise<Opcion[]> {
   return ((data as any[]) ?? []).map((r) => ({ value: r.id_zona, label: r.nombre_zona }))
 }
 
+/** Tipo de zona que puede ser padre de cada tipo. Espejo de `validar_jerarquia_zona()`:
+ *  CAMPUS es la raíz, un EDIFICIO cuelga del CAMPUS y un PARQUEADERO de un EDIFICIO. */
+const PADRE_DE: Record<string, string | undefined> = {
+  EDIFICIO: 'CAMPUS',
+  PARQUEADERO: 'EDIFICIO',
+}
+
+/** Zonas que pueden ser padre de una del tipo dado.
+ *
+ *  Antes el combo "Zona padre" ofrecía TODAS las zonas registradas, así que al crear un
+ *  parqueadero se podían elegir otros parqueaderos o el campus (feedback PCO). Ahora solo se
+ *  ofrece el nivel inmediatamente superior, y la BD lo vuelve a comprobar por trigger. */
+export async function optZonasPadrePara(tipoZona: string): Promise<Opcion[]> {
+  const tipoPadre = PADRE_DE[tipoZona]
+  if (!tipoPadre) return []
+  return optZonasPorTipo(tipoPadre)
+}
+
 /** Puntos de control de una zona dada (cascada zona→punto al asignar dispositivo/guardia). */
 export async function optPuntosPorZona(idZona: string): Promise<Opcion[]> {
   if (!idZona) return []
@@ -87,5 +105,24 @@ export async function optMemorandosVigentes(): Promise<Opcion[]> {
  *  usuario_rol directamente, RLS doc 02). Evita asignar por error a un Responsable de Módulo. */
 export async function optGuardiasDisponibles(): Promise<Opcion[]> {
   const { data } = await (supabase as any).rpc('guardias_disponibles')
-  return ((data as any[]) ?? []).map((r) => ({ value: r.id_usuario, label: r.correo_electronico }))
+  // El RPC devuelve `nombre_usuario` ("guardia_demo"), que no es el nombre de nadie. Se muestra
+  // ese identificador junto al correo solo como desempate; quien elige necesita reconocer a la
+  // persona, y el correo es lo único que el RPC expone de ella.
+  return ((data as any[]) ?? []).map((r) => ({
+    value: r.id_usuario,
+    label: `${humanizarNombreCuenta(r.nombre_usuario)} · ${r.correo_electronico}`,
+  }))
+}
+
+/** "heidy.tenelema" / "guardia_demo" -> "Heidy Tenelema" / "Guardia Demo".
+ *
+ *  Un nombre de cuenta no es un nombre propio, pero es lo único disponible cuando no se puede
+ *  leer la `persona` (el RPC de guardias no la expone). Al menos que se lea como un nombre y no
+ *  como un identificador de sistema (feedback PCO sobre "heidy.tenelema"). */
+export function humanizarNombreCuenta(v: string | null | undefined): string {
+  return (v ?? '')
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join(' ')
 }

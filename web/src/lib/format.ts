@@ -51,6 +51,35 @@ export function hoyISO(): string {
   }).format(new Date())
 }
 
+/**
+ * Hora actual en Ecuador, como "HH:MM" en 24 horas.
+ *
+ * Espejo de `public.hora_ecuador()`. Mismo motivo que `hoyISO()` (§D52): el navegador puede
+ * estar en cualquier zona y el servidor va en UTC, cinco horas por delante. Comparar un turno
+ * contra la hora local del equipo daría "fuera de turno" a un guardia que sí está trabajando.
+ */
+export function horaEcuadorHHMM(): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Guayaquil',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date())
+}
+
+/**
+ * ¿Cae `hhmm` dentro del turno? Espejo de `public.esta_en_turno(time, time, time)`.
+ *
+ * Contempla el turno que cruza medianoche (22:00 → 06:00), donde la salida es "menor" que la
+ * entrada y el intervalo son en realidad dos tramos del día.
+ */
+export function estaEnTurno(inicio?: string | null, fin?: string | null, hhmm = horaEcuadorHHMM()): boolean | null {
+  if (!inicio || !fin) return null
+  const min = (v: string) => Number(v.slice(0, 2)) * 60 + Number(v.slice(3, 5))
+  const [i, f, m] = [min(inicio), min(fin), min(hhmm)]
+  return i < f ? m >= i && m < f : m >= i || m < f
+}
+
 /** Autoformatea una MAC mientras se escribe: agrega ":" cada 2 hex y fuerza mayúsculas
  *  (feedback PCO #9). Descarta cualquier caracter no hexadecimal. */
 export function formatearMac(v: string): string {

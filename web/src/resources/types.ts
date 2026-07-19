@@ -46,6 +46,14 @@ export interface FieldConfig {
   /** Al cambiar este campo, limpia el valor de estos otros (ej. cambiar el filtro de zona
    *  invalida el punto de control ya elegido). */
   alCambiarLimpiar?: string[]
+  /** Valor inicial de un campo auxiliar (`persistir: false`) al EDITAR un registro existente.
+   *
+   *  Sin esto, los filtros de cascada arrancaban vacíos en la edición: como no son columnas de
+   *  la tabla, no vienen en el registro y quedaban en "". El campo que dependía de ellos se
+   *  quedaba entonces sin opciones y, al ser obligatorio, impedía guardar. Es lo que hacía que
+   *  al abrir un punto de control no apareciera ninguna "Zona", y al abrir un dispositivo,
+   *  ningún "Punto de control" (feedback PCO). */
+  derivarDeRegistro?: (registro: Record<string, any>) => Promise<unknown> | unknown
   /** El campo solo se muestra si esta función devuelve true para los valores actuales
    *  (ej. "Zona padre" solo si el tipo de zona es Parqueadero o Edificio). */
   visibleSi?: (valores: Record<string, any>) => boolean
@@ -141,6 +149,15 @@ export interface ResourceConfig<Row = any> {
   }[]
   campoEstado?: string
   baja?: BajaConfig
+  /** Vuelta atrás de la baja. Sin esto, inactivar era un viaje de ida: la pantalla ofrecía
+   *  "Inactivar" y ninguna forma de deshacerlo salvo editar el registro y cambiar el estado a
+   *  mano (feedback PCO: "cuando se inactiva una Zona no existe un botón para volver a
+   *  activarla"). El botón solo aparece cuando la fila está efectivamente dada de baja. */
+  reactivar?: {
+    /** Valor de `baja.campoEstado` que representa "en servicio" (ej. ACTIVA). */
+    valorActivo: string
+    etiqueta?: string
+  }
   /** Valores por defecto extra al insertar (además de los `default` por campo). */
   defaultsInsert?: Record<string, unknown>
   /** Columnas que se rellenan automáticamente con el id del usuario autenticado al INSERTAR. */
