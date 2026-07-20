@@ -1,0 +1,16 @@
+{
+  "name": "calibracion-placas-epn",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mide el lector de placas contra un banco sintetico con verdad conocida. No forma parte de la aplicacion.",
+  "scripts": {
+    "compilar": "esbuild ../../web/src/lib/placas.ts --bundle --format=esm --platform=node --external:tesseract.js --outfile=placas.build.mjs",
+    "medir": "npm run compilar && node medir.mjs"
+  },
+  "dependencies": {
+    "esbuild": "^0.21.5",
+    "pngjs": "^7.0.0",
+    "tesseract.js": "^5.1.1"
+  }
+}

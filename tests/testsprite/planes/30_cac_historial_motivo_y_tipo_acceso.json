@@ -1,0 +1,51 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "CAC — el historial dice el motivo del rechazo y el tipo de acceso",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "El inicio de sesión fue correcto: el encabezado de la cuenta muestra el nombre 'Carlos Chávez' con el rol 'Responsable de Control de Accesos', y el Panel Principal muestra el módulo 'Control de Accesos'."
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos' y entrar en la sección 'Historial de accesos'."
+    },
+    {
+      "type": "assertion",
+      "description": "El listado del historial está visible y contiene columnas llamadas 'Tipo', 'Movimiento', 'Resultado' y 'Motivo del rechazo'"
+    },
+    {
+      "type": "assertion",
+      "description": "Existe al menos una fila cuyo resultado es 'Denegado' y cuya columna 'Motivo del rechazo' contiene texto en castellano legible, por ejemplo 'Persona desconocida', 'Fuera del horario permitido' o 'La placa no corresponde a esta persona'"
+    },
+    {
+      "type": "assertion",
+      "description": "En la columna 'Motivo del rechazo' NO aparece ningún código en mayúsculas con guiones bajos como 'PERSONA_DESCONOCIDA' o 'FUERA_DE_HORARIO'"
+    },
+    {
+      "type": "assertion",
+      "description": "Existe al menos una fila cuya columna 'Persona' dice 'Persona desconocida'"
+    },
+    {
+      "type": "action",
+      "description": "Usar el filtro 'Tipo de acceso' y seleccionar la opción 'Vehicular'."
+    },
+    {
+      "type": "assertion",
+      "description": "El listado filtrado muestra únicamente filas cuyo tipo de acceso es 'Vehicular'"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar sobre cualquier fila del listado para abrir su ficha de detalle."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha del evento muestra los campos 'Tipo de acceso', 'Hora de salida', 'Placa leída' y 'Categoría'"
+    }
+  ]
+}

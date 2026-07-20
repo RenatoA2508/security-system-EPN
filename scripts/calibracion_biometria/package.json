@@ -1,0 +1,16 @@
+{
+  "name": "calibracion-biometria-epn",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mide la separacion real entre rostros para fijar los umbrales de UMBRAL_BIOMETRIA. Herramienta de analisis: no forma parte de la aplicacion ni toca la base de datos.",
+  "scripts": {
+    "calibrar": "node calibrar.mjs"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
+    "jpeg-js": "^0.4.4"
+  }
+}

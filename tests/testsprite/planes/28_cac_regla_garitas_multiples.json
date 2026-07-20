@@ -1,0 +1,47 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "CAC — una regla puede aplicar en varias garitas",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en el campo de contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "El inicio de sesión fue correcto: el encabezado de la cuenta muestra el nombre 'Carlos Chávez' con el rol 'Responsable de Control de Accesos', y el Panel Principal muestra el módulo 'Control de Accesos'."
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos' y entrar en la sección 'Reglas de acceso'."
+    },
+    {
+      "type": "assertion",
+      "description": "El listado de reglas de acceso está visible y contiene una columna llamada 'Garitas'"
+    },
+    {
+      "type": "assertion",
+      "description": "Existe al menos una fila cuya columna 'Garitas' dice 'Todas las garitas'"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar sobre la regla llamada 'ACCESO_DOCENTES' para abrir su ficha de detalle."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha de la regla muestra el apartado 'Garitas donde aplica' con una lista de casillas de verificación, una por punto de control"
+    },
+    {
+      "type": "assertion",
+      "description": "Bajo el título 'Garitas donde aplica' aparece el texto que explica que sin ninguna marcada la regla aplica en todas las garitas"
+    },
+    {
+      "type": "action",
+      "description": "Marcar la casilla correspondiente a 'Garita Principal (demo)' y pulsar el botón 'Guardar garitas'."
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece una confirmación de que las garitas de la regla se actualizaron correctamente"
+    }
+  ]
+}

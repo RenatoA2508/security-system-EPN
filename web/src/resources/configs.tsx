@@ -8,6 +8,7 @@ import {
 import { Badge } from '../components/ui'
 import { AsociacionesVehiculo } from '../components/AsociacionesVehiculo'
 import { AnularMemorando } from '../components/AnularMemorando'
+import { GaritasDeRegla } from '../components/GaritasDeRegla'
 import {
   opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas,
   opcionesTabla, optZonasPorTipo, optZonasPadrePara, optPuntosPorZona, optGuardiasDisponibles,
@@ -1006,14 +1007,16 @@ export const cfgReglaAcceso: ResourceConfig = {
   titulo: 'Reglas de acceso',
   singular: 'Regla de acceso',
   idField: 'id_regla_acceso',
-  select: '*, categoria:categoria_persona(codigo_categoria), punto:punto_control(nombre_punto)',
+  // Las garitas de la regla viven ahora en una tabla aparte (RF-CA-007): una regla puede
+  // aplicar en varias, y sin ninguna asociada aplica en todas.
+  select: '*, categoria:categoria_persona(codigo_categoria), garitas:regla_acceso_punto_control(id_punto_control, punto:punto_control(nombre_punto))',
   orderBy: { columna: 'nombre_regla' },
   permisos: { select: ['CAC_REGLA_SELECT'], insert: ['CAC_REGLA_INSERT'], update: ['CAC_REGLA_UPDATE'] },
   buscarEn: ['nombre_regla', 'descripcion'],
   columnas: [
     { key: 'nombre_regla', label: 'Nombre' },
-    { key: 'categoria', label: 'Categoría', render: (r) => r.categoria?.codigo_categoria ?? '—' },
-    { key: 'punto', label: 'Punto', render: (r) => r.punto?.nombre_punto ?? 'Todos' },
+    { key: 'categoria', label: 'Categoría', render: (r) => humanizar(r.categoria?.codigo_categoria) },
+    { key: 'garitas', label: 'Garitas', render: (r) => textoGaritas(r), valorExport: (r) => textoGaritas(r) },
     { key: 'horario', label: 'Horario', render: (r) => `${fmtHora(r.horario_inicio)}–${fmtHora(r.horario_fin)}` },
     { key: 'estado_regla', label: 'Estado', badge: true },
   ],
@@ -1021,24 +1024,57 @@ export const cfgReglaAcceso: ResourceConfig = {
   campoSubtituloDetalle: (r) => <Badge value={r.estado_regla} />,
   detalle: [
     { label: 'Categoría', render: (r) => humanizar(r.categoria?.codigo_categoria) },
-    { label: 'Punto de control', render: (r) => r.punto?.nombre_punto ?? 'Todos los puntos' },
-    { label: 'Horario', render: (r) => `${fmtHora(r.horario_inicio)} – ${fmtHora(r.horario_fin)}` },
+    { label: 'Garitas', render: (r) => textoGaritas(r) },
+    { label: 'Horario', render: (r) => horarioLegible(r) },
     { label: 'Requiere memorando', render: (r) => (r.requiere_memorando ? 'Sí' : 'No') },
     { label: 'Descripción', render: (r) => d(r.descripcion) },
   ],
+  // Las garitas se gestionan desde la ficha, como las personas de un vehículo: son una
+  // relación N:M, no un campo del formulario.
+  detalleExtra: (r, ctx) => <GaritasDeRegla idRegla={r.id_regla_acceso} onCambio={ctx.recargar} />,
   campos: [
     { name: 'nombre_regla', label: 'Nombre de la regla', required: true, colSpan: 2, validar: validarNoVacio },
     { name: 'id_categoria', label: 'Categoría', type: 'select', required: true, options: optCategorias() },
-    { name: 'id_punto_control', label: 'Punto de control (opcional = todos)', type: 'select', options: optPuntosControl },
-    { name: 'horario_inicio', label: 'Horario inicio', type: 'time', required: true },
+    {
+      name: 'horario_inicio', label: 'Horario inicio', type: 'time', required: true,
+      // Un horario que cruza la medianoche es legítimo (el turno de noche), pero es tan fácil
+      // de teclear por error que conviene decirlo en voz alta antes de guardar.
+      aviso: (v, valores) =>
+        v && valores.horario_fin && v > valores.horario_fin
+          ? 'El horario cruza la medianoche: la regla valdrá desde esta hora hasta la hora de fin del día siguiente.'
+          : null,
+    },
     { name: 'horario_fin', label: 'Horario fin', type: 'time', required: true },
-    { name: 'requiere_memorando', label: '¿Requiere memorando?', type: 'checkbox' },
+    {
+      name: 'requiere_memorando', label: '¿Requiere memorando?', type: 'checkbox',
+      hint: 'Si se marca, la validación exige un memorando vigente a nombre de la persona. No es informativo: sin memorando se deniega el ingreso.',
+    },
     // Oculto en el alta: toda regla nueva nace ACTIVA (feedback CAC). Solo editable después.
     { name: 'estado_regla', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.regla_estado), default: 'ACTIVA', hideOnInsert: true },
-    { name: 'descripcion', label: 'Descripción', type: 'textarea', required: true, colSpan: 3 },
+    { name: 'descripcion', label: 'Descripción', type: 'textarea', required: true, colSpan: 3, validar: validarNoVacio },
   ],
   campoEstado: 'estado_regla',
+  // Cambiar el horario o la categoría de una regla cambia quién entra al campus mañana por la
+  // mañana, y no hay ninguna pantalla que avise de ello después.
+  camposSensibles: ['horario_inicio', 'horario_fin', 'id_categoria', 'requiere_memorando'],
   baja: { campoEstado: 'estado_regla', valorBaja: 'INACTIVA', etiqueta: 'Inactivar regla' },
+  // RF-CA-003 deja la regla inactiva sin borrarla; hacía falta el camino de vuelta (§D56).
+  reactivar: { valorActivo: 'ACTIVA', etiqueta: 'Reactivar regla' },
+}
+
+/** "Todas las garitas" / "Garita Principal" / "3 garitas". Sin garitas asociadas la regla
+ *  aplica en todos los puntos, así que decir "—" sería justo lo contrario de la verdad. */
+function textoGaritas(r: any): string {
+  const garitas = (r.garitas ?? []) as { punto?: { nombre_punto: string } | null }[]
+  if (garitas.length === 0) return 'Todas las garitas'
+  if (garitas.length === 1) return garitas[0].punto?.nombre_punto ?? '1 garita'
+  return `${garitas.length} garitas`
+}
+
+/** Horario con la nota del cruce de medianoche, que si no se explica se lee como un error. */
+function horarioLegible(r: any): string {
+  const texto = `${fmtHora(r.horario_inicio)} – ${fmtHora(r.horario_fin)}`
+  return r.horario_inicio > r.horario_fin ? `${texto} (del día siguiente)` : texto
 }
 
 /** Autorizaciones de visita diaria (GPE). El guardia las crea desde su vista operativa. */

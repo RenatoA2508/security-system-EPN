@@ -929,3 +929,265 @@ salir del callejón desde donde se ve el problema, sin tener que buscar el despl
 causó. "No hay X registrados" queda reservado para cuando de verdad no hay ninguno.
 
 Es un cambio del motor genérico, así que vale para todas las pantallas del sistema, no solo PCO.
+
+---
+
+# Ronda de CAC (Control de Accesos) — §D62 a §D69
+
+## §D62 — La cadena de validación se separa en pasos con motivo propio
+
+**Conflicto:** `evaluarReglaAcceso` resolvía categoría, garita y horario en una sola consulta a
+PostgREST. Cuando no encontraba ninguna regla, no había forma de saber cuál de las tres
+condiciones había fallado, y la función devolvía siempre `FUERA_DE_HORARIO`. RNF-CA-004 pide
+justo lo contrario: *"el motivo correspondiente sin utilizar mensajes ambiguos o genéricos"*.
+
+**Decisión:** tres pasos separados, en el orden que fija RF-CA-019, con cortocircuito:
+
+1. ¿Existe alguna regla ACTIVA para la categoría? → `SIN_REGLA_ACCESO` (RF-CA-005)
+2. ¿Alguna de ellas autoriza esta garita? → `GARITA_NO_AUTORIZADA` (RF-CA-007)
+3. ¿Alguna está vigente a esta hora? → `FUERA_DE_HORARIO` (RF-CA-006)
+
+**Lo que ese fallo escondía:** seis docentes y seis administrativos no tenían **ninguna regla de
+acceso activa** y por tanto no podían entrar al campus. Con el mensaje antiguo, el síntoma era
+"fuera de horario" a cualquier hora del día, y se leía como un problema de horarios. Las reglas
+que faltaban se sembraron en `20260719223310`, y la vista `vista_categoria_sin_regla` deja el
+hueco a la vista de CAC antes de que alguien se quede fuera de la garita.
+
+## §D63 — `requiere_memorando` deja de ser decorativo
+
+**Conflicto:** RF-CA-001 lo dice con todas las letras: *"si es que requiere memorando hay que
+validar que realmente esté ligado a un memorando, no tiene que ser un campo de decoración"*.
+La validación solo comprobaba el memorando en la rama de personas **externas**. Una regla que
+declaraba exigir memorando dejaba pasar a cualquier persona interna sin mirar si lo tenía.
+
+**Decisión:** la comprobación depende de la REGLA, no del ámbito de la persona. Y se distingue
+"no tiene ninguno" de "lo tiene vencido" (RF-CA-009 frente a RF-CA-010), porque son dos
+problemas con dos soluciones distintas: al primero hay que tramitarle un memorando, al segundo
+renovárselo. Decirle "memorando vencido" a quien nunca tuvo uno manda al guardia y a la persona
+a buscar un papel que no existe.
+
+## §D64 — El estado de la persona se comprueba en los dos ámbitos
+
+RF-CA-008 no distingue interno de externo: *"únicamente los usuarios con estado Activo podrán
+continuar"*. La validación solo miraba `persona.estado` en la rama interna, así que **una
+persona externa bloqueada entraba** si su memorando seguía vigente. Ahora es el primer paso de
+la cadena, antes de mirar reglas.
+
+## §D65 — Una regla de acceso puede aplicar en varias garitas
+
+**Conflicto:** RF-CA-002 y RF-CA-007 hablan de "garitas" en plural, pero `regla_acceso` tenía
+una sola FK a `punto_control`. Autorizar a los docentes por las tres garitas del campus obligaba
+a crear tres reglas iguales y a mantenerlas sincronizadas a mano.
+
+**Decisión:** tabla N:M `regla_acceso_punto_control` y se retira la columna. La semántica de
+"sin filas" se conserva exactamente igual que la de la columna a NULL:
+
+> **Sin ninguna garita asociada, la regla aplica en TODAS.**
+
+Es la parte que hay que tener presente al leer la pantalla: cero filas no es "esta regla no vale
+en ninguna parte", es lo contrario. Por eso el listado dice "Todas las garitas" y no un guion.
+
+## §D66 — Persona desconocida es un evento, no un error de pantalla
+
+**Conflicto:** RF-CA-021 exige registrar el intento cuando el rostro no coincide con nadie. Era
+**imposible**: `evento_acceso.id_persona` era NOT NULL, y la Edge Function devolvía 404 sin
+escribir nada. El caso que más interesa registrar era el único que no se registraba; en la
+garita se veía como un texto rojo que desaparecía al recargar la página.
+
+**Decisión:** `id_persona` pasa a nullable, con un CHECK que ata ese hueco a su único caso
+legítimo (`resultado = DENEGADO` y motivo `PERSONA_DESCONOCIDA%`). En las pantallas, un evento
+sin persona se lee **"Persona desconocida"**, nunca "—": pintarlo como un dato que falta lo
+convierte en una fila que nadie mira.
+
+## §D67 — Dos umbrales biométricos en vez de uno, calibrados con caras reales
+
+**Conflicto:** el umbral era 0.38 de confianza (= 0.62 de distancia L2). Medido sobre el banco
+real, las personas **distintas** se separan a partir de **0.691**:
+
+| Par | Distancia L2 |
+|---|---|
+| Guerra ↔ Jumbo | 0.6910 |
+| Guerra ↔ Jaramillo | 0.6949 |
+| Jumbo ↔ Jaramillo | 0.7423 |
+
+Es decir: **0.071 de margen** entre el umbral y el impostor más parecido del banco. Un cambio de
+luz o de ángulo mueve un descriptor bastante más que eso. El sistema estaba a un mal reflejo de
+autorizar a la persona equivocada, y un umbral "de manual" (el 0.6 clásico de dlib) no lo revela
+hasta que se prueba con caras de verdad.
+
+**Decisión:** dos umbrales, que es lo que hace un control de acceso real:
+
+| Confianza | Qué ocurre |
+|---|---|
+| ≥ 0.45 (`UMBRAL_BIOMETRIA`) | Se autoriza sin intervención |
+| 0.35 – 0.45 (`UMBRAL_BIOMETRIA_REVISION`) | El guardia confirma visualmente |
+| < 0.35 | `PERSONA_DESCONOCIDA` (RF-CA-021) |
+
+Margen contra el impostor más cercano: **0.141**, el doble que antes. Y el impostor más parecido
+(0.309) ni siquiera llega a la banda de revisión.
+
+**Por qué no se sube más:** por encima de 0.50 empiezan a caerse capturas legítimas con
+mascarilla, gafas o contraluz. Un guardia al que el rostro le falla tres de cada diez veces deja
+de usarlo y teclea la cédula, y un umbral que nadie usa no protege nada.
+
+**Recalibrar cuando haya más rostros enrolados.** Tres personas son pocas para fijar el suelo de
+"personas distintas"; el número puede bajar con un banco mayor.
+
+## §D68 — El OCR de placas se corrige por posición antes de por parecido
+
+**Conflicto:** un OCR sobre una placa metálica no falla al azar: confunde siempre los mismos
+caracteres (O/0, I/1, S/5, B/8, Z/2, G/6). Una comparación exacta rechaza `PDF1Z34` cuando la
+placa es `PDF1234`, y el guardia acaba tecleándolo todo a mano.
+
+**Decisión:** dos correcciones, en este orden, y la segunda es deliberadamente cobarde.
+
+1. **Posicional** (`corregir_placa_ocr`, espejo en `web/src/lib/placas.ts`). La placa ecuatoriana
+   tiene forma fija: tres letras y luego tres o cuatro dígitos. Un dígito leído en las tres
+   primeras posiciones es necesariamente un error, y una letra en la parte numérica también. Se
+   corrige por posición, sin mirar la base de datos. **No puede convertir una placa en otra placa
+   válida distinta**, porque solo toca caracteres que estaban en la clase equivocada.
+2. **Tolerancia difusa** (`identificar_placa`, `levenshtein` ≤ `TOLERANCIA_PLACA_CARACTERES`).
+   Aquí sí se puede confundir un vehículo con otro, así que **solo se aplica cuando UNA sola
+   placa registrada queda a esa distancia**. Con dos candidatas la función devuelve
+   `ambigua = true` y no elige ninguna. Escoger "la más parecida" entre dos sería autorizar un
+   vehículo por parecido, que es exactamente lo que RF-CA-015 prohíbe.
+
+Cualquier lectura que haya hecho falta corregir se le enseña al guardia antes de usarla: el
+sistema propone, la persona confirma.
+
+## §D69 — Un horario de regla puede cruzar la medianoche
+
+`regla_acceso` nunca exigió `fin > inicio`, a propósito: el turno nocturno es legítimo. Pero la
+validación comparaba `inicio <= hora <= fin` en la propia consulta, así que **una regla nocturna
+no casaba nunca**: a las 23:00 fallaba `hora <= 06:00` y a las 02:00 fallaba `22:00 <= hora`.
+
+Es el mismo error que ya apareció en los turnos del guardia (§D59). La comparación se parte en
+dos tramos cuando `fin < inicio`. En el formulario, teclear un horario que cruza la medianoche
+muestra un **aviso** (no bloquea): es válido, pero se teclea por error con demasiada facilidad.
+
+## §D71 — Los umbrales del lector de placas salen de una medición, y la confianza se calcula por consenso
+
+**Conflicto:** §D68 dejó el lector funcionando pero con dos números puestos a ojo
+(`UMBRAL_PLACA` 0.80, `UMBRAL_PLACA_REVISION` 0.55). Al medirlos aparecieron dos problemas, uno
+de ellos grave.
+
+**El grave: la confianza era siempre 0.** `tesseract.js` 5 devuelve `confidence` a cero en todos
+los niveles —documento, bloque y palabra—, así que el umbral no filtraba absolutamente nada.
+Ninguna lectura lo alcanzaba jamás. El parámetro existía, se guardaba en cada evento y no hacía
+nada. No se detectó antes porque el flujo no se rompe: simplemente todas las lecturas empataban
+a cero y la primera válida ganaba siempre.
+
+**La confianza pasa a calcularse por acuerdo entre variantes.** Las cuatro formas de preparar la
+imagen son cuatro lectores independientes sobre la misma foto; que coincidan dice mucho más de
+la lectura que cualquier número que un motor se ponga a sí mismo. Es la misma idea que votar
+entre varios modelos. Y esa señal **sí** discrimina:
+
+| | n | p5 | mediana | p95 |
+|---|---|---|---|---|
+| Lecturas correctas | 132 | 0.63 | **1.00** | 1.00 |
+| Lecturas equivocadas | 20 | 0.38 | **0.63** | 0.75 |
+
+**Cómo se midió:** 200 imágenes generadas con la placa correcta conocida
+(`scripts/calibracion_placas`), en cinco condiciones. El medidor importa
+`web/src/lib/placas.ts` compilado, así que mide el código real y no una copia parecida.
+
+| Condición | Leída bien | Leída mal | No se leyó |
+|---|---|---|---|
+| Limpia | 90.0 % | 0.0 % | 10.0 % |
+| Leve (ángulo, algo de desenfoque) | **100.0 %** | 0.0 % | 0.0 % |
+| **Foto en la pantalla de un móvil** | 65.0 % | 12.5 % | 22.5 % |
+| Pantalla del móvil, lejos y torcida | 5.0 % | 30.0 % | 65.0 % |
+| Placa real en malas condiciones | 70.0 % | 7.5 % | 22.5 % |
+
+**El preprocesado de un solo paso era el cuello de botella.** La binarización de Otsu que había
+es la mejor opción con una placa metálica bien iluminada y una de las peores con una foto de
+pantalla, porque el moiré —la interferencia entre la rejilla de píxeles del móvil y la del
+sensor— se convierte en cantos negros falsos por toda la imagen. Ahora se prueban cuatro
+variantes y se vota:
+
+| Condición | SUAVIZADA | REALZADA | BINARIZADA | GRIS |
+|---|---|---|---|---|
+| Foto en pantalla del móvil | **65.0 %** | 57.5 % | 40.0 % | 42.5 % |
+| Placa real en malas condiciones | **60.0 %** | 17.5 % | 12.5 % | 10.0 % |
+
+`SUAVIZADA` (desenfoque 3×3 antes de binarizar) gana en todo lo difícil, y multiplica por cinco
+el acierto de la binarización sola con una placa real en malas condiciones.
+
+**Los umbrales elegidos:**
+
+| Umbral | De las aceptadas, equivocadas | Correctas que se descartarían |
+|---|---|---|
+| 0.60 | 9.9 % | 3.8 % |
+| 0.65 | 5.6 % | 23.5 % |
+| **0.75** | **1.2 %** | 35.6 % |
+| 0.90 | 1.2 % | 37.9 % |
+
+`UMBRAL_PLACA = 0.75` es donde el error se desploma sin que subir más aporte nada. Y ese 35.6 %
+de lecturas correctas **no se tira**: cae en la banda de revisión (`UMBRAL_PLACA_REVISION = 0.50`),
+donde el guardia confirma la placa que el sistema propone. Por debajo de 0.50 las variantes
+discrepan entre sí, y proponer una de ellas sería echar una moneda al aire delante del guardia:
+ahí se pide repetir la captura.
+
+Es el mismo patrón que la biometría (§D67): **el sistema propone, la persona decide, y solo lo
+que no llega ni a proponerse se descarta.**
+
+**Lo que la medición dice sobre la demo:** una foto de la placa en la pantalla del móvil,
+encuadrada en el marco y de cerca, cae entre "leve" (100 %) y "pantalla del móvil" (65 %). Si se
+aleja o se tuerce, el acierto se hunde — y ahí importa que las lecturas malas de ese caso tienen
+confianza baja (p95 = 0.75), así que la mayoría no se auto-aceptan: se le proponen al guardia o
+se descartan.
+
+## §D70 — El umbral biométrico, ya medido: la estimación era correcta pero el margen era otro
+
+**Qué se hizo:** §D67 fijó `UMBRAL_BIOMETRIA = 0.45` con tres rostros enrolados, midiendo solo
+lo que se podía medir con una foto por persona: a qué distancia están dos personas **distintas**.
+Faltaba la otra mitad —a qué distancia está la **misma** persona en dos fotos— y sin ella el
+umbral era una estimación prudente.
+
+Con LFW (*Labeled Faces in the Wild*) y su protocolo de pares etiquetados, medido con el mismo
+modelo y el mismo detector que usa la garita:
+
+| | n | min | p5 | mediana | p95 | max |
+|---|---|---|---|---|---|---|
+| **Misma persona** | 446 | 0.250 | 0.325 | 0.448 | 0.588 | 0.948 |
+| **Personas distintas** | 416 | 0.566 | 0.681 | 0.829 | 0.963 | 1.087 |
+
+**El valor no cambia.** La estimación estaba bien puesta:
+
+| Confianza | Distancia | FAR (entra quien no es) | FRR (se rechaza a quien sí es) |
+|---|---|---|---|
+| 0.50 | 0.50 | 0.00 % | 27.35 % |
+| **0.45** | **0.55** | **0.00 %** | **10.99 %** ← el vigente |
+| 0.40 | 0.60 | 0.72 % | 4.48 % |
+| **0.35** | **0.65** | 2.88 % | 4.04 % ← suelo de la banda de revisión |
+| 0.30 | 0.70 | 7.93 % | 2.91 % |
+
+A 0.45 **no se cuela ni un impostor de los 416 medidos**, y el 11 % de intentos legítimos que se
+rechazan no se pierden: caen en la banda de revisión, donde el guardia confirma.
+
+**Lo que la medición sí corrige de §D67:** allí se escribió "margen de 0.141", comparando contra
+el impostor más parecido del banco de la EPN (0.691). Con 416 pares de impostores, el más
+parecido está a **0.566**, no a 0.691. El margen real es **0.016** — sigue bastando, porque el
+FAR medido es 0 %, pero es un filo y no un colchón. Si se cambia el modelo o el detector, hay que
+volver a medir antes de dar nada por bueno.
+
+**Por qué no se baja a 0.42** (FAR 0.5 %, FRR 5.2 %): los dos errores no cuestan lo mismo.
+Rechazar a alguien legítimo cuesta repetir la captura delante de un guardia que está ahí mismo;
+aceptar a un impostor es que entre. Con la banda de revisión cubriendo el rechazo, no hay razón
+para pagar FAR a cambio de comodidad.
+
+**Un hallazgo que no se buscaba: el detector pierde uno de cada cuatro rostros.** De los 1200
+pares, **338 se descartaron porque `TinyFaceDetector` no encontró cara en alguna de las dos
+fotos** — un 28 %. LFW son fotos de prensa, de frente y bien iluminadas; si ahí falla una de cada
+cuatro, en una garita a contraluz fallará más.
+
+Eso no afecta al umbral (un rostro no detectado no llega a compararse), pero sí a la experiencia:
+parte de las capturas dirán "no se detectó ningún rostro" y habrá que repetir. `SsdMobilenetv1`
+detecta bastante mejor a cambio de ser más pesado y lento. **Está sin decidir a propósito**:
+cambiar el detector invalida esta calibración, así que habría que medir de nuevo con él antes de
+cambiarlo. Anotado en §V32.
+
+**Sobre trasladar estos números a la EPN:** LFW no es una garita. El FRR medido es **optimista**
+—una cámara a contraluz o con mascarilla lo empeora— mientras que el FAR es razonablemente
+trasladable: si dos personas distintas se separan bien en condiciones buenas, en condiciones
+malas se separan más, no menos. Por eso el umbral se eligió apuntando al FAR.

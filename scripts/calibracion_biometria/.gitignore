@@ -1,0 +1,4 @@
+node_modules/
+# Los pesos del modelo se descargan del mismo CDN que usa el navegador (ver README).
+# Son 12 MB de binarios que no aportan nada al historial del repositorio.
+modelos/
