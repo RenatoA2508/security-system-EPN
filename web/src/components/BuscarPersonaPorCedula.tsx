@@ -8,6 +8,10 @@ import { Badge, Button, Field, Input, cx } from './ui'
 export interface PersonaCedula {
   id_persona: string
   cedula: string
+  /** Se pide para poder proponerlo como correo de acceso al crear la cuenta: sin él, el
+   *  alta obligaba a teclearlo a mano y ahí se colaban erratas que dejaban la cuenta con
+   *  un correo distinto al de la persona. */
+  correo: string | null
   nombres: string
   apellidos: string
   tipo_persona: string
@@ -68,7 +72,7 @@ export function BuscarPersonaPorCedula({
     setBuscando(true)
     const { data, error: err } = await supabase
       .from('persona')
-      .select('id_persona, cedula, nombres, apellidos, tipo_persona, estado, categoria:categoria_persona(codigo_categoria)')
+      .select('id_persona, cedula, nombres, apellidos, correo, tipo_persona, estado, categoria:categoria_persona(codigo_categoria)')
       .eq('cedula', normal)
       .maybeSingle()
     setBuscando(false)

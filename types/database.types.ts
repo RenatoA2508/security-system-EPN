@@ -1498,6 +1498,10 @@ export type Database = {
     Functions: {
       acentuar_texto: { Args: { texto: string }; Returns: string }
       allowed_modules: { Args: never; Returns: string[] }
+      asignar_rol_unico: {
+        Args: { p_id_rol: string; p_id_usuario: string; p_observacion?: string }
+        Returns: string
+      }
       cerrar_sesion: {
         Args: { p_id_sesion?: string }
         Returns: {
@@ -1712,6 +1716,10 @@ export type Database = {
       }
       ruc_pasa_algoritmo_legado: { Args: { p_ruc: string }; Returns: boolean }
       sesion_vigente: { Args: never; Returns: boolean }
+      sincronizar_correo_auth: {
+        Args: { p_correo: string; p_id_usuario: string }
+        Returns: undefined
+      }
       sincronizar_estado_memorandos: { Args: never; Returns: number }
       tiene_acceso_operativo_cac: { Args: never; Returns: boolean }
       tiene_algun_modulo: { Args: never; Returns: boolean }

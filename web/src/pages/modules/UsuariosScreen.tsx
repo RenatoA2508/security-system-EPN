@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { KeyRound, Lock, Plus, Search, ShieldCheck, UserPlus, UserX, X } from 'lucide-react'
+import { KeyRound, Lock, Pencil, Plus, Search, ShieldCheck, UserPlus, UserX, X } from 'lucide-react'
 import { supabase, mensajeError } from '../../lib/supabase'
 import { useAuth } from '../../auth/AuthProvider'
 import { fmtFecha, fmtFechaHora } from '../../lib/format'
@@ -296,6 +296,8 @@ export function UsuariosScreen() {
               )}
             </dl>
 
+            {tiene('ADM_USUARIO_UPDATE') && <EditarCuenta usuario={sel} onCambio={cargar} />}
+
             {puedeVerRoles && <RolesDelUsuario usuario={sel} onCambio={cargar} />}
 
             {bloqueoVigente(sel) && (
@@ -378,8 +380,104 @@ function Row({ label, val }: { label: string; val: string }) {
  * Muestra también las revocadas, con su fecha: quién tuvo qué permiso y hasta cuándo es
  * justo lo que se le pregunta a un sistema de accesos cuando algo sale mal.
  */
+/**
+ * Edición de los datos de la cuenta: correo de acceso y nombre de usuario.
+ *
+ * El correo es el caso que motiva todo esto. Antes solo se podía corregir desde GPI, y
+ * corregirlo allí NO cambiaba la credencial: la cuenta seguía entrando con el correo viejo.
+ * Ahora los dos sitios escriben el mismo dato — el trigger `propagar_correo_cuenta` lleva
+ * el cambio a `persona` y a `auth.users` en la misma transacción —, así que el
+ * administrador puede arreglarlo desde aquí sin depender del responsable de GPI.
+ */
+function EditarCuenta({ usuario, onCambio }: { usuario: Usuario; onCambio: () => Promise<void> }) {
+  const toast = useToast()
+  const [editando, setEditando] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [correo, setCorreo] = useState(usuario.correo_electronico)
+  const [nombreUsuario, setNombreUsuario] = useState(usuario.nombre_usuario)
+
+  // Al cambiar de usuario en la lista, el formulario debe mirar a la cuenta nueva.
+  useEffect(() => {
+    setEditando(false)
+    setCorreo(usuario.correo_electronico)
+    setNombreUsuario(usuario.nombre_usuario)
+  }, [usuario.id_usuario, usuario.correo_electronico, usuario.nombre_usuario])
+
+  const errorCorreo = correo ? validarCorreoInstitucional(correo) : 'El correo es obligatorio.'
+  const errorUsuario = nombreUsuario ? validarNombreUsuario(nombreUsuario) : 'El nombre de usuario es obligatorio.'
+  const huboCambio = correo !== usuario.correo_electronico || nombreUsuario !== usuario.nombre_usuario
+
+  const guardar = async () => {
+    setGuardando(true)
+    const { error } = await supabase
+      .from('usuario_sistema')
+      .update({ correo_electronico: correo, nombre_usuario: nombreUsuario })
+      .eq('id_usuario', usuario.id_usuario)
+    setGuardando(false)
+    if (error) {
+      toast('error', mensajeError(error))
+      return
+    }
+    toast(
+      'ok',
+      correo !== usuario.correo_electronico
+        ? 'Datos actualizados. El correo de acceso y el de la persona quedaron sincronizados.'
+        : 'Datos actualizados.',
+    )
+    setEditando(false)
+    await onCambio()
+  }
+
+  if (!editando) {
+    return (
+      <div className="mb-5">
+        <Button variant="secondary" onClick={() => setEditando(true)}>
+          <Pencil className="h-4 w-4" /> Editar datos de la cuenta
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mb-5 space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <h3 className="text-sm font-semibold text-navy">Datos de la cuenta</h3>
+      <Field
+        label="Correo institucional"
+        required
+        htmlFor="editar-correo"
+        error={correo ? errorCorreo : null}
+        ayuda="Es la credencial con la que entra al sistema. Al cambiarlo aquí se actualiza también en Personal interno: son el mismo dato, no dos copias."
+      >
+        <Input id="editar-correo" type="email" value={correo}
+          onChange={(e) => setCorreo(e.target.value.toLowerCase())} />
+      </Field>
+      <Field
+        label="Nombre de usuario"
+        required
+        htmlFor="editar-usuario"
+        error={nombreUsuario ? errorUsuario : null}
+      >
+        <Input id="editar-usuario" value={nombreUsuario}
+          onChange={(e) => setNombreUsuario(e.target.value.toLowerCase())} />
+      </Field>
+      <div className="flex gap-2">
+        <Button onClick={guardar} loading={guardando} disabled={!huboCambio || !!errorCorreo || !!errorUsuario}>
+          Guardar
+        </Button>
+        <Button variant="ghost" onClick={() => {
+          setEditando(false)
+          setCorreo(usuario.correo_electronico)
+          setNombreUsuario(usuario.nombre_usuario)
+        }}>
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function RolesDelUsuario({ usuario, onCambio }: { usuario: Usuario; onCambio: () => Promise<void> }) {
-  const { tiene } = useAuth()
+  const { tiene, perfil } = useAuth()
   const toast = useToast()
   const puedeAsignar = tiene('ADM_USUARIO_ROL_INSERT')
   const puedeRevocar = tiene('ADM_USUARIO_ROL_UPDATE')
@@ -408,20 +506,39 @@ function RolesDelUsuario({ usuario, onCambio }: { usuario: Usuario; onCambio: ()
   const yaTieneActivo = (id: string) =>
     asignados.some((a) => a.estado_asignacion === 'ACTIVO' && a.rol?.id_rol === id)
 
+  /** El rol vigente, si lo hay. Por invariante de la base no puede haber más de uno. */
+  const rolActivo = asignados.find((a) => a.estado_asignacion === 'ACTIVO') ?? null
+
+  /**
+   * Quitarse a uno mismo el rol de administrador es una puerta que solo se abre por fuera:
+   * quien lo hace pierde ADM y necesita que OTRO administrador se lo devuelva. La base lo
+   * impide (trigger proteger_rol_administrador); esto evita que el administrador descubra
+   * la regla chocándose con un error.
+   */
+  const esMiRolDeAdmin = (a: Asignacion): boolean =>
+    usuario.id_usuario === perfil?.id_usuario && a.rol?.nombre_rol === 'ADMINISTRADOR_SISTEMA'
+
+  /**
+   * Asigna el rol con la RPC en vez de un INSERT suelto.
+   *
+   * Desde que una cuenta solo puede tener un rol activo, cambiar de rol son DOS escrituras
+   * (revocar la anterior, insertar la nueva) y el índice único rechazaría la segunda si se
+   * hicieran por separado. `asignar_rol_unico` las hace en una sola operación: o cambia el
+   * rol o no cambia nada, nunca deja la cuenta sin ninguno.
+   */
   const asignar = async () => {
     if (!idRol) return
     setGuardando(true)
-    const { error } = await supabase.from('usuario_rol').insert({
-      id_usuario: usuario.id_usuario,
-      id_rol: idRol,
-      estado_asignacion: 'ACTIVO',
-    } as never)
+    const { error } = await supabase.rpc('asignar_rol_unico', {
+      p_id_usuario: usuario.id_usuario,
+      p_id_rol: idRol,
+    })
     setGuardando(false)
     if (error) {
       toast('error', mensajeError(error))
       return
     }
-    toast('ok', 'Rol asignado.')
+    toast('ok', rolActivo ? 'Rol cambiado.' : 'Rol asignado.')
     setAsignando(false)
     setIdRol('')
     await onCambio()
@@ -445,17 +562,22 @@ function RolesDelUsuario({ usuario, onCambio }: { usuario: Usuario; onCambio: ()
   return (
     <div className="mb-5 border-t border-slate-100 pt-4">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-navy">Roles asignados</h3>
+        <h3 className="text-sm font-semibold text-navy">Rol de la cuenta</h3>
         {puedeAsignar && !asignando && (
           <Button variant="secondary" onClick={() => setAsignando(true)}>
-            <Plus className="h-4 w-4" /> Asignar rol
+            <Plus className="h-4 w-4" /> {rolActivo ? 'Cambiar rol' : 'Asignar rol'}
           </Button>
         )}
       </div>
 
       {asignando && (
         <div className="mb-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-          <Field label="Rol" htmlFor="asignar-rol" hint="Define qué módulos y acciones podrá usar.">
+          <Field
+            label="Rol"
+            htmlFor="asignar-rol"
+            hint="Define qué módulos y acciones podrá usar."
+            ayuda="Cada cuenta tiene un solo rol. Si eliges otro, el actual queda revocado en la misma operación y su histórico se conserva. Quien necesite dos funciones distintas necesita dos cuentas."
+          >
             <Select
               id="asignar-rol"
               value={idRol}
@@ -466,8 +588,17 @@ function RolesDelUsuario({ usuario, onCambio }: { usuario: Usuario; onCambio: ()
                 .map((r) => ({ value: r.id_rol, label: ROL_LABEL[r.nombre_rol] ?? humanizar(r.nombre_rol) }))}
             />
           </Field>
+          {/* Cambiar de rol es una sustitución, no una suma: conviene decirlo ANTES de
+              pulsar, no después. */}
+          {rolActivo && (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Sustituirá al rol actual, <b>{nombreRol(rolActivo)}</b>, que quedará revocado.
+            </p>
+          )}
           <div className="flex gap-2">
-            <Button onClick={asignar} loading={guardando} disabled={!idRol}>Asignar</Button>
+            <Button onClick={asignar} loading={guardando} disabled={!idRol}>
+              {rolActivo ? 'Cambiar rol' : 'Asignar'}
+            </Button>
             <Button variant="ghost" onClick={() => { setAsignando(false); setIdRol('') }}>Cancelar</Button>
           </div>
         </div>
@@ -489,8 +620,14 @@ function RolesDelUsuario({ usuario, onCambio }: { usuario: Usuario; onCambio: ()
                   <span>· {a.estado_asignacion === 'REVOCADO' ? 'Revocado' : 'Activo'} desde {fmtFecha(fechaEstado(a))}</span>
                 </p>
                 {a.observacion && <p className="mt-0.5 text-xs text-ink-soft">{a.observacion}</p>}
+                {esMiRolDeAdmin(a) && a.estado_asignacion === 'ACTIVO' && (
+                  <p className="mt-1 text-xs text-ink-soft">
+                    Es tu propio rol de administrador: no puedes quitártelo. Si cedes la
+                    administración, que otro administrador te lo revoque después.
+                  </p>
+                )}
               </div>
-              {puedeRevocar && a.estado_asignacion === 'ACTIVO' && (
+              {puedeRevocar && a.estado_asignacion === 'ACTIVO' && !esMiRolDeAdmin(a) && (
                 <button
                   type="button"
                   onClick={() => revocar(a)}
@@ -541,6 +678,14 @@ function CrearUsuarioPanel({
   const [correo, setCorreo] = useState('')
   const [idRol, setIdRol] = useState('')
   const [usuarioTocado, setUsuarioTocado] = useState(false)
+  const [correoTocado, setCorreoTocado] = useState(false)
+
+  // Alta de la persona cuando la cédula no está registrada: evita tener que salir a GPI,
+  // volver a entrar como administrador y repetir la búsqueda.
+  const [cedulaSinPersona, setCedulaSinPersona] = useState<string | null>(null)
+  const [categorias, setCategorias] = useState<{ id_categoria: string; codigo_categoria: string }[]>([])
+  const [nuevaPersona, setNuevaPersona] = useState({ nombres: '', apellidos: '', correo: '', id_categoria: '' })
+  const [creandoPersona, setCreandoPersona] = useState(false)
 
   // Borrador: si el administrador cambia de pestaña a mitad del alta, al volver no tiene
   // que teclearlo todo otra vez. La contraseña temporal no pasa por aquí, y `useBorrador`
@@ -552,8 +697,14 @@ function CrearUsuarioPanel({
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase.from('rol').select('id_rol, nombre_rol').eq('estado_rol', 'ACTIVO').order('nombre_rol')
-      setRoles((data as { id_rol: string; nombre_rol: string }[] | null) ?? [])
+      const [rolesRes, categoriasRes] = await Promise.all([
+        supabase.from('rol').select('id_rol, nombre_rol').eq('estado_rol', 'ACTIVO').order('nombre_rol'),
+        // Solo categorías internas: el personal externo no puede tener cuenta.
+        supabase.from('categoria_persona').select('id_categoria, codigo_categoria')
+          .eq('ambito', 'INTERNA').eq('estado', 'ACTIVO').order('codigo_categoria'),
+      ])
+      setRoles((rolesRes.data as { id_rol: string; nombre_rol: string }[] | null) ?? [])
+      setCategorias((categoriasRes.data as { id_categoria: string; codigo_categoria: string }[] | null) ?? [])
     })()
     const previo = borrador.restaurar()
     if (previo) {
@@ -570,7 +721,13 @@ function CrearUsuarioPanel({
   const alElegirPersona = async (p: PersonaCedula | null) => {
     setPersona(p)
     setProblemaPersona(null)
+    setCedulaSinPersona(null)
     if (!p) return
+
+    // El correo de la persona ES el correo de acceso: se propone siempre. Antes había que
+    // teclearlo a mano y ahí se colaba la errata que dejaba la cuenta con un correo
+    // distinto al de la persona — el caso de lady.celina / lady.velasquez.
+    if (p.correo && !correoTocado) setCorreo(p.correo)
 
     if (p.tipo_persona !== 'INTERNA') {
       setProblemaPersona('Solo el personal interno puede tener cuenta en el sistema.')
@@ -593,6 +750,54 @@ function CrearUsuarioPanel({
       setNombreUsuario(`${nombre}.${apellido}`.replace(/[^a-z0-9._-]/g, ''))
     }
   }
+
+  /**
+   * Registra la persona interna sin salir de esta pantalla y la deja seleccionada, de modo
+   * que el alta continúe con la cuenta y el rol.
+   *
+   * `persona` sigue siendo entidad maestra única (CLAUDE.md): esto no crea una copia, es el
+   * mismo INSERT que hace GPI, con el permiso ADM_PERSONA_INSERT y acotado por RLS a
+   * tipo_persona = INTERNA.
+   */
+  const crearPersona = async () => {
+    if (!cedulaSinPersona) return
+    setCreandoPersona(true)
+    setError(null)
+    const { data, error: err } = await supabase
+      .from('persona')
+      .insert({
+        cedula: cedulaSinPersona,
+        nombres: nuevaPersona.nombres.trim(),
+        apellidos: nuevaPersona.apellidos.trim(),
+        correo: nuevaPersona.correo.trim().toLowerCase(),
+        id_categoria: nuevaPersona.id_categoria,
+        tipo_persona: 'INTERNA',
+        estado: 'ACTIVO',
+      } as never)
+      .select('id_persona, cedula, nombres, apellidos, correo, tipo_persona, estado')
+      .single()
+    setCreandoPersona(false)
+    if (err) {
+      setError(mensajeError(err))
+      return
+    }
+    const creada = data as unknown as PersonaCedula
+    toast('ok', `${creada.nombres} ${creada.apellidos} quedó registrada como personal interno.`)
+    setCedulaSinPersona(null)
+    setPersona(creada)
+    if (creada.correo && !correoTocado) setCorreo(creada.correo)
+    if (!usuarioTocado) {
+      const sinTildes = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '')
+      const nombre = sinTildes(creada.nombres.trim().split(/\s+/)[0] ?? '').toLowerCase()
+      const apellido = sinTildes(creada.apellidos.trim().split(/\s+/)[0] ?? '').toLowerCase()
+      setNombreUsuario(`${nombre}.${apellido}`.replace(/[^a-z0-9._-]/g, ''))
+    }
+  }
+
+  const errorCorreoPersona = nuevaPersona.correo ? validarCorreoInstitucional(nuevaPersona.correo) : null
+  const listoPersona =
+    !!cedulaSinPersona && nuevaPersona.nombres.trim() && nuevaPersona.apellidos.trim() &&
+    nuevaPersona.correo && !errorCorreoPersona && nuevaPersona.id_categoria
 
   const errorUsuario = nombreUsuario ? validarNombreUsuario(nombreUsuario) : null
   const errorCorreo = correo ? validarCorreoInstitucional(correo) : null
@@ -629,8 +834,8 @@ function CrearUsuarioPanel({
         <div>
           <h3 className="text-base font-semibold text-navy">Crear usuario del sistema</h3>
           <p className="mt-0.5 text-sm text-ink-soft">
-            Busca por cédula a la persona interna que tendrá la cuenta. Si no aparece, regístrala
-            primero en Personal interno (GPI).
+            Busca por cédula a la persona interna que tendrá la cuenta. Si no está registrada,
+            puedes darla de alta aquí mismo.
           </p>
         </div>
         <Button variant="ghost" onClick={cancelar}>Cancelar</Button>
@@ -640,9 +845,66 @@ function CrearUsuarioPanel({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
-          <BuscarPersonaPorCedula onSelect={alElegirPersona} soloActivas label="Cédula de la persona" autoFocus />
+          <BuscarPersonaPorCedula
+            onSelect={alElegirPersona}
+            onNoEncontrada={(cedula) => { setCedulaSinPersona(cedula); setPersona(null) }}
+            soloActivas
+            soloTipo="INTERNA"
+            label="Cédula de la persona"
+            autoFocus
+          />
           {problemaPersona && (
             <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">{problemaPersona}</p>
+          )}
+
+          {/* La cédula no está registrada: se ofrece darla de alta aquí mismo en vez de
+              mandar al administrador a GPI, salir de su sesión y volver. */}
+          {cedulaSinPersona && (
+            <div className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+              <div>
+                <h4 className="text-sm font-semibold text-navy">Registrar a esta persona</h4>
+                <p className="mt-0.5 text-xs text-ink-soft">
+                  La cédula {cedulaSinPersona} no está registrada. Puedes darla de alta como personal
+                  interno y continuar con su cuenta sin salir de aquí.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Nombres" required htmlFor="np-nombres">
+                  <Input id="np-nombres" value={nuevaPersona.nombres}
+                    onChange={(e) => setNuevaPersona((v) => ({ ...v, nombres: e.target.value }))} />
+                </Field>
+                <Field label="Apellidos" required htmlFor="np-apellidos">
+                  <Input id="np-apellidos" value={nuevaPersona.apellidos}
+                    onChange={(e) => setNuevaPersona((v) => ({ ...v, apellidos: e.target.value }))} />
+                </Field>
+                <Field
+                  label="Correo institucional"
+                  required
+                  htmlFor="np-correo"
+                  error={errorCorreoPersona}
+                  ayuda="Será también el correo con el que entre al sistema: los dos se mantienen sincronizados, así que corregirlo aquí o en Personal interno da igual."
+                >
+                  <Input id="np-correo" type="email" value={nuevaPersona.correo}
+                    onChange={(e) => setNuevaPersona((v) => ({ ...v, correo: e.target.value.toLowerCase() }))}
+                    placeholder="nombre.apellido@epn.edu.ec" />
+                </Field>
+                <Field label="Categoría" required htmlFor="np-categoria">
+                  <Select
+                    id="np-categoria"
+                    value={nuevaPersona.id_categoria}
+                    onChange={(e) => setNuevaPersona((v) => ({ ...v, id_categoria: e.target.value }))}
+                    placeholder="— Seleccionar —"
+                    options={categorias.map((c) => ({ value: c.id_categoria, label: humanizar(c.codigo_categoria) }))}
+                  />
+                </Field>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={crearPersona} loading={creandoPersona} disabled={!listoPersona}>
+                  Registrar y continuar
+                </Button>
+                <Button variant="ghost" onClick={() => setCedulaSinPersona(null)}>Cancelar</Button>
+              </div>
+            </div>
           )}
         </div>
 
@@ -668,7 +930,9 @@ function CrearUsuarioPanel({
           error={errorCorreo}
           ayuda="Debe ser una dirección de la Politécnica: @epn.edu.ec (o un subdominio) o @cec.edu.ec. Es el correo con el que la persona iniciará sesión."
         >
-          <Input id="alta-correo" type="email" value={correo} onChange={(e) => setCorreo(e.target.value.toLowerCase())} placeholder="nombre.apellido@epn.edu.ec" />
+          <Input id="alta-correo" type="email" value={correo}
+            onChange={(e) => { setCorreoTocado(true); setCorreo(e.target.value.toLowerCase()) }}
+            placeholder="nombre.apellido@epn.edu.ec" />
         </Field>
 
         <div className="sm:col-span-2">
