@@ -91,17 +91,200 @@ export function extraerPlacaDeTexto(texto: string): string | null {
 // Preprocesado de la imagen
 // ---------------------------------------------------------------------------
 
+/** Una imagen en crudo, sin DOM de por medio: es lo que permite medir el preprocesado fuera
+ *  del navegador (ver `scripts/calibracion_placas`). */
+export interface ImagenCruda {
+  datos: Uint8ClampedArray
+  ancho: number
+  alto: number
+}
+
 /**
- * Recorta la franja central del fotograma —la que el panel dibuja como guía— y la prepara
- * para el OCR: amplía, pasa a gris, estira el contraste y binariza por el método de Otsu.
+ * Cómo se prepara la imagen antes de pasarla al OCR.
+ *
+ * No hay una sola respuesta buena, y por eso hay tres: la que funciona con una placa metálica
+ * bien iluminada NO es la que funciona con la foto de una placa en la pantalla de un móvil.
+ *
+ *  - `BINARIZADA`  — grises, contraste estirado y umbral de Otsu. Lo mejor con una placa real:
+ *                    deja los caracteres en negro puro sobre blanco puro.
+ *  - `SUAVIZADA`   — un desenfoque de 3x3 ANTES de binarizar. Es la defensa contra el moiré,
+ *                    el patrón de rayas que aparece al fotografiar una pantalla: son detalles
+ *                    de alta frecuencia, y el desenfoque se los come antes de que el umbral
+ *                    los convierta en cantos negros falsos por toda la imagen.
+ *  - `GRIS`        — solo grises con el contraste estirado, sin binarizar. Cuando el brillo de
+ *                    la pantalla aplana el contraste, un umbral global parte la placa en dos
+ *                    mitades —una toda negra y otra toda blanca— y se pierden caracteres
+ *                    enteros. En gris, Tesseract se defiende mejor.
+ *  - `REALZADA`    — suavizado para matar el moiré y, encima, realce de bordes (máscara de
+ *                    desenfoque) antes de binarizar. Una foto de pantalla llega desenfocada
+ *                    Y con moiré a la vez: suavizar sola deja los caracteres blandos, y
+ *                    realzar sola amplifica las rayas. Hacer las dos cosas en ese orden quita
+ *                    la rejilla primero y devuelve el canto de los caracteres después.
+ */
+export type VarianteOcr = 'BINARIZADA' | 'SUAVIZADA' | 'GRIS' | 'REALZADA'
+
+/** Grises por luminancia. */
+function aGrises(img: ImagenCruda): Uint8Array {
+  const { datos } = img
+  const grises = new Uint8Array(datos.length / 4)
+  for (let i = 0, j = 0; i < datos.length; i += 4, j++) {
+    grises[j] = Math.round(0.299 * datos[i] + 0.587 * datos[i + 1] + 0.114 * datos[i + 2])
+  }
+  return grises
+}
+
+/** Desenfoque de caja 3x3. Barato y suficiente para deshacer el moiré. */
+function suavizar(grises: Uint8Array, ancho: number, alto: number): Uint8Array {
+  const salida = new Uint8Array(grises.length)
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      let suma = 0
+      let n = 0
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const yy = y + dy
+          const xx = x + dx
+          if (yy < 0 || yy >= alto || xx < 0 || xx >= ancho) continue
+          suma += grises[yy * ancho + xx]
+          n++
+        }
+      }
+      salida[y * ancho + x] = Math.round(suma / n)
+    }
+  }
+  return salida
+}
+
+/**
+ * Máscara de desenfoque: al original se le resta su versión borrosa, lo que devuelve el canto
+ * a los bordes. Es lo que compensa el desenfoque de enfocar de cerca una pantalla.
+ */
+function realzar(grises: Uint8Array, ancho: number, alto: number, fuerza = 1.2): Uint8Array {
+  const borrosa = suavizar(grises, ancho, alto)
+  const salida = new Uint8Array(grises.length)
+  for (let i = 0; i < grises.length; i++) {
+    const v = grises[i] + fuerza * (grises[i] - borrosa[i])
+    salida[i] = Math.max(0, Math.min(255, Math.round(v)))
+  }
+  return salida
+}
+
+/**
+ * Estira el contraste recortando el 2 % de cada extremo del histograma.
+ *
+ * Una placa fotografiada a contraluz —o en una pantalla— ocupa una franja estrecha del
+ * histograma; sin estirarla, el umbral posterior se lo lleva todo del mismo lado.
+ */
+function estirarContraste(grises: Uint8Array): Uint8Array {
+  const histograma = new Array(256).fill(0)
+  for (const g of grises) histograma[g]++
+
+  const total = grises.length
+  const recorte = total * 0.02
+  let acumulado = 0
+  let minimo = 0
+  let maximo = 255
+  for (let v = 0; v < 256; v++) {
+    acumulado += histograma[v]
+    if (acumulado > recorte) { minimo = v; break }
+  }
+  acumulado = 0
+  for (let v = 255; v >= 0; v--) {
+    acumulado += histograma[v]
+    if (acumulado > recorte) { maximo = v; break }
+  }
+  const rango = Math.max(1, maximo - minimo)
+
+  const salida = new Uint8Array(total)
+  for (let j = 0; j < total; j++) {
+    salida[j] = Math.max(0, Math.min(255, Math.round(((grises[j] - minimo) / rango) * 255)))
+  }
+  return salida
+}
+
+/**
+ * Umbral de Otsu: separa fondo de caracteres maximizando la varianza entre las dos clases.
+ * Se calcula de la imagen, no se elige a mano — un valor fijo solo funciona con una
+ * iluminación concreta.
+ */
+function umbralOtsu(grises: Uint8Array): number {
+  const histograma = new Array(256).fill(0)
+  for (const g of grises) histograma[g]++
+  const total = grises.length
+
+  let sumaTotal = 0
+  for (let v = 0; v < 256; v++) sumaTotal += v * histograma[v]
+
+  let sumaFondo = 0
+  let pesoFondo = 0
+  let mejorVarianza = -1
+  let umbral = 128
+  for (let v = 0; v < 256; v++) {
+    pesoFondo += histograma[v]
+    if (pesoFondo === 0) continue
+    const pesoFrente = total - pesoFondo
+    if (pesoFrente === 0) break
+    sumaFondo += v * histograma[v]
+    const mediaFondo = sumaFondo / pesoFondo
+    const mediaFrente = (sumaTotal - sumaFondo) / pesoFrente
+    const varianza = pesoFondo * pesoFrente * (mediaFondo - mediaFrente) ** 2
+    if (varianza > mejorVarianza) { mejorVarianza = varianza; umbral = v }
+  }
+  return umbral
+}
+
+/**
+ * Aplica una variante de preprocesado sobre la imagen, en el sitio.
+ *
+ * Función pura respecto al DOM: recibe y devuelve píxeles, sin canvas de por medio. Es lo que
+ * permite que `scripts/calibracion_placas` mida EXACTAMENTE este algoritmo y no una copia
+ * parecida que se desviaría con el tiempo.
+ */
+export function aplicarVariante(img: ImagenCruda, variante: VarianteOcr): void {
+  let grises = aGrises(img)
+  if (variante === 'SUAVIZADA') {
+    grises = suavizar(grises, img.ancho, img.alto)
+  } else if (variante === 'REALZADA') {
+    // El orden importa: primero se quita la rejilla, después se recupera el borde. Al revés,
+    // el realce convertiría el moiré en cantos negros por toda la imagen.
+    grises = suavizar(grises, img.ancho, img.alto)
+    grises = realzar(grises, img.ancho, img.alto)
+  }
+  grises = estirarContraste(grises)
+
+  const binarizar = variante !== 'GRIS'
+  const umbral = binarizar ? umbralOtsu(grises) : 0
+
+  const { datos } = img
+  for (let i = 0, j = 0; i < datos.length; i += 4, j++) {
+    const valor = binarizar ? (grises[j] > umbral ? 255 : 0) : grises[j]
+    datos[i] = valor
+    datos[i + 1] = valor
+    datos[i + 2] = valor
+    datos[i + 3] = 255
+  }
+}
+
+/** Las variantes, en el orden en que conviene probarlas: primero las que mejor se portan con
+ *  fotos de pantalla, que es el caso difícil. */
+export const VARIANTES_OCR: VarianteOcr[] = ['SUAVIZADA', 'REALZADA', 'BINARIZADA', 'GRIS']
+
+/**
+ * Recorta la franja central del fotograma —la que el panel dibuja como guía— y devuelve una
+ * imagen preparada por cada variante de preprocesado.
  *
  * El recorte es lo que más aporta: el guardia encuadra la placa dentro del marco, así que el
  * resto de la imagen (capó, calle, otros coches) es ruido que solo puede empeorar la lectura.
+ *
+ * Se devuelven VARIAS imágenes en vez de una porque no existe un preprocesado que gane siempre:
+ * el que mejor lee una placa metálica es el que peor lee una pantalla. Probar las tres y
+ * quedarse con la lectura que tenga forma de placa cuesta unos segundos de CPU y es la
+ * diferencia entre leer la placa y no leerla.
  */
 export function prepararImagenParaOcr(
   origen: HTMLVideoElement | HTMLImageElement,
   canvas: HTMLCanvasElement,
-): string {
+): string[] {
   const anchoOrigen = origen instanceof HTMLVideoElement ? origen.videoWidth : origen.naturalWidth
   const altoOrigen = origen instanceof HTMLVideoElement ? origen.videoHeight : origen.naturalHeight
   if (!anchoOrigen || !altoOrigen) throw new Error('La cámara todavía no ha entregado imagen.')
@@ -122,77 +305,18 @@ export function prepararImagenParaOcr(
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(origen, x, y, anchoRecorte, altoRecorte, 0, 0, canvas.width, canvas.height)
 
-  const imagen = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const pixeles = imagen.data
-
-  // 1. Escala de grises con pesos de luminancia, y histograma para los dos pasos siguientes.
-  const grises = new Uint8Array(pixeles.length / 4)
-  const histograma = new Array(256).fill(0)
-  for (let i = 0, j = 0; i < pixeles.length; i += 4, j++) {
-    const gris = Math.round(0.299 * pixeles[i] + 0.587 * pixeles[i + 1] + 0.114 * pixeles[i + 2])
-    grises[j] = gris
-    histograma[gris]++
+  const salida: string[] = []
+  for (const variante of VARIANTES_OCR) {
+    // Se vuelve a dibujar el original en cada vuelta: las variantes parten del mismo fotograma,
+    // no se encadenan una sobre otra.
+    ctx.drawImage(origen, x, y, anchoRecorte, altoRecorte, 0, 0, canvas.width, canvas.height)
+    const imagen = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    aplicarVariante({ datos: imagen.data, ancho: canvas.width, alto: canvas.height }, variante)
+    ctx.putImageData(imagen, 0, 0)
+    salida.push(canvas.toDataURL('image/png'))
   }
-
-  // 2. Estirado de contraste, recortando el 2 % de cada extremo. Una placa fotografiada a
-  //    contraluz ocupa una franja estrecha del histograma; sin estirarla, el umbral posterior
-  //    se lo come todo del mismo lado.
-  const total = grises.length
-  const recorte = total * 0.02
-  let acumulado = 0
-  let minimo = 0
-  let maximo = 255
-  for (let v = 0; v < 256; v++) {
-    acumulado += histograma[v]
-    if (acumulado > recorte) { minimo = v; break }
-  }
-  acumulado = 0
-  for (let v = 255; v >= 0; v--) {
-    acumulado += histograma[v]
-    if (acumulado > recorte) { maximo = v; break }
-  }
-  const rango = Math.max(1, maximo - minimo)
-
-  // 3. Umbral de Otsu sobre el histograma ya estirado: separa fondo de caracteres sin que
-  //    haya que elegir a mano un valor que solo funciona con una iluminación concreta.
-  const estirados = new Uint8Array(total)
-  const histEstirado = new Array(256).fill(0)
-  for (let j = 0; j < total; j++) {
-    const v = Math.max(0, Math.min(255, Math.round(((grises[j] - minimo) / rango) * 255)))
-    estirados[j] = v
-    histEstirado[v]++
-  }
-
-  let sumaTotal = 0
-  for (let v = 0; v < 256; v++) sumaTotal += v * histEstirado[v]
-  let sumaFondo = 0
-  let pesoFondo = 0
-  let mejorVarianza = -1
-  let umbral = 128
-  for (let v = 0; v < 256; v++) {
-    pesoFondo += histEstirado[v]
-    if (pesoFondo === 0) continue
-    const pesoFrente = total - pesoFondo
-    if (pesoFrente === 0) break
-    sumaFondo += v * histEstirado[v]
-    const mediaFondo = sumaFondo / pesoFondo
-    const mediaFrente = (sumaTotal - sumaFondo) / pesoFrente
-    const varianza = pesoFondo * pesoFrente * (mediaFondo - mediaFrente) ** 2
-    if (varianza > mejorVarianza) { mejorVarianza = varianza; umbral = v }
-  }
-
-  for (let i = 0, j = 0; i < pixeles.length; i += 4, j++) {
-    const valor = estirados[j] > umbral ? 255 : 0
-    pixeles[i] = valor
-    pixeles[i + 1] = valor
-    pixeles[i + 2] = valor
-    pixeles[i + 3] = 255
-  }
-  ctx.putImageData(imagen, 0, 0)
-
-  return canvas.toDataURL('image/png')
+  return salida
 }
 
 // ---------------------------------------------------------------------------
@@ -235,18 +359,71 @@ export interface LecturaPlaca {
   motor: 'NUBE' | 'LOCAL' | 'MANUAL'
 }
 
-/** Lee la placa de una imagen ya preprocesada, en el navegador. */
-export async function leerPlacaLocal(imagenDataUrl: string): Promise<LecturaPlaca | null> {
-  const worker = await obtenerTrabajador()
-  const { data } = await worker.recognize(imagenDataUrl)
+/**
+ * Confianza de una lectura, calculada por ACUERDO ENTRE VARIANTES.
+ *
+ * Lo natural sería usar la confianza que reporta Tesseract, pero en tesseract.js 5 llega
+ * siempre a 0 —en `data.confidence`, en los bloques y en las palabras—, así que como señal no
+ * existe. Medido: con ese número, ningún umbral de confianza filtraba nada, porque todas las
+ * lecturas empataban a cero.
+ *
+ * La señal que sí hay es mejor que la que falta: las tres variantes de preprocesado son tres
+ * lectores independientes sobre la misma foto. Que las tres coincidan en "PDF1234" dice mucho
+ * más de esa lectura que cualquier número que devuelva un motor sobre sí mismo — es la misma
+ * idea que votar entre varios modelos.
+ *
+ *   acuerdo   = cuántas variantes leyeron lo mismo que la elegida
+ *   cobertura = cuántas variantes consiguieron leer algo con forma de placa
+ *
+ * Se comparan las placas ya corregidas: "PDFI234" y "PDF1234" son la misma lectura escrita de
+ * dos formas, y contarlas como desacuerdo penalizaría una coincidencia real.
+ */
+function confianzaPorConsenso(lecturas: string[], elegida: string): number {
+  if (lecturas.length === 0) return 0
+  const canonica = corregirPlacaOcr(elegida)
+  const coincidencias = lecturas.filter((l) => corregirPlacaOcr(l) === canonica).length
+  const acuerdo = coincidencias / lecturas.length
+  const cobertura = lecturas.length / VARIANTES_OCR.length
+  // La cobertura pondera a la mitad: dos variantes que coinciden valen más que una sola que
+  // acierta por su cuenta, pero una lectura única tampoco es despreciable.
+  return Number((acuerdo * (0.5 + 0.5 * cobertura)).toFixed(2))
+}
 
-  const placa = extraerPlacaDeTexto(data.text ?? '')
-  if (!placa) return null
+/**
+ * Lee la placa en el navegador probando cada variante de preprocesado.
+ *
+ * Se queda con la lectura MÁS VOTADA entre las que tienen forma de placa ecuatoriana. El filtro
+ * de forma va primero y no es negociable: Tesseract devuelve con gusto "ECUADOR" o "PICHINCHA",
+ * que están impresos en la propia placa, y sin ese filtro serían candidatos.
+ *
+ * Si ninguna variante da algo con forma de placa, devuelve null y la pantalla ofrece repetir la
+ * captura o teclearla.
+ */
+export async function leerPlacaLocal(imagenes: string | string[]): Promise<LecturaPlaca | null> {
+  const worker = await obtenerTrabajador()
+  const lista = Array.isArray(imagenes) ? imagenes : [imagenes]
+
+  const lecturas: string[] = []
+  for (const imagen of lista) {
+    const { data } = await worker.recognize(imagen)
+    const placa = extraerPlacaDeTexto(data.text ?? '')
+    if (placa) lecturas.push(placa)
+  }
+
+  if (lecturas.length === 0) return null
+
+  // La más repetida (en forma canónica); a igualdad, la primera, que viene de la variante
+  // SUAVIZADA — la que mejor se comporta con fotos de pantalla, que es el caso difícil.
+  const votos = new Map<string, number>()
+  for (const l of lecturas) {
+    const clave = corregirPlacaOcr(l)
+    votos.set(clave, (votos.get(clave) ?? 0) + 1)
+  }
+  const ganadora = [...votos.entries()].sort((a, b) => b[1] - a[1])[0][0]
 
   return {
-    placa,
-    // Tesseract da la confianza en 0-100; el resto del sistema trabaja en 0-1.
-    confianza: Math.max(0, Math.min(1, (data.confidence ?? 0) / 100)),
+    placa: ganadora,
+    confianza: confianzaPorConsenso(lecturas, ganadora),
     motor: 'LOCAL',
   }
 }

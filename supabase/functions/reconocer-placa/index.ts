@@ -212,7 +212,44 @@ Deno.serve(async (req) => {
     return errorResponse('Envie imagen_base64 o placa_leida', 400);
   }
 
-  // ---- 2. Resolver la lectura contra los vehiculos registrados ----
+  // ---- 2. ¿Es la lectura lo bastante buena para usarla sin preguntar? ----
+  // Los dos umbrales viven en parametro_sistema y salen de una medicion, no de una intuicion
+  // (§D71). Antes esta funcion ignoraba por completo la confianza: una lectura en la que las
+  // cuatro variantes de preprocesado discrepaban entre si se trataba igual que una en la que
+  // todas coincidian.
+  const { data: parametros } = await supabaseService
+    .from('parametro_sistema')
+    .select('codigo_parametro, valor_parametro')
+    .in('codigo_parametro', ['UMBRAL_PLACA', 'UMBRAL_PLACA_REVISION']);
+
+  const valorDe = (codigo: string, porDefecto: number) => {
+    const fila = (parametros ?? []).find((p) => p.codigo_parametro === codigo);
+    return fila ? Number(fila.valor_parametro) : porDefecto;
+  };
+  const umbralPlaca = valorDe('UMBRAL_PLACA', 0.75);
+  const umbralRevision = valorDe('UMBRAL_PLACA_REVISION', 0.5);
+
+  // Una lectura por debajo del umbral de revision no se propone siquiera: las variantes no se
+  // ponen de acuerdo, asi que proponer una de ellas seria echar una moneda al aire delante del
+  // guardia. Se pide repetir. (El camino MANUAL no pasa por aqui: si la escribio una persona
+  // mirando la placa, su confianza es 1.)
+  if (lectura.motor !== 'MANUAL' && lectura.confianza < umbralRevision) {
+    await registrarError(supabaseService, {
+      codigo: 'PLACA_NO_LEGIBLE',
+      descripcion: `Lectura descartada por bajo acuerdo entre variantes (${lectura.confianza} < ${umbralRevision}): "${lectura.placa}"`,
+      idPuntoControl: body.id_punto_control,
+      idUsuario,
+    });
+    return jsonResponse({
+      motor: lectura.motor,
+      lectura: null,
+      vehiculo: null,
+      ambigua: false,
+      detalle: 'La placa no se leyo con suficiente claridad. Acerque la imagen, mejore la luz o escriba la placa a mano.',
+    });
+  }
+
+  // ---- 3. Resolver la lectura contra los vehiculos registrados ----
   const { data: candidatos, error: errorIdent } = await supabaseService.rpc('identificar_placa', {
     p_placa_leida: lectura.placa,
   });
@@ -242,7 +279,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  // ---- 3. Quien puede ir en ese vehiculo (RF-CA-016 / RF-CA-018) ----
+  // ---- 4. Quien puede ir en ese vehiculo (RF-CA-016 / RF-CA-018) ----
   const { data: asociadas, error: errorAsoc } = await supabaseService
     .from('persona_vehiculo')
     .select('tipo_relacion, estado_relacion, fecha_fin, persona:persona(id_persona, nombres, apellidos, cedula, tipo_persona, estado)')
@@ -270,8 +307,11 @@ Deno.serve(async (req) => {
     personas_asociadas: personas,
     propietario: personas.find((p) => p.tipo_relacion === 'PROPIETARIO') ?? null,
     ambigua: false,
-    // Una lectura que hubo que corregir, o que viene con poca confianza, se le enseña al
-    // guardia antes de usarla. La decision de cuanto es "poca" vive en parametro_sistema.
-    requiere_confirmacion: candidato.corregida === true || candidato.distancia > 0,
+    // Se le enseña al guardia antes de usarla si la lectura hubo que corregirla, si no fue
+    // exacta, o si las variantes no se pusieron del todo de acuerdo.
+    requiere_confirmacion:
+      candidato.corregida === true ||
+      candidato.distancia > 0 ||
+      (lectura.motor !== 'MANUAL' && lectura.confianza < umbralPlaca),
   });
 });

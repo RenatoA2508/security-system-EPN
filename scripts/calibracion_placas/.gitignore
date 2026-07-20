@@ -1,0 +1,3 @@
+node_modules/
+# Se genera compilando web/src/lib/placas.ts: el codigo real, no una copia.
+placas.build.mjs

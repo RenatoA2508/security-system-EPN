@@ -140,11 +140,14 @@ export function LectorPlaca({
     setAviso(null)
     setLeyendo(true)
     try {
-      const imagen = prepararImagenParaOcr(origen, canvasRef.current!)
+      const variantes = prepararImagenParaOcr(origen, canvasRef.current!)
 
-      // 1. Motor en la nube. Se le manda el recorte ya preparado, no la foto entera.
+      // 1. Motor en la nube. Se le manda el recorte ya preparado, no la foto entera. Y de las
+      //    variantes, la primera (SUAVIZADA): el lector de la nube localiza la placa por su
+      //    cuenta y no necesita que se le den cuatro versiones de lo mismo — eso solo
+      //    multiplicaría por cuatro las peticiones de una cuota mensual limitada.
       const { data, error: errorFn } = await supabase.functions.invoke('reconocer-placa', {
-        body: { imagen_base64: imagen, id_punto_control: idPuntoControl },
+        body: { imagen_base64: variantes[0], id_punto_control: idPuntoControl },
       })
       if (errorFn) throw new Error(mensajeError(errorFn))
 
@@ -173,7 +176,9 @@ export function LectorPlaca({
             ? 'Lector en la nube no configurado; leyendo la placa en este dispositivo.'
             : 'El lector en la nube no respondió; leyendo la placa en este dispositivo.',
         )
-        const lectura = await leerPlacaLocal(imagen)
+        // Al lector local sí se le dan todas: es gratis, corre aquí, y el acuerdo entre las
+        // variantes es lo que da la confianza de la lectura.
+        const lectura = await leerPlacaLocal(variantes)
         if (!lectura) {
           await registrarErrorTecnico(
             'PLACA_NO_LEGIBLE',

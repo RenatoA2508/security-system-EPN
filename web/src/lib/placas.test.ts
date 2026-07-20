@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  corregirPlacaOcr, extraerPlacaDeTexto, normalizarPlacaLeida, pareceePlacaEcuatoriana,
+  VARIANTES_OCR, aplicarVariante, corregirPlacaOcr, extraerPlacaDeTexto, normalizarPlacaLeida,
+  pareceePlacaEcuatoriana, type ImagenCruda,
 } from './placas'
 
 /**
@@ -106,5 +107,70 @@ describe('normalización', () => {
     expect(normalizarPlacaLeida('pdf-1234')).toBe('PDF1234')
     expect(normalizarPlacaLeida('P D F 1 2 3 4')).toBe('PDF1234')
     expect(normalizarPlacaLeida('')).toBe('')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Preprocesado
+// ---------------------------------------------------------------------------
+
+/** Una imagen de prueba: franja oscura arriba, clara abajo, con contraste aplastado en el
+ *  centro — parecido a lo que llega de una foto de pantalla. */
+function imagenDePrueba(ancho = 8, alto = 8): ImagenCruda {
+  const datos = new Uint8ClampedArray(ancho * alto * 4)
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      const i = (y * ancho + x) * 4
+      const v = y < alto / 2 ? 90 + (x % 2) * 8 : 150 + (x % 2) * 8
+      datos[i] = v
+      datos[i + 1] = v
+      datos[i + 2] = v
+      datos[i + 3] = 255
+    }
+  }
+  return { datos, ancho, alto }
+}
+
+const valoresDe = (img: ImagenCruda) => {
+  const vs = new Set<number>()
+  for (let i = 0; i < img.datos.length; i += 4) vs.add(img.datos[i])
+  return vs
+}
+
+describe('variantes de preprocesado', () => {
+  it('las binarizadas dejan solo negro y blanco', () => {
+    for (const variante of ['BINARIZADA', 'SUAVIZADA', 'REALZADA'] as const) {
+      const img = imagenDePrueba()
+      aplicarVariante(img, variante)
+      const valores = [...valoresDe(img)].sort((a, b) => a - b)
+      expect(valores.every((v) => v === 0 || v === 255)).toBe(true)
+      expect(valores.length).toBeGreaterThan(1) // separó algo, no dejó la imagen de un color
+    }
+  })
+
+  it('la variante GRIS no binariza: conserva los tonos intermedios', () => {
+    // Es su razón de ser: cuando el brillo de la pantalla aplana el contraste, un umbral
+    // global se lleva caracteres enteros por delante y en gris se salvan.
+    const img = imagenDePrueba()
+    aplicarVariante(img, 'GRIS')
+    const valores = [...valoresDe(img)]
+    expect(valores.some((v) => v !== 0 && v !== 255)).toBe(true)
+  })
+
+  it('deja la imagen en gris: los tres canales con el mismo valor y opaca', () => {
+    const img = imagenDePrueba()
+    aplicarVariante(img, 'SUAVIZADA')
+    for (let i = 0; i < img.datos.length; i += 4) {
+      expect(img.datos[i]).toBe(img.datos[i + 1])
+      expect(img.datos[i + 1]).toBe(img.datos[i + 2])
+      expect(img.datos[i + 3]).toBe(255)
+    }
+  })
+
+  it('se prueban varias variantes, y la primera es la que mejor lee pantallas', () => {
+    // El orden importa: ante empate de votos gana la primera, y la medida sobre el banco de
+    // pruebas dice que SUAVIZADA es la que mejor se porta con fotos de pantalla.
+    expect(VARIANTES_OCR.length).toBeGreaterThan(1)
+    expect(VARIANTES_OCR[0]).toBe('SUAVIZADA')
   })
 })

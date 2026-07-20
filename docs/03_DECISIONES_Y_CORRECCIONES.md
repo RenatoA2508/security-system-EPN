@@ -1064,3 +1064,75 @@ no casaba nunca**: a las 23:00 fallaba `hora <= 06:00` y a las 02:00 fallaba `22
 Es el mismo error que ya apareció en los turnos del guardia (§D59). La comparación se parte en
 dos tramos cuando `fin < inicio`. En el formulario, teclear un horario que cruza la medianoche
 muestra un **aviso** (no bloquea): es válido, pero se teclea por error con demasiada facilidad.
+
+## §D71 — Los umbrales del lector de placas salen de una medición, y la confianza se calcula por consenso
+
+**Conflicto:** §D68 dejó el lector funcionando pero con dos números puestos a ojo
+(`UMBRAL_PLACA` 0.80, `UMBRAL_PLACA_REVISION` 0.55). Al medirlos aparecieron dos problemas, uno
+de ellos grave.
+
+**El grave: la confianza era siempre 0.** `tesseract.js` 5 devuelve `confidence` a cero en todos
+los niveles —documento, bloque y palabra—, así que el umbral no filtraba absolutamente nada.
+Ninguna lectura lo alcanzaba jamás. El parámetro existía, se guardaba en cada evento y no hacía
+nada. No se detectó antes porque el flujo no se rompe: simplemente todas las lecturas empataban
+a cero y la primera válida ganaba siempre.
+
+**La confianza pasa a calcularse por acuerdo entre variantes.** Las cuatro formas de preparar la
+imagen son cuatro lectores independientes sobre la misma foto; que coincidan dice mucho más de
+la lectura que cualquier número que un motor se ponga a sí mismo. Es la misma idea que votar
+entre varios modelos. Y esa señal **sí** discrimina:
+
+| | n | p5 | mediana | p95 |
+|---|---|---|---|---|
+| Lecturas correctas | 132 | 0.63 | **1.00** | 1.00 |
+| Lecturas equivocadas | 20 | 0.38 | **0.63** | 0.75 |
+
+**Cómo se midió:** 200 imágenes generadas con la placa correcta conocida
+(`scripts/calibracion_placas`), en cinco condiciones. El medidor importa
+`web/src/lib/placas.ts` compilado, así que mide el código real y no una copia parecida.
+
+| Condición | Leída bien | Leída mal | No se leyó |
+|---|---|---|---|
+| Limpia | 90.0 % | 0.0 % | 10.0 % |
+| Leve (ángulo, algo de desenfoque) | **100.0 %** | 0.0 % | 0.0 % |
+| **Foto en la pantalla de un móvil** | 65.0 % | 12.5 % | 22.5 % |
+| Pantalla del móvil, lejos y torcida | 5.0 % | 30.0 % | 65.0 % |
+| Placa real en malas condiciones | 70.0 % | 7.5 % | 22.5 % |
+
+**El preprocesado de un solo paso era el cuello de botella.** La binarización de Otsu que había
+es la mejor opción con una placa metálica bien iluminada y una de las peores con una foto de
+pantalla, porque el moiré —la interferencia entre la rejilla de píxeles del móvil y la del
+sensor— se convierte en cantos negros falsos por toda la imagen. Ahora se prueban cuatro
+variantes y se vota:
+
+| Condición | SUAVIZADA | REALZADA | BINARIZADA | GRIS |
+|---|---|---|---|---|
+| Foto en pantalla del móvil | **65.0 %** | 57.5 % | 40.0 % | 42.5 % |
+| Placa real en malas condiciones | **60.0 %** | 17.5 % | 12.5 % | 10.0 % |
+
+`SUAVIZADA` (desenfoque 3×3 antes de binarizar) gana en todo lo difícil, y multiplica por cinco
+el acierto de la binarización sola con una placa real en malas condiciones.
+
+**Los umbrales elegidos:**
+
+| Umbral | De las aceptadas, equivocadas | Correctas que se descartarían |
+|---|---|---|
+| 0.60 | 9.9 % | 3.8 % |
+| 0.65 | 5.6 % | 23.5 % |
+| **0.75** | **1.2 %** | 35.6 % |
+| 0.90 | 1.2 % | 37.9 % |
+
+`UMBRAL_PLACA = 0.75` es donde el error se desploma sin que subir más aporte nada. Y ese 35.6 %
+de lecturas correctas **no se tira**: cae en la banda de revisión (`UMBRAL_PLACA_REVISION = 0.50`),
+donde el guardia confirma la placa que el sistema propone. Por debajo de 0.50 las variantes
+discrepan entre sí, y proponer una de ellas sería echar una moneda al aire delante del guardia:
+ahí se pide repetir la captura.
+
+Es el mismo patrón que la biometría (§D67): **el sistema propone, la persona decide, y solo lo
+que no llega ni a proponerse se descarta.**
+
+**Lo que la medición dice sobre la demo:** una foto de la placa en la pantalla del móvil,
+encuadrada en el marco y de cerca, cae entre "leve" (100 %) y "pantalla del móvil" (65 %). Si se
+aleja o se tuerce, el acierto se hunde — y ahí importa que las lecturas malas de ese caso tienen
+confianza baja (p95 = 0.75), así que la mayoría no se auto-aceptan: se le proponen al guardia o
+se descartan.
