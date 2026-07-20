@@ -1,35 +1,76 @@
 # Estado del sistema — punto de partida para la siguiente sesión
 
-La ronda de **CAC** está cerrada. Sustituye al documento de la ronda de PCO.
+La ronda de **ADM (cuentas y roles)** está cerrada. La siguiente es **PCO**.
 
 ---
 
-## ✅ La ronda de CAC está fusionada y desplegada
+## ⏳ Lo único pendiente de la ronda de ADM: fusionar
 
-PR **#6** fusionado el 20/07/2026. Trajo también los commits de PCO, porque `feat/cac-mejoras`
-salía de `feat/pco-mejoras`: **las dos rondas están en `main` y en producción**.
+Todo el trabajo está hecho, desplegado en preview y verificado, pero **sigue en la rama
+`feat/adm-cuentas-y-roles`**, no en `main`.
 
-Verificado tras el despliegue: bundle nuevo servido en producción (`registry-BUKOHAkY.js`),
-lector de placas corrigiendo erratas, doble autenticación del conductor, persona desconocida
-registrándose y el embed de garitas por regla devolviendo el dato correcto.
+| | |
+|---|---|
+| Rama | `feat/adm-cuentas-y-roles` (2 commits: `f0e983c`, `bbd1d40`) |
+| Preview verificado | https://security-system-7d8fhwc53-epnsw.vercel.app |
+| TestSprite | **5 planes, 5 en verde** (66 pasos) |
+| Pruebas locales | 185 en verde, typecheck y build |
+| Aserciones SQL | `scripts/pruebas_adm_cuentas.sql`, pasa entero |
 
-Por primera vez en varias rondas, **el esquema y el frontend desplegado van a la par**. No hay
-ninguna ventana abierta entre la base y lo que ve el usuario.
+**Las tres migraciones YA están aplicadas en el proyecto remoto.** Esto importa: la base va por
+delante de `main`. Los cambios son compatibles hacia atrás —columna nueva, índice, triggers y un
+permiso—, así que producción sigue funcionando con el código anterior, pero **no conviene dejarlo
+así mucho tiempo**: el correo ya se sincroniza en la base mientras el frontend desplegado aún
+tiene el buscador que no rellenaba el campo.
 
-## ⚠️ Tres cosas que hacer ANTES de empezar
+## ✅ Qué resolvió la ronda de ADM
 
-**1. Volver a proteger los previews.** Panel de Vercel → proyecto `security-system-epn` →
+Cuatro incidencias que salieron de la revisión manual del administrador, todas reproducidas antes
+de tocar código (decisiones §D53-D56):
+
+- **El correo vivía en tres sitios sin nada que los uniera.** Se registró a una persona con un
+  correo equivocado, se corrigió en GPI y **la cuenta siguió entrando con el viejo durante días**.
+  Ahora `persona.correo`, `usuario_sistema.correo_electronico`, `auth.users.email` y la identidad
+  de GoTrue son un solo dato que el sistema mantiene idéntico, se toque desde GPI o desde ADM.
+  Va en triggers y no en una Edge Function para que la propagación ocurra **dentro de la misma
+  transacción**.
+- **El alta no rellenaba el correo.** Causa raíz: `BuscarPersonaPorCedula` no pedía `correo` en su
+  consulta. Ahí se colaba la errata.
+- **El solapamiento de roles era un fallo real, no teórico.** `guardia_demo` tenía Guardia +
+  Responsable de Personal Interno y, como la vista de Garita reemplaza toda la aplicación, esa
+  cuenta **no podía entrar a GPI de ninguna manera**. Ahora: un rol activo por cuenta, impuesto
+  con un índice único, y cambio atómico con `asignar_rol_unico`.
+- **El administrador podía quitarse su propio rol.** La guarda existente solo cubría al *último*
+  administrador; que hoy no ocurriera era casualidad, no protección.
+
+Además, **ADM ya no depende de GPI para dar de alta un usuario**: si la cédula no existe, el
+mismo formulario registra a la persona interna (permiso nuevo `ADM_PERSONA_INSERT`, acotado por
+RLS a `INTERNA`) y continúa con la cuenta y el rol. Y desde la ficha se editan correo y nombre de
+usuario.
+
+**El bloqueo de 15 minutos se comprobó de extremo a extremo y funciona** (§V37): cinco intentos
+bloquean, se escribe `banned_until` en GoTrue y, vencido el plazo, la cuenta entra **al primer
+intento**.
+
+## ⚠️ Cosas que hacer ANTES de empezar
+
+**1. Fusionar `feat/adm-cuentas-y-roles`** (ver arriba).
+
+**2. Volver a proteger los previews.** Panel de Vercel → proyecto `security-system-epn` →
 **Settings → Deployment Protection** → **Vercel Authentication** → **Enabled**. Sigue desactivado
 para que TestSprite pueda entrar; mientras siga así, cualquier URL de preview es accesible para
 quien la tenga.
 
-**2. `guardia.demo@epn.edu.ec` usa `admin1234` y su turno es 12:00–23:59.** Se le repuso la
-contraseña (estaba sin documentar y bloqueaba toda prueba de la Garita) y se le **reasignó** a la
-"Garita Principal (demo)": su punto anterior estaba en MANTENIMIENTO y no podía registrar ni un
-evento.
+**3. Verificar las contraseñas de las cuentas de prueba** (§V38). En esta ronda se descubrió que
+`frank.jumbo` **no** usaba `admin1234`, contra lo que decía este documento. Se alineó, pero nadie
+ha comprobado las demás una a una. Cuesta cinco minutos y evita perseguir fallos que no existen:
+en esta ronda esa premisa falsa hizo parecer roto el bloqueo por intentos fallidos, que estaba
+perfectamente.
 
-**Fuera de 12:00–23:59 no puede operar**, y es correcto (req 34). Si necesitas probar por la
-mañana, mueve la ventana — no se puede cubrir el día entero porque la jornada máxima son 12 h:
+**4. `guardia.demo@epn.edu.ec` ya NO ve GPI** (§V39). Al imponer un rol por cuenta se quedó solo
+con GUARDIA_SEGURIDAD; el otro rol estaba marcado `TEMPORAL_PRUEBA_BIOMETRIA`. Para probar GPI,
+`lenin.amangandi@epn.edu.ec`. Su turno sigue siendo 12:00–23:59 y fuera de esa ventana no puede
+operar (req 34); para moverlo:
 
 ```sql
 update public.guardia_punto_control
@@ -38,45 +79,44 @@ update public.guardia_punto_control
    and estado_asignacion = 'ACTIVA';
 ```
 
-**3. El token del lector de placas: decidido NO activarlo** en el prototipo 3.
+**5. El token del lector de placas: decidido NO activarlo** en el prototipo 3.
 `PLATE_RECOGNIZER_TOKEN` no está configurado y el sistema funciona con el lector local
-(Tesseract). Medido (§D71): con la placa llenando el marco el local acierta casi siempre, así
-que la ganancia del motor en la nube es pequeña para una demo, y a cambio manda las imágenes a
-un tercero y exige internet en el momento de la captura.
-
-Si algún día se despliega en una garita real, ahí sí compensa: se pone en Supabase →
-*Edge Functions → Secrets* y no hay que redesplegar nada.
+(Tesseract). Medido (§D71): con la placa llenando el marco el local acierta casi siempre, así que
+la ganancia del motor en la nube es pequeña para una demo, y a cambio manda las imágenes a un
+tercero y exige internet en el momento de la captura.
 
 ---
 
-## La próxima ronda es de PCO y ADM (prototipo 3)
+## La próxima ronda es de PCO
 
-Lo que ya está abierto de esos dos módulos y conviene mirar **antes** de empezar a leer el
-documento de requerimientos nuevo, porque son cosas que el equipo ya sabe que están a medias:
+El documento de requerimientos es `docs/New_Req/Requerimientos_PCO.docx`. Antes de leerlo conviene
+mirar lo que **ya se sabe que está a medias** en ese módulo, porque son cosas que el equipo ya
+identificó y que probablemente reaparezcan en el documento:
 
-| # | Qué | Módulo |
+| # | Qué | Por qué importa |
 |---|---|---|
-| §V24 | El "Parqueadero Subsuelo EARME" cuelga del campus, no de un edificio | PCO |
-| §V25 | Los puntos de control que cuelgan directamente del campus | PCO |
-| §V27 | El "código único" enfrenta a PCO con GPI: PCO pidió quitarlo y GPI lo exige | PCO / GPI |
-| §V28 | La búsqueda "solo con 10 dígitos o por apellido" no se implementó | PCO |
-| §V30 | El descanso entre jornadas no se comprueba con turnos nocturnos combinados | PCO |
-| §V18/§V19 | Un docente sembrado tiene código único y carrera de estudiante | ADM / GPI |
-| §V35 | El tipo de alerta se deduce del prefijo del motivo: acoplamiento por cadena de texto | CAC / ADM |
+| §V27 | El "código único" enfrenta a PCO con GPI: PCO pidió quitarlo, GPI lo exige | **Empezar por aquí.** Es un choque entre dos módulos, no una tarea suelta: hay que decidir a quién se le da la razón **antes** de escribir código. En la ronda de PCO se dejó sin tocar para no romper GPI, que ya estaba probado. |
+| §V24 | El "Parqueadero Subsuelo EARME" cuelga del campus, no de un edificio | Dato mal colocado en la jerarquía de zonas. |
+| §V25 | Puntos de control que cuelgan directamente del campus | Mismo problema, otra entidad. |
+| §V28 | La búsqueda "solo con 10 dígitos o por apellido" no se implementó | Requisito pedido y no hecho. |
+| §V30 | El descanso entre jornadas no se comprueba con turnos nocturnos combinados | Ojo con §D59/§D69: el error de medianoche ya ha aparecido tres veces. |
 
-**§V27 es el que más conviene resolver primero**, porque es un choque entre dos módulos y no una
-tarea suelta: en la ronda de PCO se dejó sin tocar precisamente para no romper GPI, que ya estaba
-probado. Cualquier cambio ahí necesita decidir a quién se le da la razón antes de escribir código.
+### Qué cambió esta ronda que afecta a PCO
 
----
+- **`heidy.tenelema@epn.edu.ec` es la cuenta de PCO** y ahora tiene **un solo rol**. Si alguna
+  prueba le asignaba un rol extra, ya no es posible: asignar otro **revoca** el que tenga.
+- **Cambiar el correo de una persona con cuenta ahora cambia su credencial.** Si PCO edita
+  personas, tenerlo presente: ya no son datos independientes.
+- **`vista_categoria_sin_regla`** (de la ronda de CAC) sigue siendo la forma rápida de ver qué
+  categorías dejarían gente fuera del campus. Útil al tocar zonas y puntos.
 
 ## Dónde está todo
 
 | Qué | Dónde |
 |---|---|
 | Producción | https://security-system-epn.vercel.app (rama `main`) |
-| Decisiones | `docs/03_DECISIONES_Y_CORRECCIONES.md` — §D62-D71 son de la ronda de CAC |
-| Dudas y pendientes | `docs/99_DUDAS_PARA_EL_EQUIPO.md` — §V31-V36 son de la ronda de CAC |
+| Decisiones | `docs/03_DECISIONES_Y_CORRECCIONES.md` — §D53-D56 son de la ronda de ADM; §D62-D71, de CAC |
+| Dudas y pendientes | `docs/99_DUDAS_PARA_EL_EQUIPO.md` — §V37-V39 son de la ronda de ADM; §V31-V36, de CAC |
 | Calibrar los umbrales | `scripts/calibracion_biometria` y `scripts/calibracion_placas` |
 | **Cómo probar las placas y el rostro** | `docs/New_Req/GUIA_PRUEBAS_PLACAS.md` |
 | Despliegue | `docs/DESPLIEGUE.md` |
@@ -98,7 +138,7 @@ git checkout -b feat/<modulo>-mejoras
    que pasar el fichero entero por el MCP. Lo mismo para regenerar tipos:
    `supabase gen types typescript --project-id hwfayejcwpmercvmmyvw --schema public`.
 3. **Un commit por grupo lógico.** No un commit gigante.
-4. **Verificar antes de dar nada por hecho:** `cd web && npm run verificar` (typecheck + 183
+4. **Verificar antes de dar nada por hecho:** `cd web && npm run verificar` (typecheck + 185
    pruebas + build).
 5. **Push a la rama** → Vercel genera un preview. La URL **no** se puede adivinar: se saca de la
    API de GitHub, que es donde Vercel publica el deployment.
@@ -124,7 +164,7 @@ formulario de login. Para que un plan entre a otro módulo, el primer paso debe 
 | Módulo | Cuenta | Rol |
 |---|---|---|
 | **CAC** | `carlos.chavez03@epn.edu.ec` | Responsable de Control de Accesos (Carlos Chávez) |
-| **Garita** | `guardia.demo@epn.edu.ec` | Guardia (además ve GPI) |
+| **Garita** | `guardia.demo@epn.edu.ec` | Guardia (**ya no ve GPI**, §V39) |
 | PCO | `heidy.tenelema@epn.edu.ec` | Responsable de Puntos de Control |
 | ADM | `admin@epn.edu.ec` | Administrador del Sistema |
 | GPI | `lenin.amangandi@epn.edu.ec` | Responsable de Personal Interno |
@@ -144,7 +184,13 @@ un comando que termina mata los hijos: los procesos mueren y los logs quedan vac
 funciona es lanzar todos con `&` y terminar con `wait` dentro de la misma invocación, en segundo
 plano.
 
-**5. No afirmes columnas de una tabla que puede estar vacía.** Un plan que dice "la tabla muestra
+**5. En paralelo, comprueba que los cinco terminaron.** Lanzarlos con `&` + `wait` funciona,
+pero en esta ronda **uno de los cinco murió sin escribir nada en su log** y el comando entero
+devolvió error. Los otros cuatro habían pasado. Si un registro queda vacío, relanza ese test
+solo: `testsprite test run <testId> --wait`. No des por fallado lo que en realidad no llegó a
+ejecutarse.
+
+**6. No afirmes columnas de una tabla que puede estar vacía.** Un plan que dice "la tabla muestra
 las columnas X e Y" falla si no hay ni una fila, porque sin filas no se renderizan. Si el plan no
 crea sus propios datos, la aserción tiene que contemplar los dos casos.
 
@@ -228,7 +274,7 @@ conviene saber para no repetir el análisis:
 - Toda regla nueva va **primero en SQL** (migración) y después en el espejo de
   `web/src/lib/validacion.ts` o `placas.ts`, nunca al revés.
 
-## Qué cubren las 183 pruebas automáticas
+## Qué cubren las 185 pruebas automáticas
 
 | Archivo | Qué protege |
 |---|---|
@@ -255,6 +301,10 @@ psql "$DATABASE_URL" -f scripts/pruebas_gpe_gpi_nuevas.sql
 psql "$DATABASE_URL" -f scripts/pruebas_adm_nuevas.sql
 python3 scripts/prueba_multisesion.py
 ```
+
+De esta ronda: `UsuariosScreen.test.tsx` añade que el alta **proponga el correo de la persona
+encontrada** (regresión directa del caso lady.celina/lady.velasquez) y que cambiar de rol **avise
+de que sustituye al anterior** antes de pulsar, no después.
 
 ## Pendientes que no bloquean
 
