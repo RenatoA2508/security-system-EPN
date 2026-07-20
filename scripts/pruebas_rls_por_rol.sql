@@ -50,7 +50,7 @@ set local role authenticated;
 select
   'ADMINISTRADOR_SISTEMA'                            as rol_simulado,
   (select count(*) from public.rol)                 as ve_rol,          -- 7 (L)
-  (select count(*) from public.permiso)             as ve_permiso,      -- 100 (L)
+  (select count(*) from public.permiso)             as ve_permiso,      -- 107 (L)
   (select count(*) from public.registro_biometrico) as ve_biometrico,   -- metadatos (L)
   (select count(*) from public.usuario_sistema)     as ve_usuarios,     -- (L C A)
   public.allowed_modules()                          as allowed_modules; -- {ADM}
@@ -66,7 +66,7 @@ select set_config('request.jwt.claims',
   true);
 set local role authenticated;
 insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-  select 'EXTERNA', id_categoria, '1700000950','GuardiaCrea','Externa','gce@ex.com','ACTIVO'
+  select 'EXTERNA', id_categoria, '1700000944','GuardiaCrea','Externa','gce@ex.com','ACTIVO'
     from public.categoria_persona where codigo_categoria='VISITANTE'
 returning tipo_persona as guardia_creo_externa;  -- espera: EXTERNA
 rollback;

@@ -73,13 +73,19 @@ begin
   returning id_punto_control into v_id_punto_control;
 
   -- Regla que cubre todo el dia, para no depender de la hora de ejecucion.
+  -- Desde la ronda de CAC una regla se aplica a VARIAS garitas, asi que el
+  -- punto de control vive en la tabla puente regla_acceso_punto_control y ya
+  -- no como columna de regla_acceso.
   insert into public.regla_acceso (
-    nombre_regla, id_punto_control, id_categoria, requiere_memorando,
+    nombre_regla, id_categoria, requiere_memorando,
     horario_inicio, horario_fin, estado_regla
   ) values (
-    'Regla smoke test - docente', v_id_punto_control, v_id_categoria_docente, false,
+    'Regla smoke test - docente', v_id_categoria_docente, false,
     '00:00:00', '23:59:59', 'ACTIVA'
   ) returning id_regla_acceso into v_id_regla;
+
+  insert into public.regla_acceso_punto_control (id_regla_acceso, id_punto_control)
+  values (v_id_regla, v_id_punto_control);
 
   -- 2. Persona INTERNA (docente) + biometria vigente.
   insert into public.persona (tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado)
@@ -91,7 +97,7 @@ begin
 
   -- 3. Persona EXTERNA + verificar que el trigger D20 bloquea su biometria.
   insert into public.persona (tipo_persona, id_categoria, cedula, nombres, apellidos, correo, estado)
-  values ('EXTERNA', v_id_categoria_visitante, '1700000099', 'Externo', 'Prueba Trigger', 'externo.trigger@example.com', 'ACTIVO')
+  values ('EXTERNA', v_id_categoria_visitante, '1700000092', 'Externo', 'Prueba Trigger', 'externo.trigger@example.com', 'ACTIVO')
   returning id_persona into v_id_persona_externa;
 
   begin
