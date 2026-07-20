@@ -1136,3 +1136,58 @@ encuadrada en el marco y de cerca, cae entre "leve" (100 %) y "pantalla del móv
 aleja o se tuerce, el acierto se hunde — y ahí importa que las lecturas malas de ese caso tienen
 confianza baja (p95 = 0.75), así que la mayoría no se auto-aceptan: se le proponen al guardia o
 se descartan.
+
+## §D70 — El umbral biométrico, ya medido: la estimación era correcta pero el margen era otro
+
+**Qué se hizo:** §D67 fijó `UMBRAL_BIOMETRIA = 0.45` con tres rostros enrolados, midiendo solo
+lo que se podía medir con una foto por persona: a qué distancia están dos personas **distintas**.
+Faltaba la otra mitad —a qué distancia está la **misma** persona en dos fotos— y sin ella el
+umbral era una estimación prudente.
+
+Con LFW (*Labeled Faces in the Wild*) y su protocolo de pares etiquetados, medido con el mismo
+modelo y el mismo detector que usa la garita:
+
+| | n | min | p5 | mediana | p95 | max |
+|---|---|---|---|---|---|---|
+| **Misma persona** | 446 | 0.250 | 0.325 | 0.448 | 0.588 | 0.948 |
+| **Personas distintas** | 416 | 0.566 | 0.681 | 0.829 | 0.963 | 1.087 |
+
+**El valor no cambia.** La estimación estaba bien puesta:
+
+| Confianza | Distancia | FAR (entra quien no es) | FRR (se rechaza a quien sí es) |
+|---|---|---|---|
+| 0.50 | 0.50 | 0.00 % | 27.35 % |
+| **0.45** | **0.55** | **0.00 %** | **10.99 %** ← el vigente |
+| 0.40 | 0.60 | 0.72 % | 4.48 % |
+| **0.35** | **0.65** | 2.88 % | 4.04 % ← suelo de la banda de revisión |
+| 0.30 | 0.70 | 7.93 % | 2.91 % |
+
+A 0.45 **no se cuela ni un impostor de los 416 medidos**, y el 11 % de intentos legítimos que se
+rechazan no se pierden: caen en la banda de revisión, donde el guardia confirma.
+
+**Lo que la medición sí corrige de §D67:** allí se escribió "margen de 0.141", comparando contra
+el impostor más parecido del banco de la EPN (0.691). Con 416 pares de impostores, el más
+parecido está a **0.566**, no a 0.691. El margen real es **0.016** — sigue bastando, porque el
+FAR medido es 0 %, pero es un filo y no un colchón. Si se cambia el modelo o el detector, hay que
+volver a medir antes de dar nada por bueno.
+
+**Por qué no se baja a 0.42** (FAR 0.5 %, FRR 5.2 %): los dos errores no cuestan lo mismo.
+Rechazar a alguien legítimo cuesta repetir la captura delante de un guardia que está ahí mismo;
+aceptar a un impostor es que entre. Con la banda de revisión cubriendo el rechazo, no hay razón
+para pagar FAR a cambio de comodidad.
+
+**Un hallazgo que no se buscaba: el detector pierde uno de cada cuatro rostros.** De los 1200
+pares, **338 se descartaron porque `TinyFaceDetector` no encontró cara en alguna de las dos
+fotos** — un 28 %. LFW son fotos de prensa, de frente y bien iluminadas; si ahí falla una de cada
+cuatro, en una garita a contraluz fallará más.
+
+Eso no afecta al umbral (un rostro no detectado no llega a compararse), pero sí a la experiencia:
+parte de las capturas dirán "no se detectó ningún rostro" y habrá que repetir. `SsdMobilenetv1`
+detecta bastante mejor a cambio de ser más pesado y lento. **Está sin decidir a propósito**:
+cambiar el detector invalida esta calibración, así que habría que medir de nuevo con él antes de
+cambiarlo. Anotado en §V32.
+
+**Sobre trasladar estos números a la EPN:** LFW no es una garita. El FRR medido es **optimista**
+—una cámara a contraluz o con mascarilla lo empeora— mientras que el FAR es razonablemente
+trasladable: si dos personas distintas se separan bien en condiciones buenas, en condiciones
+malas se separan más, no menos. Por eso el umbral se eligió apuntando al FAR.

@@ -619,19 +619,24 @@ es integridad del maestro. Denegarle el paso a un conductor legítimo porque a s
 el papeleo sería castigarle por un hueco administrativo que no le corresponde. Si el equipo
 prefiere que sí bloquee, es un cambio de una línea en la Edge Function.
 
-## V32 — Los umbrales biométricos se calibraron con solo tres rostros
+## V32 — Umbrales biométricos ✅ MEDIDOS (y una decisión nueva sobre el detector)
 
 §D67 sube el umbral a 0.45 apoyándose en que las personas distintas del banco se separan a partir
 de 0.691 de distancia L2. **Son tres personas**: nueve pares posibles, tres reales.
 
 Ese suelo puede bajar con un banco mayor — cuantas más caras, más probable es encontrar dos que
-se parezcan. **Hay que volver a medir cuando haya 15 o 20 rostros enrolados**, con la consulta que
-está documentada en la migración `20260719204251`. Si el mínimo baja de 0.60, el umbral de 0.45
-se queda corto y hay que subirlo.
+se parezcan. **Resuelto el 19/07/2026** con LFW en vez de esperar a tener rostros de la EPN: 862 pares
+medidos confirman que 0.45 es correcto (FAR 0 %, FRR 11 %). Ver §D70. La herramienta queda en
+`scripts/calibracion_biometria` para repetirlo con rostros reales cuando los haya.
 
-También convendría medir lo contrario, que ahora mismo no se puede: la distancia entre **dos
-capturas de la misma persona** en condiciones distintas (con y sin gafas, de día y de noche). Eso
-es lo que fija el techo, y sin ese dato el 0.45 es una estimación prudente, no una medida.
+**Lo que queda abierto es otra cosa, y salió de esa misma medición:** `TinyFaceDetector` no
+encontró rostro en el 28 % de las fotos de LFW, que son de prensa y están bien iluminadas. En una
+garita a contraluz fallará más, y cada fallo es una captura que el guardia tiene que repetir.
+
+`SsdMobilenetv1` detecta bastante mejor a cambio de más peso y más lentitud. **No se ha cambiado
+a propósito**: cambiar el detector invalida la calibración de §D70, porque cada uno recorta la
+cara de forma distinta y el descriptor sale del recorte. Si el equipo quiere cambiarlo, hay que
+volver a medir con él — la herramienta ya está y tarda diez minutos.
 
 ## V33 — El lector de placas en la nube depende de un servicio de terceros
 
