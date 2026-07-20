@@ -1,6 +1,6 @@
 # Estado del sistema — punto de partida para la siguiente sesión
 
-La ronda de **ADM (cuentas y roles)** está cerrada. La siguiente es **PCO**.
+La ronda de **PCO v2** está cerrada. Lo siguiente es la **comprobación total del sistema**.
 
 ---
 
@@ -276,6 +276,38 @@ conviene saber para no repetir el análisis:
   son. Quedan expuestos en una vista para que los corrija quien sepa.
 - **Que falte el propietario no bloquea el ingreso.** Lo que decide un acceso es que la persona
   esté asociada al vehículo; lo otro es integridad del maestro.
+
+## ✅ Qué resolvió la ronda de PCO v2 (2026-07-20)
+
+Sobre `Requerimientos_PCO_v2.docx`. Las líneas 21-38 de ese documento repiten literalmente el v1
+y ya estaban aplicadas; lo nuevo son las líneas 2-19. Decisiones §D78-§D82, dudas §V41-§V42.
+
+- **Nombre de un punto de control en un edificio** (§D78): tres campos numéricos y una
+  descripción; el sistema compone `E20/P4/E004 – Laboratorio Alan Turing` y el usuario no teclea
+  nunca `/` ni `–`. Índice único sobre el código: dos puntos no pueden ocupar el mismo espacio.
+- **El guardia se busca por cédula** (§D79), con mensaje de encontrado o no registrado y el
+  nombre al lado. RPC acotado: no expone la ficha ni permite sondear el directorio.
+- **"Activa" y "en turno" son dos columnas** (§D80), más "Desde" y "Hasta". No se borró nada: se
+  separó lo que estaba mezclado, porque una asignación vigente de 22:00–06:00 también lo está a
+  mediodía.
+- **Campus vuelve a los combos** (§D82), lo que además cierra §V25.
+- **Fechas pasadas**: bloqueadas al registrar, en el trigger y en el propio calendario
+  (`FieldConfig.minHoy`). Al editar se respeta lo que ya estaba guardado.
+
+**Tres piezas nuevas del motor**, útiles para cualquier módulo: `componerDesde` (valor que arma
+el sistema y **sí** se guarda, a diferencia de `soloLectura`), el tipo de campo
+`cedula-busqueda`, y `minHoy`.
+
+**Un bug que no venía en el documento** (§D81): las fechas de vigencia se mostraban **un día
+antes** a cualquiera en Ecuador. `fecha_inicio`/`fecha_fin` son `timestamptz` pero significan un
+día, se guardan a medianoche UTC y se formateaban en la zona del navegador. Es la **cuarta**
+aparición del error de medianoche (§D52, §D59, §D69). Se añadió `fmtFechaDia()`.
+
+| | |
+|---|---|
+| Pruebas locales | **200 en verde** (antes 185), typecheck y build |
+| TestSprite | **12 planes de PCO, los 12 en verde**, incluida la integración con CAC |
+| Migraciones | 5, aplicadas por MCP y guardadas en `supabase/migrations/` |
 
 ## Comprobación total del sistema — pendiente para la próxima sesión
 
