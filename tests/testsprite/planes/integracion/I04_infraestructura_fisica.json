@@ -1,0 +1,55 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-04 — La infraestructura física encaja: zona, punto de control, dispositivo y guardia",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente heidy.tenelema@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Puntos de Control. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a heidy.tenelema@epn.edu.ec y el Panel Principal muestra el módulo 'Puntos de Control'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Puntos de Control' y entrar en 'Zonas'."
+    },
+    {
+      "type": "assertion",
+      "description": "La lista de zonas muestra su tipo (Campus, Edificio o Parqueadero) y su zona padre"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Puntos de control'."
+    },
+    {
+      "type": "assertion",
+      "description": "Cada punto de control muestra a qué zona pertenece"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Dispositivos'."
+    },
+    {
+      "type": "assertion",
+      "description": "Cada dispositivo muestra su MAC, su tecnología y el punto de control donde está instalado"
+    },
+    {
+      "type": "assertion",
+      "description": "Ningún dispositivo aparece sin punto de control asignado"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Asignaciones de guardia'."
+    },
+    {
+      "type": "assertion",
+      "description": "Cada asignación muestra el NOMBRE del guardia y su cédula, no un correo ni un identificador de cuenta"
+    },
+    {
+      "type": "assertion",
+      "description": "Cada asignación muestra el punto de control, el horario y desde y hasta cuándo está vigente"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-12 — La misma persona no está dos veces, y se la identifica por su cédula",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente admin@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Administración. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a admin@epn.edu.ec y el Panel Principal muestra el módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Administración' y entrar en la sección de personas."
+    },
+    {
+      "type": "action",
+      "description": "Anotar la cédula de la primera persona de la lista y buscarla en el buscador."
+    },
+    {
+      "type": "assertion",
+      "description": "La búsqueda por cédula devuelve exactamente una persona"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Biometría'."
+    },
+    {
+      "type": "assertion",
+      "description": "La pantalla de biometría identifica a las personas por su cédula y su nombre"
+    },
+    {
+      "type": "assertion",
+      "description": "La pantalla de biometría NO muestra la imagen del rostro ni el vector biométrico"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Categorías'."
+    },
+    {
+      "type": "assertion",
+      "description": "Las categorías muestran su ámbito (interna o externa) y una descripción entendible"
+    }
+  ]
+}

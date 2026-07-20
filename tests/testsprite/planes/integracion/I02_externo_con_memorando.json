@@ -1,0 +1,51 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-02 — Un externo con memorando: la vigencia manda sobre el permiso de entrada",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Personal Externo' y entrar en 'Memorandos'."
+    },
+    {
+      "type": "assertion",
+      "description": "La lista de memorandos muestra su número, la empresa y un estado"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la ficha del primer memorando de la lista y anotar su número, su empresa y sus fechas."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha indica hasta cuándo está vigente el memorando"
+    },
+    {
+      "type": "action",
+      "description": "Volver y entrar en 'Personas por memorando'."
+    },
+    {
+      "type": "assertion",
+      "description": "La lista relaciona personas con memorandos"
+    },
+    {
+      "type": "action",
+      "description": "Entrar en 'Personal externo' y abrir la ficha de una persona que tenga memorando."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha dice a qué memorando está asociada y si puede entrar o no, en lugar de un número de días suelto"
+    },
+    {
+      "type": "assertion",
+      "description": "Si el memorando está vencido o anulado, la ficha NO dice que la persona puede entrar"
+    }
+  ]
+}

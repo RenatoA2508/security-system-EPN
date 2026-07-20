@@ -1,0 +1,39 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-05 — Una regla de acceso de CAC se apoya en los puntos de control de PCO",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a carlos.chavez03@epn.edu.ec y el Panel Principal muestra el módulo 'Control de Accesos'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos' y entrar en 'Reglas de acceso'."
+    },
+    {
+      "type": "assertion",
+      "description": "La lista de reglas muestra la categoría de persona, las garitas y el horario de cada regla"
+    },
+    {
+      "type": "action",
+      "description": "Abrir la ficha de la primera regla."
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha permite gestionar las garitas de esa regla"
+    },
+    {
+      "type": "assertion",
+      "description": "Entre las garitas aparece al menos un punto de control con nombre, que es un dato que gestiona el módulo Puntos de Control"
+    },
+    {
+      "type": "assertion",
+      "description": "La ficha indica si la regla exige memorando y en qué horario aplica"
+    }
+  ]
+}

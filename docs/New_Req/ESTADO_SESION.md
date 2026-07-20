@@ -1,6 +1,15 @@
 # Estado del sistema — punto de partida para la siguiente sesión
 
-La ronda de **PCO v2** está cerrada. Lo siguiente es la **comprobación total del sistema**.
+La ronda de **PCO v2** está cerrada, fusionada (PR #8) y desplegada a producción.
+
+> ## → La siguiente sesión es la FINAL: `docs/New_Req/PLAN_SESION_FINAL.md`
+>
+> Ese documento es el que hay que seguir. Trae los pasos en orden, los criterios para dar el
+> prototipo 3 por terminado, las decisiones que el equipo tiene que cerrar y una fotografía
+> numérica del estado de los datos para saber si algo cambió.
+>
+> La batería de integración ya está **escrita**: trece recorridos de extremo a extremo en
+> `tests/testsprite/planes/integracion/`. No hay que inventarlos, hay que ejecutarlos.
 
 ---
 
