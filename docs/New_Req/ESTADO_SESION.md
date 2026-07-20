@@ -16,21 +16,57 @@ registrándose y el embed de garitas por regla devolviendo el dato correcto.
 Por primera vez en varias rondas, **el esquema y el frontend desplegado van a la par**. No hay
 ninguna ventana abierta entre la base y lo que ve el usuario.
 
-## ⚠️ Dos cosas que hacer ANTES de empezar
+## ⚠️ Tres cosas que hacer ANTES de empezar
 
 **1. Volver a proteger los previews.** Panel de Vercel → proyecto `security-system-epn` →
 **Settings → Deployment Protection** → **Vercel Authentication** → **Enabled**. Sigue desactivado
 para que TestSprite pueda entrar; mientras siga así, cualquier URL de preview es accesible para
 quien la tenga.
 
-**2. `guardia.demo@epn.edu.ec` ahora usa `admin1234`.** Se le repuso la contraseña en esta ronda
-(estaba sin documentar y bloqueaba toda prueba de la Garita). Y se le **reasignó** a la "Garita
-Principal (demo)", turno 06:00–18:00: su punto anterior estaba en MANTENIMIENTO y no podía
-registrar ni un evento. Fuera de esa franja horaria no puede operar, y es correcto.
+**2. `guardia.demo@epn.edu.ec` usa `admin1234` y su turno es 12:00–23:59.** Se le repuso la
+contraseña (estaba sin documentar y bloqueaba toda prueba de la Garita) y se le **reasignó** a la
+"Garita Principal (demo)": su punto anterior estaba en MANTENIMIENTO y no podía registrar ni un
+evento.
 
-**3. El token del lector de placas.** `PLATE_RECOGNIZER_TOKEN` **no está configurado**. Sin él el
-sistema funciona con el lector local (Tesseract), que acierta bastante menos con placas reales.
-Se pone en Supabase → *Edge Functions → Secrets*; no hay que redesplegar nada.
+**Fuera de 12:00–23:59 no puede operar**, y es correcto (req 34). Si necesitas probar por la
+mañana, mueve la ventana — no se puede cubrir el día entero porque la jornada máxima son 12 h:
+
+```sql
+update public.guardia_punto_control
+   set hora_inicio = '06:00', hora_fin = '18:00'
+ where id_usuario = (select id from auth.users where email = 'guardia.demo@epn.edu.ec')
+   and estado_asignacion = 'ACTIVA';
+```
+
+**3. El token del lector de placas: decidido NO activarlo** en el prototipo 3.
+`PLATE_RECOGNIZER_TOKEN` no está configurado y el sistema funciona con el lector local
+(Tesseract). Medido (§D71): con la placa llenando el marco el local acierta casi siempre, así
+que la ganancia del motor en la nube es pequeña para una demo, y a cambio manda las imágenes a
+un tercero y exige internet en el momento de la captura.
+
+Si algún día se despliega en una garita real, ahí sí compensa: se pone en Supabase →
+*Edge Functions → Secrets* y no hay que redesplegar nada.
+
+---
+
+## La próxima ronda es de PCO y ADM (prototipo 3)
+
+Lo que ya está abierto de esos dos módulos y conviene mirar **antes** de empezar a leer el
+documento de requerimientos nuevo, porque son cosas que el equipo ya sabe que están a medias:
+
+| # | Qué | Módulo |
+|---|---|---|
+| §V24 | El "Parqueadero Subsuelo EARME" cuelga del campus, no de un edificio | PCO |
+| §V25 | Los puntos de control que cuelgan directamente del campus | PCO |
+| §V27 | El "código único" enfrenta a PCO con GPI: PCO pidió quitarlo y GPI lo exige | PCO / GPI |
+| §V28 | La búsqueda "solo con 10 dígitos o por apellido" no se implementó | PCO |
+| §V30 | El descanso entre jornadas no se comprueba con turnos nocturnos combinados | PCO |
+| §V18/§V19 | Un docente sembrado tiene código único y carrera de estudiante | ADM / GPI |
+| §V35 | El tipo de alerta se deduce del prefijo del motivo: acoplamiento por cadena de texto | CAC / ADM |
+
+**§V27 es el que más conviene resolver primero**, porque es un choque entre dos módulos y no una
+tarea suelta: en la ronda de PCO se dejó sin tocar precisamente para no romper GPI, que ya estaba
+probado. Cualquier cambio ahí necesita decidir a quién se le da la razón antes de escribir código.
 
 ---
 
@@ -45,6 +81,7 @@ Se pone en Supabase → *Edge Functions → Secrets*; no hay que redesplegar nad
 | **Cómo probar las placas y el rostro** | `docs/New_Req/GUIA_PRUEBAS_PLACAS.md` |
 | Despliegue | `docs/DESPLIEGUE.md` |
 | Feedback de CAC | `docs/New_Req/Requerimientos_CAC.docx` |
+| Feedback de PCO y ADM | `docs/New_Req/Requerimientos_PCO.docx`, `Requerimientos_ADM.docx` |
 
 ## Cómo trabajar (lo que funcionó)
 
@@ -61,7 +98,7 @@ git checkout -b feat/<modulo>-mejoras
    que pasar el fichero entero por el MCP. Lo mismo para regenerar tipos:
    `supabase gen types typescript --project-id hwfayejcwpmercvmmyvw --schema public`.
 3. **Un commit por grupo lógico.** No un commit gigante.
-4. **Verificar antes de dar nada por hecho:** `cd web && npm run verificar` (typecheck + 178
+4. **Verificar antes de dar nada por hecho:** `cd web && npm run verificar` (typecheck + 183
    pruebas + build).
 5. **Push a la rama** → Vercel genera un preview. La URL **no** se puede adivinar: se saca de la
    API de GitHub, que es donde Vercel publica el deployment.
@@ -150,14 +187,17 @@ conviene saber para no repetir el análisis:
 - **Reconocimiento de placas nuevo** (§D68): motor en la nube con respaldo local, y corrección de
   erratas de OCR **por posición** antes que por parecido. La tolerancia difusa solo se aplica si
   una única placa registrada queda a esa distancia; con dos candidatas no elige.
-- **Umbrales biométricos recalibrados con caras reales** (§D67): de un umbral a dos, con banda de
-  revisión. El anterior dejaba 0.07 de margen contra el impostor más parecido del banco.
+- **Umbrales medidos, no estimados** (§D67, §D70, §D71). El del rostro pasó de uno a dos, con
+  banda de revisión, y se validó con 862 pares de LFW: a 0.45 no se cuela ninguno de los 416
+  impostores. El de la placa destapó un fallo de bulto — la confianza que se guardaba era
+  **siempre 0**, porque tesseract.js 5 la devuelve a cero en todos los niveles, así que el umbral
+  no filtraba nada. Se sustituyó por el acuerdo entre variantes de preprocesado.
 
 **Piezas nuevas reutilizables:**
 
 | Pieza | Para qué |
 |---|---|
-| `LectorPlaca` + `lib/placas.ts` | Captura con encuadre guiado, preprocesado (recorte, contraste, Otsu) y OCR local. |
+| `LectorPlaca` + `lib/placas.ts` | Captura con encuadre guiado, cuatro variantes de preprocesado que se votan entre sí, y OCR local. |
 | `FichaMemorando` | El memorando completo dentro de cualquier pantalla, con estado calculado. |
 | `GaritasDeRegla` | Patrón de N:M gestionado desde la ficha, como `AsociacionesVehiculo`. |
 | `MOTIVO_LEGIBLE` (catalogos) | Código canónico → frase en castellano. Lo usan la garita y el historial. |
@@ -167,8 +207,6 @@ conviene saber para no repetir el análisis:
 
 **Lo que NO se hizo a propósito:**
 
-- **No se corrigió el nombre de la persona de la cuenta de CAC** (§V36). Son dos personas reales
-  del equipo y solo ellas saben cuál es el dato bueno.
 - **Los dos vehículos sin propietario no se rellenaron** (§V31): no hay forma de saber de quién
   son. Quedan expuestos en una vista para que los corrija quien sepa.
 - **Que falte el propietario no bloquea el ingreso.** Lo que decide un acceso es que la persona
@@ -190,7 +228,7 @@ conviene saber para no repetir el análisis:
 - Toda regla nueva va **primero en SQL** (migración) y después en el espejo de
   `web/src/lib/validacion.ts` o `placas.ts`, nunca al revés.
 
-## Qué cubren las 178 pruebas automáticas
+## Qué cubren las 183 pruebas automáticas
 
 | Archivo | Qué protege |
 |---|---|
@@ -220,13 +258,19 @@ python3 scripts/prueba_multisesion.py
 
 ## Pendientes que no bloquean
 
-1. **§V32**: los umbrales están medidos (862 pares de LFW y 200 imágenes de placas). Lo que
-   queda abierto es el **detector facial**: `TinyFaceDetector` no encuentra rostro en el 28 % de
-   las fotos de LFW, que son fáciles. `SsdMobilenetv1` detecta mejor, pero cambiarlo invalida la
-   calibración — hay que volver a medir con él, y ahora eso cuesta diez minutos.
+1. **§V32**: los umbrales están medidos (862 pares de LFW y 200 imágenes de placas). Lo que queda
+   abierto es el **detector facial**: `TinyFaceDetector` no encuentra rostro en el 28 % de las
+   fotos de LFW, que son fáciles. `SsdMobilenetv1` detecta mejor, pero es 29× más pesado (5,5 MB
+   frente a 188 KB) y cambiarlo **invalida la calibración**, porque cada detector recorta la cara
+   distinto y el descriptor sale del recorte.
+   **Decidido no tocarlo en el prototipo 3**: ese 28 % es sobre LFW, y en una garita la persona
+   se pone medio metro delante de la cámara —cara grande y centrada, que es justo lo que le
+   cuesta al detector pequeño—. Si las pruebas manuales muestran que falla de más, ahí habrá un
+   dato real con el que decidir; volver a medir cuesta diez minutos.
 2. **§V33**: el lector de placas en la nube depende de un tercero; el plan gratuito son 2500
    lecturas/mes.
-3. **§V34**: las cinco reglas de acceso sembradas llevan horarios plausibles pero **no acordados**.
+3. **§V34**: revisada y aceptada por el equipo — las cinco reglas de acceso sembradas se quedan
+   con sus horarios. Si la EPN publica un horario oficial, hay que contrastarlo.
 4. **§V18/§V19**: un docente sembrado (cédula 1750000232) tiene código único y carrera de
    estudiante.
 5. **§V21**: el Root Directory de Vercel debería ser `web`; mientras no lo sea hace falta el
