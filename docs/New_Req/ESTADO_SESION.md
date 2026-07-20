@@ -4,24 +4,22 @@ La ronda de **ADM (cuentas y roles)** está cerrada. La siguiente es **PCO**.
 
 ---
 
-## ⏳ Lo único pendiente de la ronda de ADM: fusionar
+## ✅ La ronda de ADM está fusionada y desplegada
 
-Todo el trabajo está hecho, desplegado en preview y verificado, pero **sigue en la rama
-`feat/adm-cuentas-y-roles`**, no en `main`.
+PR **#7** fusionado. Verificado tras el despliegue: producción sirve el bundle nuevo
+(`registry-B7VQTN_5.js`) con el panel de rol único, la edición de la cuenta y el alta de persona
+desde ADM; el texto que mandaba a GPI ya no está.
 
 | | |
 |---|---|
-| Rama | `feat/adm-cuentas-y-roles` (2 commits: `f0e983c`, `bbd1d40`) |
-| Preview verificado | https://security-system-7d8fhwc53-epnsw.vercel.app |
+| Producción | https://security-system-epn.vercel.app |
 | TestSprite | **5 planes, 5 en verde** (66 pasos) |
 | Pruebas locales | 185 en verde, typecheck y build |
 | Aserciones SQL | `scripts/pruebas_adm_cuentas.sql`, pasa entero |
 
-**Las tres migraciones YA están aplicadas en el proyecto remoto.** Esto importa: la base va por
-delante de `main`. Los cambios son compatibles hacia atrás —columna nueva, índice, triggers y un
-permiso—, así que producción sigue funcionando con el código anterior, pero **no conviene dejarlo
-así mucho tiempo**: el correo ya se sincroniza en la base mientras el frontend desplegado aún
-tiene el buscador que no rellenaba el campo.
+**El esquema y el frontend desplegado vuelven a ir a la par.** Comprobado en la base al cerrar:
+cero correos desincronizados entre persona, cuenta y credencial, y cero cuentas con más de un rol
+activo. No hay ninguna ventana abierta.
 
 ## ✅ Qué resolvió la ronda de ADM
 
@@ -54,20 +52,18 @@ intento**.
 
 ## ⚠️ Cosas que hacer ANTES de empezar
 
-**1. Fusionar `feat/adm-cuentas-y-roles`** (ver arriba).
-
-**2. Volver a proteger los previews.** Panel de Vercel → proyecto `security-system-epn` →
+**1. Volver a proteger los previews.** Panel de Vercel → proyecto `security-system-epn` →
 **Settings → Deployment Protection** → **Vercel Authentication** → **Enabled**. Sigue desactivado
 para que TestSprite pueda entrar; mientras siga así, cualquier URL de preview es accesible para
 quien la tenga.
 
-**3. Verificar las contraseñas de las cuentas de prueba** (§V38). En esta ronda se descubrió que
+**2. Verificar las contraseñas de las cuentas de prueba** (§V38). En esta ronda se descubrió que
 `frank.jumbo` **no** usaba `admin1234`, contra lo que decía este documento. Se alineó, pero nadie
 ha comprobado las demás una a una. Cuesta cinco minutos y evita perseguir fallos que no existen:
 en esta ronda esa premisa falsa hizo parecer roto el bloqueo por intentos fallidos, que estaba
 perfectamente.
 
-**4. `guardia.demo@epn.edu.ec` ya NO ve GPI** (§V39). Al imponer un rol por cuenta se quedó solo
+**3. `guardia.demo@epn.edu.ec` ya NO ve GPI** (§V39). Al imponer un rol por cuenta se quedó solo
 con GUARDIA_SEGURIDAD; el otro rol estaba marcado `TEMPORAL_PRUEBA_BIOMETRIA`. Para probar GPI,
 `lenin.amangandi@epn.edu.ec`. Su turno sigue siendo 12:00–23:59 y fuera de esa ventana no puede
 operar (req 34); para moverlo:
@@ -79,7 +75,7 @@ update public.guardia_punto_control
    and estado_asignacion = 'ACTIVA';
 ```
 
-**5. El token del lector de placas: decidido NO activarlo** en el prototipo 3.
+**4. El token del lector de placas: decidido NO activarlo** en el prototipo 3.
 `PLATE_RECOGNIZER_TOKEN` no está configurado y el sistema funciona con el lector local
 (Tesseract). Medido (§D71): con la placa llenando el marco el local acierta casi siempre, así que
 la ganancia del motor en la nube es pequeña para una demo, y a cambio manda las imágenes a un
