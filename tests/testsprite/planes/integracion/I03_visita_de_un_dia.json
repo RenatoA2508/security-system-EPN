@@ -1,0 +1,43 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-03 — Una visita de un solo día se autoriza sin memorando y caduca sola",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Personal Externo' y entrar en 'Ingresos (visitas sin memorando)'."
+    },
+    {
+      "type": "assertion",
+      "description": "Existe la pantalla para autorizar una visita de un día"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el formulario para registrar una autorización nueva."
+    },
+    {
+      "type": "assertion",
+      "description": "El formulario pide la persona, el motivo y la fecha de la visita"
+    },
+    {
+      "type": "assertion",
+      "description": "En el formulario de alta NO hay un desplegable para elegir el estado de la autorización"
+    },
+    {
+      "type": "action",
+      "description": "Sin guardar, cerrar el formulario y revisar la lista de autorizaciones."
+    },
+    {
+      "type": "assertion",
+      "description": "Cada autorización muestra su fecha y un estado que se entiende sin conocer la base de datos"
+    }
+  ]
+}

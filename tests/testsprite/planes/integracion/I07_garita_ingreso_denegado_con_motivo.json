@@ -1,0 +1,35 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-07 — Un ingreso denegado dice POR QUÉ se denegó",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a carlos.chavez03@epn.edu.ec y el Panel Principal muestra el módulo 'Control de Accesos'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos' y entrar en 'Historial de accesos'."
+    },
+    {
+      "type": "assertion",
+      "description": "El historial muestra ingresos con su fecha, la persona y el resultado"
+    },
+    {
+      "type": "action",
+      "description": "Buscar o filtrar los accesos cuyo resultado sea denegado."
+    },
+    {
+      "type": "assertion",
+      "description": "Si hay algún acceso denegado, cada uno muestra un motivo entendible (por ejemplo fuera de horario, sin regla que lo permita o memorando vencido)"
+    },
+    {
+      "type": "assertion",
+      "description": "Ningún motivo aparece como un código en mayúsculas sin traducir ni como un mensaje en inglés"
+    }
+  ]
+}

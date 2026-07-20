@@ -1,0 +1,59 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-10 — Cada rol ve exactamente su módulo y ninguno más",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente heidy.tenelema@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Puntos de Control. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a heidy.tenelema@epn.edu.ec y el Panel Principal muestra el módulo 'Puntos de Control'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal muestra la tarjeta del módulo 'Puntos de Control'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal NO muestra la tarjeta del módulo 'Administración'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal NO muestra la tarjeta del módulo 'Personal Interno'"
+    },
+    {
+      "type": "action",
+      "description": "Cerrar la sesión actual desde el menú de la cuenta. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente joel.velastegui@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Personal Externo. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a joel.velastegui@epn.edu.ec y el Panel Principal muestra el módulo 'Personal Externo'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal muestra la tarjeta del módulo 'Personal Externo'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal NO muestra la tarjeta del módulo 'Puntos de Control'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal NO muestra la tarjeta del módulo 'Administración'"
+    },
+    {
+      "type": "action",
+      "description": "Cerrar la sesión actual desde el menú de la cuenta. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente admin@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Administración. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a admin@epn.edu.ec y el Panel Principal muestra el módulo 'Administración'"
+    },
+    {
+      "type": "assertion",
+      "description": "El Panel Principal muestra la tarjeta del módulo 'Administración'"
+    }
+  ]
+}

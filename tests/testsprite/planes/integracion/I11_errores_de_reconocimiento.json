@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "INT-11 — Los fallos de cámara y de lectura de placas se registran y se entienden",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor que venga precargado en el campo de correo y escribir exactamente carlos.chavez03@epn.edu.ec; en la contraseña escribir admin1234. Es imprescindible usar esa cuenta y no otra: es la única con acceso al módulo Control de Accesos. Pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "assertion",
+      "description": "La sesión iniciada corresponde a carlos.chavez03@epn.edu.ec y el Panel Principal muestra el módulo 'Control de Accesos'"
+    },
+    {
+      "type": "action",
+      "description": "Abrir el módulo 'Control de Accesos' y entrar en 'Errores de reconocimiento'."
+    },
+    {
+      "type": "assertion",
+      "description": "La pantalla de errores de reconocimiento existe y carga sin error"
+    },
+    {
+      "type": "assertion",
+      "description": "Si hay registros, cada uno indica de qué tipo de fallo se trata en español (por ejemplo rostro no reconocido o placa ilegible)"
+    },
+    {
+      "type": "assertion",
+      "description": "Si no hay ningún registro, la pantalla lo dice con un mensaje claro y no con una tabla vacía sin explicación"
+    }
+  ]
+}
