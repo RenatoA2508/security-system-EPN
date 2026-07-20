@@ -1,0 +1,35 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "ADM · una cuenta tiene un solo rol y cambiarlo avisa de que sustituye",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor precargado en el campo de correo y escribir exactamente admin@epn.edu.ec; en contraseña escribir admin1234. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración' y luego la tarjeta 'Usuarios'"
+    },
+    {
+      "type": "action",
+      "description": "Escribir 'gary' en la caja de búsqueda y hacer clic en la fila del usuario gary.defas"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel muestra la sección 'Rol de la cuenta' con exactamente un rol activo"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar el botón 'Cambiar rol'"
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece un aviso que dice que el rol elegido sustituirá al rol actual y que este quedará revocado"
+    },
+    {
+      "type": "assertion",
+      "description": "El desplegable de roles NO ofrece el rol que la cuenta ya tiene activo"
+    }
+  ]
+}

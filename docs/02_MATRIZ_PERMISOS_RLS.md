@@ -33,7 +33,7 @@ vía Edge Function con `service_role`; se lista aquí solo para documentar qué 
 
 | Tabla | ADMIN | DIR | GPI | GPE | PCO | CAC | GUA | DISP |
 |---|---|---|---|---|---|---|---|---|
-| `persona` | L | L | L C A | L C A | — | L | L C¹ | L |
+| `persona` | L C⁵ A | L | L C A | L C A | — | L | L C¹ | L |
 | `empresa` | L C A | L | L | L | — | — | — | — |
 | `categoria_persona` | L C A | L | L | L | L | L | L | L |
 | `usuario_sistema` | L C A | L | L² | L² | L² | L² | L² | — |
@@ -56,6 +56,11 @@ ni modificar personas existentes. *(Derivado: ver `03_DECISIONES_Y_CORRECCIONES.
 
 ³ GPI y GPE pueden dar de alta un vehículo nuevo, pero **no** modificarlo ni darlo de baja:
 el ciclo de vida (UPDATE / cambio de estado) queda en ADM, como exige el modelo de datos §3.1.
+
+⁵ `ADM_PERSONA_INSERT`, acotado por RLS a `tipo_persona = 'INTERNA'` (§D56). Existe para que
+crear un responsable no exija dos sesiones —una de GPI para la persona y otra de ADM para la
+cuenta y el rol—, que era el flujo anterior. El personal externo sigue siendo de GPE: no puede
+tener cuenta, así que ADM no lo crea.
 
 ⚠️ **`bitacora_sistema` no tiene INSERT para ningún rol.** Se escribe exclusivamente desde
 triggers y funciones `SECURITY DEFINER`. Ningún usuario la escribe a mano y nadie la actualiza.
@@ -185,11 +190,17 @@ ADM_ROL_PERMISO_SELECT      ADM_ROL_PERMISO_INSERT      ADM_ROL_PERMISO_UPDATE
 ADM_PARAMETRO_SELECT        ADM_PARAMETRO_INSERT        ADM_PARAMETRO_UPDATE
 ADM_EMPRESA_SELECT          ADM_EMPRESA_INSERT          ADM_EMPRESA_UPDATE
 ADM_CATEGORIA_SELECT        ADM_CATEGORIA_INSERT        ADM_CATEGORIA_UPDATE
-ADM_PERSONA_SELECT                                      ADM_PERSONA_UPDATE
+ADM_PERSONA_SELECT          ADM_PERSONA_INSERT          ADM_PERSONA_UPDATE
 ADM_VEHICULO_SELECT         ADM_VEHICULO_INSERT         ADM_VEHICULO_UPDATE
 ADM_PERSONA_VEHICULO_SELECT ADM_PERSONA_VEHICULO_INSERT ADM_PERSONA_VEHICULO_UPDATE
 ADM_BITACORA_SELECT         ADM_BITACORA_EXPORTAR
 ```
+
+> `ADM_PERSONA_INSERT` es de la ronda del 20/07/2026 (§D56) y solo lo tiene el
+> **Administrador del Sistema**, no el Director Administrativo, que es de consulta. Su política
+> RLS lo acota a `tipo_persona = 'INTERNA'`: el personal externo es de GPE y no puede tener
+> cuenta. Existe para que dar de alta a un responsable no exija dos sesiones (una de GPI para
+> la persona y otra de ADM para la cuenta).
 
 ### GPI
 ```

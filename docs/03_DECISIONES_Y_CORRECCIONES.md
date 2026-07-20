@@ -1191,3 +1191,68 @@ cambiarlo. Anotado en §V32.
 —una cámara a contraluz o con mascarilla lo empeora— mientras que el FAR es razonablemente
 trasladable: si dos personas distintas se separan bien en condiciones buenas, en condiciones
 malas se separan más, no menos. Por eso el umbral se eligió apuntando al FAR.
+
+---
+
+# Ronda de cuentas y roles de ADM (2026-07-20)
+
+Origen: revisión manual del administrador tras desplegar la ronda de ADM. Cuatro incidencias,
+todas reproducidas antes de tocar código.
+
+### D53 — El correo de una persona con cuenta es UNO SOLO
+
+`persona.correo`, `usuario_sistema.correo_electronico` y `auth.users.email` (más la identidad
+del proveedor en `auth.identities`) eran tres datos independientes. Se registró a Lady Celina
+Velásquez con `lady.celina@epn.edu.ec`, se corrigió en GPI y **la cuenta siguió entrando con el
+correo viejo durante días**.
+
+Ahora hay **un solo correo guardado en tres sitios que el sistema mantiene idénticos**, se
+toque desde donde se toque: GPI o ADM. No hay "fuente de verdad" porque no hay copias.
+
+Se implementa con triggers y **no** con una Edge Function a propósito: así la propagación
+ocurre dentro de la misma transacción que el cambio. Si la validación falla, no se guarda nada
+y quien edita ve el error. Con una función externa habría una ventana en la que la persona ya
+estaría cambiada y la credencial no — exactamente el fallo que se está arreglando.
+
+La identidad de GoTrue (`auth.identities.identity_data->>'email'`) se actualiza también.
+Olvidarla deja la cuenta en un estado incoherente que se manifiesta más tarde y cuesta
+diagnosticar.
+
+### D54 — Una cuenta, un rol activo
+
+El modelo permitía varios roles y eso producía un fallo real: `guardia_demo` tenía
+GUARDIA_SEGURIDAD + RESPONSABLE_PERSONAL_INTERNO y, como la vista de Garita **reemplaza toda
+la aplicación**, esa cuenta no podía entrar a GPI de ninguna manera. El rol extra no daba
+acceso a nada; solo dejaba la pregunta de "¿qué ventana se abre?".
+
+El multi-rol existe en sistemas reales, pero siempre con un **selector visible** de "actúas
+como X". Lo que no existe en ninguno serio es una precedencia implícita e invisible. Entre
+implementar el selector (toca la navegación de los seis módulos) y simplificar, el equipo
+eligió simplificar: **quien necesite dos funciones, dos cuentas**.
+
+Se impone con un índice único parcial sobre `usuario_rol (id_usuario) where estado_asignacion
+= 'ACTIVO'`, no solo en la pantalla. Cambiar de rol pasa a ser atómico
+(`asignar_rol_unico`): revoca el anterior y asigna el nuevo en una operación, porque con el
+índice dos escrituras sueltas dejarían la cuenta sin rol si fallara la segunda.
+
+### D55 — Nadie se quita a sí mismo el rol de administrador
+
+`proteger_rol_administrador` solo cubría al **último** administrador. Con dos, cualquiera podía
+revocarse el suyo, perder ADM y no poder devolvérselo: una puerta que solo se abre por fuera.
+Que hoy no ocurra es casualidad —`admin` es el único administrador, así que la guarda del
+último lo cubre por accidente—, no una protección.
+
+Añadida la guarda de auto-revocación, simétrica a la que `proteger_administracion` ya tenía
+para el estado de la cuenta. La interfaz además oculta el control, para no descubrir la regla
+chocándose con un error.
+
+### D56 — ADM da de alta personal interno
+
+Crear un responsable exigía dos sesiones y dos personas: entrar como GPI para registrar a la
+persona, salir, entrar como ADM para crear la cuenta y el rol. Ahora el alta de ADM registra
+la persona si la cédula no existe, con permiso propio `ADM_PERSONA_INSERT` y RLS acotada a
+`tipo_persona = 'INTERNA'` (el personal externo es de GPE y no puede tener cuenta).
+
+`persona` sigue siendo entidad maestra única: es el mismo INSERT que hace GPI, no una copia.
+El permiso es nuevo en vez de reutilizar `GPI_PERSONA_INSERT` para que la matriz siga diciendo
+la verdad sobre quién puede qué, y para poder retirarlo sin tocar GPI.
