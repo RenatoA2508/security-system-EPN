@@ -52,6 +52,7 @@ const PERSONA_BUSCADA = {
   cedula: '1750000117',
   nombres: 'Lenin',
   apellidos: 'Amangandi',
+  correo: 'lenin.amangandi@epn.edu.ec',
   tipo_persona: 'INTERNA',
   estado: 'ACTIVO',
   categoria: { codigo_categoria: 'ADMINISTRATIVO' },
@@ -167,15 +168,27 @@ describe('UsuariosScreen', () => {
     expect(within(fila).getByText(/sin rol asignado/i)).toBeInTheDocument()
   })
 
-  it('la ficha del usuario permite asignar y revocar roles sin cambiar de pantalla', async () => {
+  it('la ficha del usuario permite cambiar y revocar el rol sin cambiar de pantalla', async () => {
     const usuario = userEvent.setup()
     render(<UsuariosScreen />)
 
     await usuario.click(await screen.findByText('gary.defas'))
 
-    expect(await screen.findByText('Roles asignados')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /asignar rol/i })).toBeInTheDocument()
+    expect(await screen.findByText('Rol de la cuenta')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /revocar el rol director administrativo/i })).toBeInTheDocument()
+  })
+
+  it('con un rol ya asignado, la acción es CAMBIAR y avisa de que sustituye al anterior', async () => {
+    // Una cuenta solo puede tener un rol activo: elegir otro no suma, reemplaza. Decirlo
+    // después de pulsar sería tarde — el rol anterior ya estaría revocado.
+    const usuario = userEvent.setup()
+    render(<UsuariosScreen />)
+
+    await usuario.click(await screen.findByText('gary.defas'))
+    await usuario.click(await screen.findByRole('button', { name: /cambiar rol/i }))
+
+    expect(await screen.findByText(/sustituirá al rol actual/i)).toBeInTheDocument()
+    expect(screen.getByText('Director Administrativo', { selector: 'b' })).toBeInTheDocument()
   })
 
   it('el alta busca la persona por cédula y no ofrece un combo con todas', async () => {
@@ -221,6 +234,26 @@ describe('UsuariosScreen', () => {
     await usuario2.click(await screen.findByRole('button', { name: /crear usuario/i }))
 
     expect(await screen.findByRole('textbox', { name: /nombre de usuario/i })).toHaveValue('nuevo.usuario')
+  })
+
+  /**
+   * REGRESIÓN de la incidencia de lady.celina / lady.velasquez.
+   *
+   * El buscador encontraba a la persona pero dejaba el correo vacío, así que había que
+   * teclearlo a mano. Ahí se coló la errata que dejó la cuenta entrando con un correo
+   * distinto al de la persona durante días.
+   */
+  it('propone el correo de la persona encontrada, no lo deja en blanco', async () => {
+    const usuario = userEvent.setup()
+    render(<UsuariosScreen />)
+
+    await usuario.click(await screen.findByRole('button', { name: /crear usuario/i }))
+    await usuario.type(await screen.findByLabelText(/cédula de la persona/i), '1750000117')
+    await usuario.click(screen.getByRole('button', { name: /buscar/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: /correo institucional/i })).toHaveValue('lenin.amangandi@epn.edu.ec'),
+    )
   })
 
   it('nunca guarda datos sensibles en el borrador', async () => {

@@ -707,3 +707,35 @@ persona y el correo en correspondencia.
 **Resuelta el 19/07/2026:** el equipo confirma que el nombre era el dato equivocado, no la
 vinculación. La persona 1750000141 se llama **Carlos Chávez**; su correo institucional ya era el
 correcto. Corregido en la migración `cac_corregir_nombre_persona_cuenta_control_accesos`.
+
+---
+
+# Ronda de cuentas y roles de ADM (2026-07-20)
+
+## V37 — El bloqueo de 15 minutos: COMPROBADO, funciona
+
+El administrador pidió verificarlo porque bloquearse a sí mismo sin desbloqueo automático
+dejaría el sistema sin acceso. Se probó de extremo a extremo sobre una cuenta no crítica:
+cinco intentos fallidos bloquean con 15 minutos, se escribe `banned_until` en GoTrue (así no
+se puede saltar llamando a la API directamente) y, simulando el vencimiento, **la cuenta entra
+al PRIMER intento con la contraseña correcta**.
+
+Durante la comprobación hubo una falsa alarma que conviene recordar: el primer intento parecía
+fallar tras el vencimiento. La causa no era el bloqueo sino que **la contraseña de
+`frank.jumbo` no era `admin1234`**, contra lo que decía la documentación. Se alineó con lo
+documentado. Moraleja: antes de declarar un bug, comprobar que la premisa de la prueba es
+cierta.
+
+## V38 — Contraseñas de las cuentas de prueba sin verificar
+
+Lo anterior destapa que **nadie ha comprobado que las 8 cuentas usen la contraseña que dice la
+documentación**. `frank.jumbo` no la usaba. Conviene verificarlas una a una antes de la
+siguiente ronda de pruebas manuales, o se perderá tiempo persiguiendo fallos que no existen.
+
+## V39 — `guardia_demo` perdió su rol de GPI
+
+Al imponer un rol activo por cuenta hubo que elegir uno para `guardia_demo`, que tenía dos. Se
+conservó GUARDIA_SEGURIDAD (es la cuenta de la Garita) y se revocó el de Personal Interno, que
+además estaba marcado `TEMPORAL_PRUEBA_BIOMETRIA`. **Esa cuenta ya no ve GPI** — antes tampoco
+podía, porque la Garita ocupa la pantalla entera, pero ahora es explícito. Para probar GPI,
+`lenin.amangandi@epn.edu.ec`.

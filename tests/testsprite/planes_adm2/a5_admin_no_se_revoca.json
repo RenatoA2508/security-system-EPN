@@ -1,0 +1,27 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "ADM · el administrador no puede quitarse su propio rol",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor precargado en el campo de correo y escribir exactamente admin@epn.edu.ec; en contraseña escribir admin1234. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración' y luego la tarjeta 'Usuarios'"
+    },
+    {
+      "type": "action",
+      "description": "Escribir 'admin' en la caja de búsqueda y hacer clic en la fila de la cuenta admin (la del propio usuario con el que se inició sesión)"
+    },
+    {
+      "type": "assertion",
+      "description": "El panel muestra la sección 'Rol de la cuenta' con el rol Administrador del Sistema"
+    },
+    {
+      "type": "assertion",
+      "description": "Junto a ese rol NO hay ningún control para revocarlo, y se explica que es el propio rol de administrador y no puede quitárselo"
+    }
+  ]
+}

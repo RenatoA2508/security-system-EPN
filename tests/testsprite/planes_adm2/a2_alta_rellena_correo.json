@@ -1,0 +1,31 @@
+{
+  "projectId": "95936660-3989-4f92-a0ce-d536ee25b14a",
+  "type": "frontend",
+  "name": "ADM · el alta propone el correo de la persona encontrada",
+  "planSteps": [
+    {
+      "type": "action",
+      "description": "Abrir la aplicación. En la pantalla de inicio de sesión, BORRAR cualquier valor precargado en el campo de correo y escribir exactamente admin@epn.edu.ec; en contraseña escribir admin1234. Después pulsar 'Ingresar al sistema'."
+    },
+    {
+      "type": "action",
+      "description": "Desde el Panel Principal, abrir el módulo 'Administración' y luego la tarjeta 'Usuarios'"
+    },
+    {
+      "type": "action",
+      "description": "Pulsar 'Crear usuario'"
+    },
+    {
+      "type": "assertion",
+      "description": "El formulario muestra un campo 'Cédula de la persona' con botón 'Buscar'"
+    },
+    {
+      "type": "action",
+      "description": "Escribir la cédula 1750000109 y pulsar 'Buscar'"
+    },
+    {
+      "type": "assertion",
+      "description": "Se muestra el nombre de la persona encontrada y el campo 'Correo institucional' queda RELLENO automáticamente con una dirección que termina en @epn.edu.ec, no vacío"
+    }
+  ]
+}
