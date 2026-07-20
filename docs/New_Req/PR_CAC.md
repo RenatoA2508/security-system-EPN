@@ -60,17 +60,32 @@ La tolerancia difusa (`levenshtein`) se aplica después y es deliberadamente cob
 una única placa registrada queda a esa distancia**. Con dos candidatas no elige ninguna. Escoger
 "la más parecida" entre dos sería autorizar un vehículo por parecido.
 
-## Umbrales recalibrados con caras reales
+## Umbrales, medidos
 
-El umbral era 0.38 de confianza. Medido sobre el banco real, las personas **distintas** se
-separan a partir de **0.691** de distancia L2 — es decir, **0.071 de margen** contra el impostor
-más parecido. Un cambio de luz mueve un descriptor bastante más que eso.
+Los dos reconocimientos se calibraron con datos, no a ojo. Las herramientas quedan en
+`scripts/calibracion_biometria` y `scripts/calibracion_placas`, y usan el mismo modelo y el
+mismo detector que la garita.
 
-Ahora son dos umbrales: se autoriza solo a partir de 0.45, entre 0.35 y 0.45 el guardia confirma
-visualmente, y por debajo es persona desconocida. Margen nuevo: 0.141, el doble.
+**Rostro** — 1200 pares de LFW (862 útiles), con su protocolo de parejas etiquetadas:
 
-No se sube más a propósito: por encima de 0.50 empiezan a caerse capturas legítimas con gafas o
-contraluz, y un guardia al que el rostro le falla tres de cada diez veces deja de usarlo.
+| Confianza | FAR (entra quien no es) | FRR (se rechaza a quien sí es) |
+|---|---|---|
+| **0.45** ← vigente | **0.00 %** | 11.0 % |
+| 0.40 | 0.72 % | 4.5 % |
+| 0.35 ← suelo de revisión | 2.9 % | 4.0 % |
+
+A 0.45 no se cuela ninguno de los 416 impostores medidos. El 11 % de legítimos que se rechazan
+no se pierde: cae en la banda de revisión, donde el guardia confirma.
+
+**Placa** — 200 imágenes con la placa correcta conocida. Aquí apareció un fallo de bulto: la
+confianza que se guardaba era **siempre 0**, porque tesseract.js 5 devuelve `confidence` a cero
+en todos los niveles. `UMBRAL_PLACA` no filtraba absolutamente nada. Se sustituye por el
+**acuerdo entre variantes de preprocesado**, que sí discrimina (correctas mediana 1.00,
+equivocadas 0.63), con corte en 0.75 → 1.2 % de error entre las aceptadas.
+
+Y el preprocesado de un solo paso era el cuello de botella: la binarización de Otsu es lo mejor
+con una placa metálica y de lo peor con una foto de pantalla. Con la variante suavizada, el
+acierto sobre placa real en malas condiciones pasa de **12.5 % a 60 %**.
 
 ## Seguridad
 
@@ -108,17 +123,27 @@ las garitas" y no un guion.
 
 ## Lo que NO se hizo, a propósito
 
-- **No se corrigió el nombre de la persona de la cuenta de CAC** (§V36). `carlos.chavez03@epn.edu.ec`
-  está vinculada a la persona "Sebastián Chávez". Son dos personas reales del equipo y solo ellas
-  saben cuál es el dato bueno. Comprobado que es el único caso de las ocho cuentas.
 - **Los dos vehículos sin propietario no se rellenaron** (§V31): no hay forma de saber de quién
   son. Quedan expuestos en `vista_vehiculo_sin_propietario`.
+- **No se cambió el detector facial.** `TinyFaceDetector` no encontró rostro en el 28 % de las
+  fotos de LFW, que son de prensa y están bien iluminadas; en una garita fallará más. Cambiarlo
+  a `SsdMobilenetv1` invalidaría la calibración, así que queda medido y anotado en §V32 en vez
+  de cambiado a ciegas.
 - **Que falte el propietario no bloquea el ingreso.** Lo que decide un acceso es que la persona
   esté asociada al vehículo (RF-CA-015); que el vehículo tenga propietario es integridad del
   maestro (RF-CA-018). Denegarle el paso a un conductor legítimo por un hueco administrativo
   sería castigarle por algo que no le corresponde.
 - **Los horarios de las cinco reglas nuevas son plausibles pero no acordados** (§V34). Que los
   revise el equipo: son los horarios que deciden quién entra al campus.
+
+## Ojo: producción muestra un dato incorrecto hasta que esto se fusione
+
+Las migraciones ya están aplicadas en la base (van por MCP, no por el PR), así que **el esquema
+va por delante del frontend desplegado**. No rompe nada, pero al retirarse
+`regla_acceso.id_punto_control`, PostgREST resuelve el embed antiguo a través de la tabla nueva
+y devuelve un array donde el bundle viejo espera un objeto: la columna "Punto" de Reglas de
+acceso dice **"Todos"** en todas las filas, que es lo contrario de la verdad para las reglas que
+sí tienen garita. Se arregla solo al fusionar.
 
 ## Antes de fusionar
 
