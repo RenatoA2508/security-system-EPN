@@ -53,6 +53,9 @@ begin
 end $$;
 
 -- 5. Turno de guardia (hora del servidor, cruce de medianoche) ----------------
+-- Desde PCO v2 una asignación ACTIVA exige fecha_fin, hora_inicio y hora_fin
+-- (trigger validar_asignacion_completa), y esas dos columnas —no el nombre del
+-- turno— son la fuente de verdad de esta_en_turno_guardia.
 do $$
 declare v_uid uuid; v_pc uuid; v_in boolean; v_out boolean; v_noc boolean;
 begin
@@ -61,12 +64,16 @@ begin
    where r.nombre_rol='GUARDIA_SEGURIDAD' and ur.estado_asignacion='ACTIVO' and us.estado_usuario='ACTIVO' limit 1;
   select id_punto_control into v_pc from punto_control where estado_punto='ACTIVO' limit 1;
   update guardia_punto_control set estado_asignacion='FINALIZADA' where id_usuario=v_uid;
-  insert into guardia_punto_control(id_usuario,id_punto_control,turno,fecha_inicio,estado_asignacion,id_usuario_registro)
-    values (v_uid,v_pc,'MATUTINO',now()-interval '10 days','ACTIVA',v_uid);
-  v_in  := esta_en_turno_guardia(v_uid,(current_date::timestamp + time '08:00') at time zone 'America/Guayaquil');
-  v_out := esta_en_turno_guardia(v_uid,(current_date::timestamp + time '23:00') at time zone 'America/Guayaquil');
-  update guardia_punto_control set turno='NOCTURNO' where id_usuario=v_uid and estado_asignacion='ACTIVA';
-  v_noc := esta_en_turno_guardia(v_uid,(current_date::timestamp + time '23:00') at time zone 'America/Guayaquil');
+  insert into guardia_punto_control(id_usuario,id_punto_control,turno,fecha_inicio,fecha_fin,hora_inicio,hora_fin,estado_asignacion,id_usuario_registro)
+    values (v_uid,v_pc,'MATUTINO',now(),now()+interval '10 days','06:00','14:00','ACTIVA',v_uid);
+  -- Se evalúa sobre la jornada siguiente: fecha_inicio ya no puede ser pasada
+  -- (trigger validar_fechas_asignacion), así que un momento de hoy por la
+  -- mañana quedaría antes del inicio de la asignación recién creada.
+  v_in  := esta_en_turno_guardia(v_uid,((current_date + 1)::timestamp + time '08:00') at time zone 'America/Guayaquil');
+  v_out := esta_en_turno_guardia(v_uid,((current_date + 1)::timestamp + time '23:00') at time zone 'America/Guayaquil');
+  update guardia_punto_control set turno='NOCTURNO', hora_inicio='22:00', hora_fin='06:00'
+   where id_usuario=v_uid and estado_asignacion='ACTIVA';
+  v_noc := esta_en_turno_guardia(v_uid,((current_date + 1)::timestamp + time '23:00') at time zone 'America/Guayaquil');
   assert v_in, '08:00 deberia estar en MATUTINO';
   assert not v_out, '23:00 NO deberia estar en MATUTINO';
   assert v_noc, '23:00 deberia estar en NOCTURNO (cruce de medianoche)';

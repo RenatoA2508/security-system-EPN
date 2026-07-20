@@ -6,6 +6,7 @@ import {
   prepararImagenParaOcr, type LecturaPlaca,
 } from '../lib/placas'
 import { formatearPlaca, validarPlacaTipo } from '../lib/validacion'
+import { mensajeDeErrorDeCamara } from '../lib/errores-camara'
 import { Badge, Button, ErrorBanner, Input, Spinner } from './ui'
 
 export interface PersonaVehiculo {
@@ -99,9 +100,10 @@ export function LectorPlaca({
       if (videoRef.current) videoRef.current.srcObject = stream
       setActiva(true)
     } catch (e) {
-      const mensaje = 'No se pudo abrir la cámara (requiere https o localhost). ' + (e as Error).message
-      setError(mensaje)
-      await registrarErrorTecnico('CAMARA_NO_DISPONIBLE', mensaje)
+      // Al guardia se le dice qué hacer; el detalle técnico va a la bitácora, que es
+      // donde sirve para depurar.
+      setError(mensajeDeErrorDeCamara(e as Error, 'Mientras tanto, puedes escribir la placa a mano.'))
+      await registrarErrorTecnico('CAMARA_NO_DISPONIBLE', 'No se pudo abrir la cámara: ' + (e as Error).message)
     } finally {
       setEncendiendo(false)
     }

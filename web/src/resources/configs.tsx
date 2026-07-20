@@ -26,6 +26,19 @@ import {
 
 const d = (v: any) => (v == null || v === '' ? '—' : String(v))
 
+/**
+ * RUC con su estado de verificación (§V12). No hay integración con el SRI en el prototipo, así
+ * que ningún RUC llega a VALIDO/INVALIDO. En vez de callarlo —que se leía como "verificado"— la
+ * pantalla dice explícitamente "sin verificar" cuando el estado es NO_VERIFICADO.
+ */
+function rucConVerificacion(r: any) {
+  if (!r.ruc) return '—'
+  const estado = r.estado_verificacion_ruc
+  if (!estado || estado === 'NO_VERIFICADO')
+    return <>{r.ruc} <span className="text-xs text-ink-soft">· sin verificar</span></>
+  return <>{r.ruc} <Badge value={estado} /></>
+}
+
 /* =========================================================================
    ADM — entidades maestras y seguridad lógica
    ========================================================================= */
@@ -42,14 +55,14 @@ export const cfgEmpresa: ResourceConfig = {
   buscarEn: ['nombre', 'ruc', 'tipo_servicio'],
   columnas: [
     { key: 'nombre', label: 'Nombre' },
-    { key: 'ruc', label: 'RUC', render: (r) => d(r.ruc) },
+    { key: 'ruc', label: 'RUC', render: (r) => rucConVerificacion(r) },
     { key: 'tipo_servicio', label: 'Tipo de servicio', render: (r) => d(r.tipo_servicio) },
     { key: 'estado', label: 'Estado', badge: true },
   ],
   campoTituloDetalle: (r) => r.nombre,
   campoSubtituloDetalle: (r) => <Badge value={r.estado} />,
   detalle: [
-    { label: 'RUC', render: (r) => d(r.ruc) },
+    { label: 'RUC', render: (r) => rucConVerificacion(r) },
     { label: 'Tipo de servicio', render: (r) => d(r.tipo_servicio) },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
@@ -1039,7 +1052,21 @@ export const cfgPersonaMemorando: ResourceConfig = {
       ) : '—'),
     },
     { label: 'Vigencia del memorando', render: (r) => (r.memorando ? `${fmtFecha(r.memorando.fecha_inicio)} → ${fmtFecha(r.memorando.fecha_fin)}` : '—') },
-    { label: 'Estado de acceso', render: (r) => <Badge value={r.estado_acceso} /> },
+    // La ficha decía 'Estado de acceso: Activo' junto a un memorando vencido, que se lee como
+    // que la persona puede entrar cuando no puede. El vínculo activo solo significa que no se
+    // le retiró el acceso individualmente; quien manda es la vigencia del memorando, igual que
+    // en la columna '¿Puede entrar?' de la lista.
+    {
+      label: '¿Puede entrar?',
+      render: (r) => {
+        if (r.estado_acceso === 'BLOQUEADO') return <><Badge value="BLOQUEADO" /> <span className="text-xs text-ink-soft">acceso retirado</span></>
+        const estado = estadoMemorandoEfectivo(r.memorando ?? {})
+        return estado === 'VIGENTE'
+          ? <span className="text-emerald-700">Sí, hasta el {fmtFecha(r.memorando?.fecha_fin)}</span>
+          : <><span className="text-red">No</span> <Badge value={estado} /> <span className="text-xs text-ink-soft">el memorando ya no autoriza</span></>
+      },
+    },
+    { label: 'Vínculo con el memorando', render: (r) => <Badge value={r.estado_acceso} /> },
   ],
   campos: [
     // El memorando va primero: es el documento que se está tramitando, y saber cuál es ayuda a

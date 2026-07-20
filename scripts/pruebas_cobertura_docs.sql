@@ -28,7 +28,7 @@
 \echo '=== MÓDULO A — Esquema, catálogos, parámetros y privilegios ==='
 -- D1 (sin password_hash), D14 (token_hash nullable), D15 (vigente boolean),
 -- D16/D25 (catálogo tipo_alerta), D17/D25 (parámetros), D18/D21 (defaults evento),
--- D20 (índice cédula), 01§3 (7 roles), 02 (RLS en 25 tablas; REVOKE de históricos).
+-- D20 (índice cédula), 01§3 (7 roles), 02 (RLS en todas las tablas; REVOKE de históricos).
 begin;
 create temp table _res(seccion text, prueba text, esperado text, obtenido text, ok boolean) on commit drop;
 do $$
@@ -43,12 +43,19 @@ begin
   select count(*) into v_n from public.rol;
   insert into _res values('A. Esquema','A2 exactamente 7 roles definidos (01 §3)','7',v_n::text, v_n=7);
 
+  -- UMBRAL_BIOMETRIA queda fuera de la lista de valores exactos: es un umbral
+  -- calibrado contra el banco de rostros, no una constante del documento. Aquí
+  -- solo se exige que exista y sea un número entre 0 y 1.
   select count(*) into v_n from public.parametro_sistema where
      (codigo_parametro,valor_parametro) in (
        ('MAX_INTENTOS_LOGIN','5'),('TIEMPO_BLOQUEO_CUENTA_MIN','15'),('TIEMPO_SESION_MIN','60'),
-       ('UMBRAL_BIOMETRIA','0.85'),('PERMANENCIA_MAX_INTERNO_H','16'),('PERMANENCIA_MAX_EXTERNO_H','12'),
+       ('PERMANENCIA_MAX_INTERNO_H','16'),('PERMANENCIA_MAX_EXTERNO_H','12'),
        ('PERMANENCIA_MAX_VISITA_H','4'),('PERMANENCIA_ABANDONO_H','72'));
-  insert into _res values('A. Esquema','A3 los 8 parámetros con valores exactos (D17/D25)','8',v_n::text, v_n=8);
+  insert into _res values('A. Esquema','A3 los 7 parámetros con valores exactos (D17/D25)','7',v_n::text, v_n=7);
+
+  select count(*) into v_n from public.parametro_sistema
+   where codigo_parametro='UMBRAL_BIOMETRIA' and valor_parametro::numeric between 0 and 1;
+  insert into _res values('A. Esquema','A3b UMBRAL_BIOMETRIA existe y está calibrado en [0,1]','1',v_n::text, v_n=1);
 
   select ambito into v_txt from public.categoria_persona where codigo_categoria='CONDUCTOR';
   insert into _res values('A. Esquema','A4 categoría CONDUCTOR con ambito EXTERNA (E4)','EXTERNA',v_txt, v_txt='EXTERNA');
@@ -74,9 +81,15 @@ begin
   select not exists(select 1 from information_schema.columns where table_schema='public' and table_name='usuario_sistema' and column_name='password_hash') into v_bool;
   insert into _res values('A. Esquema','A9 usuario_sistema sin password_hash (D1)','sin password_hash',(case when v_bool then 'ok' else 'existe!' end), v_bool);
 
+  -- El número de tablas crece con cada ronda (hoy 27: se sumaron
+  -- regla_acceso_punto_control y error_reconocimiento). Lo que no puede cambiar
+  -- nunca es que NINGUNA quede sin RLS y sin políticas, así que se comprueba eso
+  -- y no un número fijo que envejece.
   select count(*) into v_n from pg_class c join pg_namespace n on n.oid=c.relnamespace
-    where n.nspname='public' and c.relkind='r' and c.relrowsecurity;
-  insert into _res values('A. Esquema','A10 RLS habilitado en 25 tablas (02 notas)','25',v_n::text, v_n=25);
+    where n.nspname='public' and c.relkind='r'
+      and (not c.relrowsecurity
+           or not exists (select 1 from pg_policies p where p.schemaname='public' and p.tablename=c.relname));
+  insert into _res values('A. Esquema','A10 ninguna tabla sin RLS ni sin políticas (02 notas)','0',v_n::text, v_n=0);
 
   select (not has_table_privilege('authenticated','public.persona','DELETE'))
      and (not has_table_privilege('authenticated','public.evento_acceso','UPDATE'))
@@ -99,9 +112,9 @@ begin
   select id_categoria into v_cat_doc from public.categoria_persona where codigo_categoria='DOCENTE';
   select id_categoria into v_cat_vis from public.categoria_persona where codigo_categoria='VISITANTE';
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('INTERNA',v_cat_doc,'1700000501','Beta','Interna Test','beta.int@epn.edu.ec','ACTIVO') returning id_persona into v_p_int;
+    values('INTERNA',v_cat_doc,'1700000506','Beta','Interna Test','beta.int@epn.edu.ec','ACTIVO') returning id_persona into v_p_int;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('EXTERNA',v_cat_vis,'1700000599','Gamma','Externa Test','gamma.ext@example.com','ACTIVO') returning id_persona into v_p_ext;
+    values('EXTERNA',v_cat_vis,'1700000597','Gamma','Externa Test','gamma.ext@example.com','ACTIVO') returning id_persona into v_p_ext;
   insert into public.zona(nombre_zona,tipo_zona,estado_zona) values('Zona B Test','CAMPUS','ACTIVA') returning id_zona into v_zona;
   insert into public.punto_control(id_zona,nombre_punto,estado_punto) values(v_zona,'PC B Test','ACTIVO') returning id_punto_control into v_pc;
 
@@ -137,7 +150,7 @@ begin
   insert into _res values('B. Triggers','B6 bitacora_sistema: UPDATE revocado a authenticated (histórico, 02)','sin privilegio UPDATE',
     (case when has_table_privilege('authenticated','public.bitacora_sistema','UPDATE') then 'TIENE UPDATE!' else 'revocado' end),
     not has_table_privilege('authenticated','public.bitacora_sistema','UPDATE'));
-  update public.persona set fecha_modificacion = timestamptz '2000-01-01 00:00+00', nombres='Gamma2' where id_persona=v_p_ext;
+  update public.persona set fecha_modificacion = timestamptz '2000-01-01 00:00+00', nombres='Gamma Modificada' where id_persona=v_p_ext;
   select fecha_modificacion into v_new from public.persona where id_persona=v_p_ext;
   insert into _res values('B. Triggers','B7 trigger set_fecha_modificacion sobrescribe fecha en UPDATE de persona',
     'trigger la fija a now()', (case when v_new > timestamptz '2001-01-01' then 'sobrescrita a now()' else 'quedó en 2000 (no disparó)' end),
@@ -155,7 +168,7 @@ declare v_cat_doc uuid; v_p uuid; v_zona uuid; v_pc uuid; v_ev uuid; v_n int; v_
 begin
   select id_categoria into v_cat_doc from public.categoria_persona where codigo_categoria='DOCENTE';
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('INTERNA',v_cat_doc,'1700000701','Delta','Alerta Test','delta.al@epn.edu.ec','ACTIVO') returning id_persona into v_p;
+    values('INTERNA',v_cat_doc,'1700000704','Delta','Alerta Test','delta.al@epn.edu.ec','ACTIVO') returning id_persona into v_p;
   insert into public.zona(nombre_zona,tipo_zona,estado_zona) values('Zona C Test','CAMPUS','ACTIVA') returning id_zona into v_zona;
   insert into public.punto_control(id_zona,nombre_punto,estado_punto) values(v_zona,'PC C Test','ACTIVO') returning id_punto_control into v_pc;
 
@@ -212,21 +225,21 @@ begin
   insert into public.empresa(nombre,estado) values('Empresa D Test','ACTIVO') returning id_empresa into v_emp;
 
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('INTERNA',v_cat_doc,'1700000801','Eps','Interna','eps.i@epn.edu.ec','ACTIVO') returning id_persona into v_int;
+    values('INTERNA',v_cat_doc,'1700000811','Eps','Interna','eps.i@epn.edu.ec','ACTIVO') returning id_persona into v_int;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('EXTERNA',v_cat_vis,'1700000802','Zeta','Memo','zeta.m@ex.com','ACTIVO') returning id_persona into v_ext_memo;
+    values('EXTERNA',v_cat_vis,'1700000829','Zeta','Memo','zeta.m@ex.com','ACTIVO') returning id_persona into v_ext_memo;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('EXTERNA',v_cat_vis,'1700000803','Eta','Auth','eta.a@ex.com','ACTIVO') returning id_persona into v_ext_auth;
+    values('EXTERNA',v_cat_vis,'1700000837','Eta','Auth','eta.a@ex.com','ACTIVO') returning id_persona into v_ext_auth;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('EXTERNA',v_cat_vis,'1700000804','Theta','MemoHoy','theta.h@ex.com','ACTIVO') returning id_persona into v_ext_hoy;
+    values('EXTERNA',v_cat_vis,'1700000845','Theta','MemoHoy','theta.h@ex.com','ACTIVO') returning id_persona into v_ext_hoy;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('EXTERNA',v_cat_vis,'1700000805','Iota','SinVia','iota.s@ex.com','ACTIVO') returning id_persona into v_ext_sin;
+    values('EXTERNA',v_cat_vis,'1700000852','Iota','SinVia','iota.s@ex.com','ACTIVO') returning id_persona into v_ext_sin;
 
   insert into public.memorando(numero_memorando,id_empresa,fecha_inicio,fecha_fin,dependencia_autorizada,estado_memorando,id_usuario_registro)
-    values('MEMO-D-1',v_emp,current_date-2,current_date+5,'Dir Admin','VIGENTE',v_admin) returning id_memorando into v_memo;
+    values('MEMO-DTEST-0001',v_emp,current_date-2,current_date+5,'Dir Admin','VIGENTE',v_admin) returning id_memorando into v_memo;
   insert into public.persona_memorando(id_memorando,id_persona,estado_acceso) values(v_memo,v_ext_memo,'ACTIVO');
   insert into public.memorando(numero_memorando,id_empresa,fecha_inicio,fecha_fin,dependencia_autorizada,estado_memorando,id_usuario_registro)
-    values('MEMO-D-HOY',v_emp,current_date-3,current_date,'Dir Admin','VIGENTE',v_admin) returning id_memorando into v_memo_hoy;
+    values('MEMO-DTEST-0002',v_emp,current_date-3,current_date,'Dir Admin','VIGENTE',v_admin) returning id_memorando into v_memo_hoy;
   insert into public.persona_memorando(id_memorando,id_persona,estado_acceso) values(v_memo_hoy,v_ext_hoy,'ACTIVO');
   insert into public.autorizacion_visita_diaria(id_persona,fecha_visita,motivo,estado_autorizacion,id_usuario_registro)
     values(v_ext_auth,current_date,'Reunion','VIGENTE',v_admin);
@@ -244,8 +257,8 @@ begin
 
   insert into public.zona(nombre_zona,tipo_zona,estado_zona) values('Zona D Test','CAMPUS','ACTIVA') returning id_zona into v_zona;
   insert into public.punto_control(id_zona,nombre_punto,estado_punto) values(v_zona,'PC D Test','ACTIVO') returning id_punto_control into v_pc;
-  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('DTA-0001','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh;
-  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('DTA-0002','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh2;
+  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('PDT1001','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh;
+  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('PDT1002','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh2;
 
   insert into public.evento_acceso(id_persona,id_vehiculo,id_punto_control,tipo_movimiento,resultado,origen_registro,es_conductor)
     values(v_int,v_veh,v_pc,'INGRESO','AUTORIZADO','AUTOMATICA',true);
@@ -288,11 +301,11 @@ begin
     join public.usuario_rol ur on ur.id_usuario=us.id_usuario and ur.estado_asignacion='ACTIVO'
     join public.rol r on r.id_rol=ur.id_rol and r.nombre_rol='ADMINISTRADOR_SISTEMA' limit 1;
   insert into public.persona(tipo_persona,id_categoria,cedula,nombres,apellidos,correo,estado)
-    values('INTERNA',v_cat_doc,'1700000901','Kappa','Perm','kappa.p@epn.edu.ec','ACTIVO') returning id_persona into v_int;
+    values('INTERNA',v_cat_doc,'1700000902','Kappa','Perm','kappa.p@epn.edu.ec','ACTIVO') returning id_persona into v_int;
   insert into public.zona(nombre_zona,tipo_zona,estado_zona) values('Zona E Test','CAMPUS','ACTIVA') returning id_zona into v_zona;
   insert into public.punto_control(id_zona,nombre_punto,estado_punto) values(v_zona,'PC E Test','ACTIVO') returning id_punto_control into v_pc;
-  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('ETA-EXC1','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh_exc;
-  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('ETA-ABA1','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh_aba;
+  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('PET1001','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh_exc;
+  insert into public.vehiculo(placa,tipo_vehiculo,estado_vehiculo,id_usuario_registro) values('PET1002','AUTOMOVIL','ACTIVO',v_admin) returning id_vehiculo into v_veh_aba;
 
   insert into public.evento_acceso(id_persona,id_vehiculo,id_punto_control,tipo_movimiento,resultado,origen_registro,es_conductor,fecha_hora)
     values(v_int,v_veh_exc,v_pc,'INGRESO','AUTORIZADO','AUTOMATICA',true, now()-interval '20 hours') returning id_evento into v_ev_exc;
@@ -317,7 +330,7 @@ select seccion, prueba, esperado, obtenido, (case when ok then 'PASA' else 'FALL
 rollback;
 
 \echo '=== MÓDULO F — Matriz de permisos (rol_permiso vs doc 02) ==='
--- 02 (matriz por rol), D3/D5/D6/D7 (revertida), E7 (100 permisos + 2 nuevos), E8 (supervisor CAC).
+-- 02 (matriz por rol), D3/D5/D6/D7 (revertida), D75 (ADM_PERSONA_INSERT), E7 (catálogo >=100 + 2 nuevos), E8 (supervisor CAC).
 begin;
 create temp table _res(seccion text, prueba text, esperado text, obtenido text, ok boolean) on commit drop;
 create or replace function pg_temp.perms(p_rol text) returns text[] language sql stable as $$
@@ -330,8 +343,13 @@ $$;
 do $$
 declare v_n int; v_a text[]; v_b text[];
 begin
+  -- El catálogo crece con cada ronda (hoy 107). Fijar el número lo hace envejecer
+  -- a cada PR; lo que importa es que el seed no se rompió (hay al menos los ~100 de
+  -- la matriz) y que TODO permiso respeta el formato MODULO_ENTIDAD_ACCION.
   select count(*) into v_n from public.permiso;
-  insert into _res values('F. Permisos','F1 catálogo de 100 permisos sembrados (E7)','100',v_n::text, v_n=100);
+  insert into _res values('F. Permisos','F1 catálogo de permisos sembrado (>=100) (E7)','>=100',v_n::text, v_n>=100);
+  select count(*) into v_n from public.permiso where codigo_permiso !~ '^(ADM|CAC|GPE|GPI|PCO)_[A-Z]+(_[A-Z]+)+$';
+  insert into _res values('F. Permisos','F1b todo permiso respeta MODULO_ENTIDAD_ACCION','0',v_n::text, v_n=0);
   select count(*) into v_n from public.permiso where codigo_permiso in ('ADM_BIOMETRIA_SELECT','CAC_AUTORIZACION_SELECT');
   insert into _res values('F. Permisos','F2 permisos nuevos ADM_BIOMETRIA_SELECT y CAC_AUTORIZACION_SELECT existen (E7)','2',v_n::text, v_n=2);
 
@@ -339,9 +357,16 @@ begin
   select array_agg(codigo_permiso) into v_b from public.permiso where codigo_permiso like 'ADM\_%';
   insert into _res values('F. Permisos','F3 ADMIN posee ADM_MODULO_ACCEDER + todos los ADM_*','todos ADM_*',
     (case when 'ADM_MODULO_ACCEDER'=any(v_a) and v_b <@ v_a then 'ok' else 'faltan ADM_*' end), 'ADM_MODULO_ACCEDER'=any(v_a) and v_b <@ v_a);
-  insert into _res values('F. Permisos','F4 ADMIN no tiene ningún PERSONA_INSERT (D5)','sin PERSONA_INSERT',
-    (case when exists(select 1 from unnest(v_a) x where x like '%PERSONA_INSERT') then 'tiene!' else 'ninguno' end),
-    not exists(select 1 from unnest(v_a) x where x like '%PERSONA_INSERT'));
+  -- §D75 (20/07/2026) dio al ADMIN un único PERSONA_INSERT: ADM_PERSONA_INSERT,
+  -- acotado por RLS a tipo_persona='INTERNA', para que el alta de usuario por
+  -- cédula pueda crear la persona si no existe. Lo que sigue vedado (§D5) es que
+  -- el admin haga de operador de los módulos: nada de GPE/GPI/CAC *PERSONA_INSERT.
+  insert into _res values('F. Permisos','F4 ADMIN solo tiene ADM_PERSONA_INSERT, no los de módulo (D5/D75)','solo ADM_',
+    (case when 'ADM_PERSONA_INSERT'=any(v_a)
+               and not exists(select 1 from unnest(v_a) x where x like '%PERSONA_INSERT' and x <> 'ADM_PERSONA_INSERT')
+          then 'solo ADM_' else 'mal' end),
+    'ADM_PERSONA_INSERT'=any(v_a)
+      and not exists(select 1 from unnest(v_a) x where x like '%PERSONA_INSERT' and x <> 'ADM_PERSONA_INSERT'));
 
   v_a := pg_temp.perms('DIRECTOR_ADMINISTRATIVO');
   insert into _res values('F. Permisos','F5 DIRECTOR sin ningún _INSERT ni _UPDATE (solo lectura, 02)','sin INSERT/UPDATE',

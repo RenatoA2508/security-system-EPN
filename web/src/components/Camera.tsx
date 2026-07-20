@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Camera as CamIcon, VideoOff } from 'lucide-react'
 import { cargarModelos, capturarJpeg, descriptorDesdeVideo } from '../lib/faceapi'
+import { mensajeDeErrorDeCamara } from '../lib/errores-camara'
 import { Button, Spinner } from './ui'
 
 export interface CameraHandle {
@@ -23,6 +24,7 @@ export const CameraPanel = forwardRef<CameraHandle, { className?: string }>(func
   const [activa, setActiva] = useState(false)
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [detalleTecnico, setDetalleTecnico] = useState<string | null>(null)
 
   useImperativeHandle(ref, () => ({
     descriptor: () => descriptorDesdeVideo(videoRef.current!),
@@ -38,7 +40,8 @@ export const CameraPanel = forwardRef<CameraHandle, { className?: string }>(func
       if (videoRef.current) videoRef.current.srcObject = stream
       setActiva(true)
     } catch (e) {
-      setError('No se pudo abrir la cámara (requiere https o localhost). ' + (e as Error).message)
+      setError(mensajeDeErrorDeCamara(e as Error, 'Mientras tanto, puedes identificar a la persona escribiendo su cédula.'))
+      setDetalleTecnico((e as Error).message)
     } finally {
       setCargando(false)
     }
@@ -68,7 +71,11 @@ export const CameraPanel = forwardRef<CameraHandle, { className?: string }>(func
           <CamIcon className="h-4 w-4" /> Activar cámara
         </Button>
       )}
-      {error && <p className="mt-2 text-xs text-red">{error}</p>}
+      {error && (
+        // El detalle técnico no se pierde —hace falta para depurar—, pero va en el
+        // title y no en la cara del guardia.
+        <p className="mt-2 text-xs text-red" title={detalleTecnico ?? undefined}>{error}</p>
+      )}
     </div>
   )
 })
