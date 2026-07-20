@@ -697,9 +697,9 @@ export const cfgAsignacionGuardia: ResourceConfig = {
         return `Turno de ${(dur / 60).toFixed(1)} h: supera la jornada ordinaria de ${JORNADA_ORDINARIA_MIN / 60} h, el resto son horas extra.`
       },
     },
-    { name: 'fecha_inicio', label: 'Inicio', type: 'date', required: true },
+    { name: 'fecha_inicio', label: 'Inicio', type: 'date', required: true, minHoy: true },
     // Obligatoria (feedback PCO #12): todos los guardias cumplen contrato con fecha de fin.
-    { name: 'fecha_fin', label: 'Fin', type: 'date', required: true },
+    { name: 'fecha_fin', label: 'Fin', type: 'date', required: true, minHoy: true },
     // Una asignación nueva nace vigente; se finaliza desde la ficha, no al crearla.
     { name: 'estado_asignacion', label: 'Estado', type: 'select', options: opcionesCatalogo(CAT.asignacion_estado), default: 'ACTIVA', hideOnInsert: true },
   ],

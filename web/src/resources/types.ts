@@ -68,6 +68,14 @@ export interface FieldConfig {
    *  resto de valores del formulario, para reglas que dependen de otro campo (ej. el valor de
    *  un parámetro según su tipo_dato). */
   validar?: (valor: string, valores: Record<string, any>) => string | null
+  /** En un campo `type: 'date'`, impide elegir una fecha anterior a hoy.
+   *
+   *  PCO v2: «en los campos de fecha, no debe haber la posibilidad de poner fechas anteriores».
+   *  El trigger de la base ya lo rechaza, pero rechazarlo al guardar no es lo mismo que no
+   *  poder elegirlo: el calendario del navegador deshabilita los días anteriores.
+   *
+   *  Usa `hoyISO()` (hora de Ecuador), no la fecha del navegador. */
+  minHoy?: boolean
   /** Configuración del campo `type: 'cedula-busqueda'`.
    *
    *  PCO v2: «el input Guardia será de tipo numérico, se debe validar el ingreso de 10 dígitos

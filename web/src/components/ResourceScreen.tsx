@@ -5,6 +5,7 @@ import { fromTable, mensajeError, supabase } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
 import { useBorrador } from '../lib/useBorrador'
 import { validarCedula } from '../lib/validacion'
+import { hoyISO } from '../lib/format'
 import type { FieldConfig, Opcion, ResourceConfig } from '../resources/types'
 import {
   Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Input, Modal,
@@ -919,6 +920,11 @@ function RecordForm({
                       value={valores[c.name] ?? ''}
                       disabled={disabled}
                       placeholder={c.placeholder}
+                      // El calendario no ofrece días pasados. La base también lo rechaza, pero
+                      // que no se pueda elegir es distinto de que salte un error al guardar.
+                      // Al EDITAR no se aplica: una asignación que empezó en el pasado tiene que
+                      // poder abrirse sin obligar a cambiarle la fecha de inicio.
+                      min={c.minHoy && c.type === 'date' && !esEdicion ? hoyISO() : undefined}
                       onChange={(e) => set(c.name, c.formatear ? c.formatear(e.target.value) : e.target.value)}
                     />
                   )}

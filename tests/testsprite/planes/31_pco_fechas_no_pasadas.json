@@ -21,15 +21,23 @@
     },
     {
       "type": "assertion",
-      "description": "El formulario muestra campos de fecha llamados 'Inicio' y 'Fin'"
-    },
-    {
-      "type": "action",
-      "description": "Intentar escribir o seleccionar en el campo 'Inicio' una fecha del año 2020."
+      "description": "El formulario muestra un campo de fecha llamado 'Inicio' y otro llamado 'Fin'"
     },
     {
       "type": "assertion",
-      "description": "El sistema no acepta esa fecha: o bien el campo no permite elegirla, o al intentar guardar aparece un mensaje diciendo que la fecha no puede ser anterior a hoy"
+      "description": "El campo de fecha 'Inicio' tiene un atributo min con la fecha de hoy, de modo que el calendario no permite elegir días anteriores"
+    },
+    {
+      "type": "assertion",
+      "description": "El campo de fecha 'Fin' también tiene ese atributo min con la fecha de hoy"
+    },
+    {
+      "type": "action",
+      "description": "Escribir 1750000018 en el campo de la cédula del guardia, que corresponde a un guardia registrado."
+    },
+    {
+      "type": "assertion",
+      "description": "Aparece el nombre 'Guardia Demo' junto al campo de la cédula"
     }
   ]
 }
