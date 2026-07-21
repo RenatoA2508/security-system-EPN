@@ -1411,43 +1411,83 @@ anterior (§V25): seis de los puntos sembrados —las garitas de entrada, "Acces
 Un acceso perimetral pertenece al campus y a ningún edificio: es un caso legítimo, no una
 excepción que hubiera que tolerar.
 
-# Últimos cambios GPI (2026-07-21) — `Ultimos_Cambios_GPI.pdf`
+---
 
-## §D83 — Los datos internos expresan el perfil real y toda relación vehicular tiene fin
+## Ronda GPE — ingreso vehicular con memorando
 
-La última revisión de GPI precisa qué campos aplican a cada categoría:
+### D83 — Una fecha sin hora es un día, y ninguna zona horaria puede moverla
 
-- **Docente:** conserva Unidad, Categoría académica y Contrato; no usa Cargo ni Nombramiento.
-- **Administrativo:** usa Cargo y Contrato; no usa Nombramiento.
-- **Trabajador:** usa Cargo y Contrato; no usa Nombramiento.
-- **Empresas de servicio:** usa Contrato; no usa Nombramiento. Su etiqueta visible pasa al
-  plural solicitado: “Empresas de servicio”.
-- **Estudiante CEC:** registra Curso y Carrera queda bloqueada.
-- **Estudiante EPN:** registra Carrera y Curso queda bloqueado.
+Reportado desde Memorandos: se registra uno con vigencia del 21/07 al 22/07 y el listado lo
+muestra como "20/07 → 21/07".
 
-Los campos incompatibles permanecen visibles y grises para el estudiante, porque el documento
-habla de bloquearlos y así queda claro por qué no se pueden rellenar. Cambiar la Unidad limpia
-Carrera y Curso antes de habilitar el que corresponde, evitando guardar un dato escondido de la
-selección anterior. El backend replica las reglas para nuevas escrituras, pero no borra valores
-históricos que ya existían antes de esta decisión.
+Lo primero fue descartar el backend, porque de eso dependía si había gente quedándose fuera del
+campus. No la había: la base guardaba `2026-07-21` y `2026-07-22`, exactamente lo tecleado, y la
+validación de acceso compara columnas `date` contra `hoy_ecuador()` dentro de SQL, sin pasar por
+el navegador. **Mentía solo la presentación.**
 
-La relación persona–vehículo exige ahora **Fecha de fin** tanto al crear el vehículo con su
-propietario como al vincular otra persona desde la ficha. La RPC atómica recibe `p_fecha_fin`
-como argumento obligatorio y la tabla rechaza nuevas relaciones sin esa fecha. Las filas
-históricas abiertas se conservan hasta que se corrijan expresamente; asignarles una fecha
-inventada habría falseado el registro.
+La causa es la de siempre: `new Date('2026-07-21')` es medianoche UTC por norma de JavaScript, y
+`toLocaleDateString` la reexpresa en la zona del navegador; en Ecuador eso son las 19:00 del día
+anterior. Es §D52, §D59 y §D69 otra vez, ahora en la vista.
 
-## §D84 — Una persona se identifica por cédula antes de asignarla a otro registro
+Se arregla **en `fmtFecha`**, por donde pasan todas las fechas, y no en cada llamada: una cadena
+`AAAA-MM-DD` ya viene escrita, y convertirla de zona no tiene ningún significado correcto. Con
+eso quedaron bien de golpe la ficha del memorando de la garita, las autorizaciones de visita y
+"Personas por memorando", que arrastraban el mismo desfase sin que nadie lo hubiera reportado.
 
-**Problema:** Detalle Interno, Enrolamiento Biométrico y Autorización de visita todavía cargaban
-un combo con todas las personas. Además de escalar mal, en Detalle Interno ocultaba el dato que
-explica el formulario: la categoría de la persona elegida determina qué campos aplican.
+`fmtFechaDia` sigue existiendo para las columnas `timestamptz` que representan un día; una
+prueba fija que ambas den el mismo resultado, para que no aparezcan dos criterios en pantalla.
 
-**Decisión:** toda selección **individual** de una persona en esos flujos reutiliza la búsqueda
-exacta por cédula. El resultado confirma nombre, categoría y estado antes de continuar. GPI
-restringe la búsqueda a personas internas activas y GPE a externas activas; la RLS existente
-sigue delimitando quién puede consultar cada directorio.
+### D84 — Para un externo en vehículo, el segundo factor es el memorando
 
-La vinculación de personas a un memorando conserva su selector múltiple con búsqueda por cédula,
-apellido o empresa. Es una excepción deliberada: ahí se agregan varias personas en una sola
-operación, por lo que sustituirlo por una búsqueda individual eliminaría una capacidad del flujo.
+RF-CA-016 exige dos validaciones en el ingreso vehicular. Para el personal interno son la placa
+y el rostro. Un externo **no tiene registro biométrico** (§D20), así que ese segundo factor no
+existía para él: hasta ahora un conductor externo entraba solo con la placa.
+
+El equipo cerró la regla: **la placa y el memorando vigente**. Y su corolario, que es lo que
+convierte esto en una regla de seguridad y no en un trámite: **sin memorando, un externo no
+entra conduciendo**; puede entrar a pie con su autorización de visita, pero no al volante.
+
+Dos comprobaciones distintas, y conviene no confundirlas:
+
+| A quién | Qué se exige |
+|---|---|
+| Cualquier ocupante externo | Memorando vigente. Una autorización de visita diaria no basta. |
+| Además, al conductor externo | Que su memorando ampare **esa placa concreta**, no cualquier vehículo suyo. |
+
+Sin la segunda, un externo con memorando podría entrar conduciendo cualquier coche del que
+figure como propietario, que es justo lo que el oficio no dice.
+
+**Esto es más estricto que RF-CA-017**, que dice que los pasajeros cumplen las reglas del
+ingreso peatonal. Aquella decisión se tomó para no dejar fuera a quien llega en el coche de un
+compañero, y se pensó para personal interno. La regla nueva la estrecha solo para externos. Ver
+§V43: si el equipo prefiere que un acompañante externo con visita diaria pueda entrar en el
+coche, es cambiar una condición.
+
+### D85 — El vehículo se cuelga del memorando, no de la persona
+
+`memorando_vehiculo` referencia la maestra `vehiculo` (CLAUDE.md: sin entidades duplicadas; aquí
+no se repiten ni la placa ni las características).
+
+Se colgó del memorando y no de la persona porque **así el permiso caduca solo**: cuando el
+memorando vence o se anula, el vehículo deja de estar amparado sin que nadie tenga que acordarse
+de revocar nada. Es el mismo criterio de §D47 —lo que depende del calendario se calcula— llevado
+al permiso vehicular. El script de aserciones lo comprueba en los dos sentidos.
+
+Es tabla y no una columna en `memorando` porque una empresa puede acudir con más de un vehículo
+amparado por el mismo oficio.
+
+### D86 — El alta del memorando con vehículo es una transacción, y por eso tiene pantalla propia
+
+El equipo pidió que las preguntas "¿entra con vehículo?" y "¿con acompañantes?" formen parte de
+la **creación** del memorando. Pero un memorando con vehículo son tres filas que tienen que
+nacer juntas: el memorando, el vehículo y la persona que lo conduce — porque `vehiculo` no
+admite quedarse sin propietario (RF-CA-018, trigger diferido).
+
+Hacerlo en dos llamadas desde el navegador deja un hueco desagradable: si la segunda falla
+(placa repetida, la persona ya tiene dos vehículos, RLS), queda un memorando creado a medias y
+quien reintenta choca contra "ese número ya existe" sin entender por qué. Con
+`crear_memorando_con_vehiculo` en una sola transacción, o queda todo o no queda nada y el número
+sigue libre.
+
+Eso obliga a salir del formulario genérico, que solo sabe insertar en una tabla. Se reutiliza
+`ResourceConfig.altaRuta`, el mismo mecanismo que ya usaba el alta de vehículo con propietario.
