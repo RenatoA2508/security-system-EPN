@@ -48,7 +48,8 @@ Contraseña de las 8 cuentas de prueba: `admin1234`.
 
 **Personal Externo → Ingresos (visitas sin memorando)**
 
-- [ ] **Registrar Autorización**: ya **no** hay combo "Estado". Solo visitante, fecha y motivo.
+- [ ] **Registrar Autorización**: ya **no** hay combo "Estado". El visitante se busca por su
+      cédula; al encontrarlo se muestran su identidad y categoría antes de elegir fecha y motivo.
 - [ ] Intenta poner una fecha de visita anterior a hoy → lo rechaza (nacería caducada).
 - [ ] En el listado, las visitas de días pasados aparecen como **Caducada**; una de hoy,
       **Vigente**; una futura, **Programada**.
@@ -80,6 +81,8 @@ Contraseña de las 8 cuentas de prueba: `admin1234`.
 
 **Personal Interno → Datos internos → Registrar**
 
+- [ ] La persona se busca por su **cédula**, no en un combo con todo el personal. Al encontrarla
+      se muestran nombre, categoría y estado; la categoría explica los campos habilitados.
 - [ ] Elige un **docente**: "Contrato" es un desplegable con **Fijo / Temporal** y el dato
       académico se etiqueta **Categoría**. No aparecen Cargo ni Nombramiento.
 - [ ] Elige un **administrativo**: tiene Contrato y Cargo, pero no Nombramiento.
@@ -88,6 +91,11 @@ Contraseña de las 8 cuentas de prueba: `admin1234`.
 - [ ] Elige un **estudiante** y Unidad **CEC**: Curso queda habilitado y Carrera bloqueada.
 - [ ] Cambia la Unidad a **EPN**: Carrera queda habilitada, Curso bloqueado y se limpian los
       valores académicos incompatibles con la unidad anterior.
+
+**Personal Interno → Biometría → Enrolar rostro**
+
+- [ ] La persona interna se busca por su **cédula** y el resultado muestra su categoría antes de
+      capturar el rostro; no existe un combo con todo el personal.
 
 ## 6. Vehículos y asociaciones (GPE §9, GPI)
 

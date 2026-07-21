@@ -1436,3 +1436,18 @@ propietario como al vincular otra persona desde la ficha. La RPC atómica recibe
 como argumento obligatorio y la tabla rechaza nuevas relaciones sin esa fecha. Las filas
 históricas abiertas se conservan hasta que se corrijan expresamente; asignarles una fecha
 inventada habría falseado el registro.
+
+## §D84 — Una persona se identifica por cédula antes de asignarla a otro registro
+
+**Problema:** Detalle Interno, Enrolamiento Biométrico y Autorización de visita todavía cargaban
+un combo con todas las personas. Además de escalar mal, en Detalle Interno ocultaba el dato que
+explica el formulario: la categoría de la persona elegida determina qué campos aplican.
+
+**Decisión:** toda selección **individual** de una persona en esos flujos reutiliza la búsqueda
+exacta por cédula. El resultado confirma nombre, categoría y estado antes de continuar. GPI
+restringe la búsqueda a personas internas activas y GPE a externas activas; la RLS existente
+sigue delimitando quién puede consultar cada directorio.
+
+La vinculación de personas a un memorando conserva su selector múltiple con búsqueda por cédula,
+apellido o empresa. Es una excepción deliberada: ahí se agregan varias personas en una sola
+operación, por lo que sustituirlo por una búsqueda individual eliminaría una capacidad del flujo.
