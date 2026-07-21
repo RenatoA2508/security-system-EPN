@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { Fingerprint, ScanFace } from 'lucide-react'
+import { Fingerprint, ScanFace, Trash2 } from 'lucide-react'
 import { supabase, mensajeError } from '../../lib/supabase'
 import { useAuth } from '../../auth/AuthProvider'
 import { CameraPanel, type CameraHandle } from '../../components/Camera'
-import { Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Select, useToast } from '../../components/ui'
+import { Badge, Button, Card, CenterSpinner, EmptyState, ErrorBanner, Field, Modal, Select, useToast } from '../../components/ui'
 
 const BUCKET = 'registro-biometrico'
+
+interface RegistroBiometrico {
+  id_registro: string
+  vigente: boolean
+  path_storage: string | null
+}
 
 interface PersonaInterna {
   id_persona: string
   nombres: string
   apellidos: string
   cedula: string
-  registro_biometrico: { id_registro: string; vigente: boolean }[]
+  registro_biometrico: RegistroBiometrico[]
 }
 
 /**
@@ -25,6 +31,9 @@ export function BiometriaScreen() {
   const toast = useToast()
   const puedeLeer = tiene('GPI_BIOMETRIA_SELECT')
   const puedeEnrolar = tiene('GPI_BIOMETRIA_INSERT')
+  // Quitar un enrolamiento que salió mal usa el mismo permiso que modificarlo (GPI_BIOMETRIA_UPDATE):
+  // desactiva la fila (vigente=false; el matching ya filtra vigente=true) y borra la foto de Storage.
+  const puedeBorrar = tiene('GPI_BIOMETRIA_UPDATE')
 
   const [personas, setPersonas] = useState<PersonaInterna[]>([])
   const [cargando, setCargando] = useState(true)
@@ -32,18 +41,54 @@ export function BiometriaScreen() {
   const [sel, setSel] = useState('')
   const [enrolando, setEnrolando] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [aBorrar, setABorrar] = useState<PersonaInterna | null>(null)
+  const [borrando, setBorrando] = useState(false)
   const camRef = useRef<CameraHandle>(null)
 
   const cargar = async () => {
     setCargando(true)
     const { data, error } = await supabase
       .from('persona')
-      .select('id_persona, nombres, apellidos, cedula, registro_biometrico(id_registro, vigente)')
+      .select('id_persona, nombres, apellidos, cedula, registro_biometrico(id_registro, vigente, path_storage)')
       .eq('tipo_persona', 'INTERNA')
       .order('apellidos')
     if (error) setError(mensajeError(error))
     setPersonas((data as PersonaInterna[] | null) ?? [])
     setCargando(false)
+  }
+
+  /**
+   * Borra el enrolamiento de una persona (rostro capturado mal, borroso, de otra persona…).
+   * Primero DESACTIVA la fila —eso corta el acceso, porque el matching solo usa vigente=true—,
+   * luego borra la foto de Storage. La fila no se elimina físicamente (principio del proyecto);
+   * queda como histórico desactivado. Se puede volver a enrolar después.
+   */
+  const borrar = async (persona: PersonaInterna) => {
+    setBorrando(true)
+    setError(null)
+    try {
+      const vigentes = (persona.registro_biometrico ?? []).filter((b) => b.vigente)
+      for (const b of vigentes) {
+        const { error } = await supabase.from('registro_biometrico').update({ vigente: false }).eq('id_registro', b.id_registro)
+        if (error) throw new Error(error.message)
+      }
+      // path_storage es '<bucket>/<carpeta>/<archivo>'; Storage.remove espera la ruta SIN el bucket.
+      const rutas = vigentes
+        .map((b) => b.path_storage)
+        .filter((p): p is string => !!p)
+        .map((p) => p.replace(`${BUCKET}/`, ''))
+      if (rutas.length) {
+        const { error } = await supabase.storage.from(BUCKET).remove(rutas)
+        if (error) throw new Error('El rostro se retiró, pero la foto no se pudo borrar de Storage: ' + error.message)
+      }
+      toast('ok', `Enrolamiento de ${persona.apellidos} ${persona.nombres} borrado: rostro retirado y foto eliminada de Storage.`)
+      setABorrar(null)
+      await cargar()
+    } catch (e) {
+      setError(mensajeError(e))
+    } finally {
+      setBorrando(false)
+    }
   }
 
   useEffect(() => {
@@ -120,20 +165,36 @@ export function BiometriaScreen() {
                     <th className="px-4 py-2.5">Cédula</th>
                     <th className="px-4 py-2.5">Persona</th>
                     <th className="px-4 py-2.5">Biometría</th>
+                    <th className="px-4 py-2.5 text-right"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {personas.map((p) => (
+                  {personas.map((p) => {
+                    const enrolada = p.registro_biometrico?.some((b) => b.vigente)
+                    return (
                     <tr key={p.id_persona} className="border-b border-slate-100 last:border-0">
                       <td className="px-4 py-2.5">{p.cedula}</td>
                       <td className="px-4 py-2.5 text-navy">{p.apellidos} {p.nombres}</td>
                       <td className="px-4 py-2.5">
-                        {p.registro_biometrico?.some((b) => b.vigente)
+                        {enrolada
                           ? <Badge value="ACTIVA" />
                           : <span className="text-xs text-slate-400">Sin enrolar</span>}
                       </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {enrolada && puedeBorrar && (
+                          <button
+                            type="button"
+                            onClick={() => setABorrar(p)}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            aria-label={`Borrar el enrolamiento de ${p.apellidos} ${p.nombres}`}
+                          >
+                            <Trash2 className="h-4 w-4" /> Borrar
+                          </button>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -176,6 +237,26 @@ export function BiometriaScreen() {
           </div>
         )}
       </Card>
+
+      <Modal
+        open={!!aBorrar}
+        onClose={() => (borrando ? undefined : setABorrar(null))}
+        title="Borrar enrolamiento"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setABorrar(null)} disabled={borrando}>Cancelar</Button>
+            <Button variant="danger" onClick={() => aBorrar && borrar(aBorrar)} loading={borrando}>
+              <Trash2 className="h-4 w-4" /> Borrar enrolamiento
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-navy">
+          Se quitará el rostro de <strong>{aBorrar?.apellidos} {aBorrar?.nombres}</strong> y se borrará su foto de Storage.
+          La persona dejará de identificarse por rostro hasta que se la vuelva a enrolar.
+        </p>
+        <p className="mt-2 text-xs text-ink-soft">Úsalo cuando la captura salió mal (borrosa, mal encuadrada o de otra persona).</p>
+      </Modal>
     </div>
   )
 }
