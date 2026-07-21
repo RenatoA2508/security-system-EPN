@@ -13,6 +13,7 @@ import {
   opcionesCatalogo, optCategorias, optEmpresas, optPuntosControl, optZonas,
   optZonasPorTipo, optZonasPadrePara, optPuntosPorZona, optGuardiasDisponibles,
   optPersonasExternasConEmpresa, optMemorandosVigentes, humanizarNombreCuenta,
+  zonaEdificioPorNumero,
 } from './opciones'
 import { supabase } from '../lib/supabase'
 import { hoyISO } from '../lib/format'
