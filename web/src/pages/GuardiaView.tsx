@@ -12,6 +12,7 @@ import { CameraPanel, type CameraHandle } from '../components/Camera'
 import { LectorPlaca, ResultadoPlacaPanel, type ResultadoPlaca } from '../components/LectorPlaca'
 import { FichaMemorando } from '../components/FichaMemorando'
 import { MemorandoDelVehiculo } from '../components/MemorandoDelVehiculo'
+import { OcupantesDelMemorando } from '../components/OcupantesDelMemorando'
 import { AutorizarVisita } from '../components/AutorizarVisita'
 import { TopBar, PageContainer } from '../components/layout/Shell'
 import {
@@ -38,6 +39,10 @@ interface Vigencia {
 interface ResultadoEvento {
   autorizado: boolean
   motivo: string | null
+  /** Ingreso o salida. Sin esto el aviso decía "Acceso autorizado" en los dos casos y, al
+   *  revisar lo ocurrido en la garita, no había forma de distinguir quién entró de quién
+   *  salió. */
+  movimiento?: 'INGRESO' | 'SALIDA'
   persona?: string
 }
 
@@ -186,9 +191,10 @@ function GuardiaInner() {
 function ResultadoBanner({ resultado }: { resultado: ResultadoEvento }) {
   const [codigo, ...resto] = (resultado.motivo ?? '').split(':')
   const explicacion = resto.join(':').trim()
+  const esSalida = resultado.movimiento === 'SALIDA'
   const titulo = resultado.autorizado
-    ? 'Acceso autorizado'
-    : MOTIVO_LEGIBLE[codigo.trim()] ?? 'Acceso denegado'
+    ? (esSalida ? 'Salida autorizada' : 'Ingreso autorizado')
+    : MOTIVO_LEGIBLE[codigo.trim()] ?? (esSalida ? 'Salida denegada' : 'Ingreso denegado')
 
   return (
     <div
@@ -256,7 +262,7 @@ function BuscarPorCedula({ idPunto, uid, enTurno, onDone }: { idPunto: string; u
     setRegistrando(false)
     if (error) { setError(mensajeError(error)); return }
     const oc = (data as any)?.ocupantes?.[0]
-    setResultado({ autorizado: !!oc?.autorizado, motivo: oc?.motivo ?? null })
+    setResultado({ autorizado: !!oc?.autorizado, motivo: oc?.motivo ?? null, movimiento: tipo_movimiento })
     if (oc?.autorizado) onDone()
   }
 
@@ -408,7 +414,7 @@ function BiometriaGuardia({ idPunto, enTurno, onDone }: { idPunto: string; enTur
     setProc(false)
     if (error) { setError(mensajeError(error)); return }
     const oc = (data as any)?.ocupantes?.[0]
-    setResultado({ autorizado: !!oc?.autorizado, motivo: oc?.motivo ?? null })
+    setResultado({ autorizado: !!oc?.autorizado, motivo: oc?.motivo ?? null, movimiento: tipo_movimiento })
     if (oc?.autorizado) onDone()
   }
 
@@ -423,7 +429,7 @@ function BiometriaGuardia({ idPunto, enTurno, onDone }: { idPunto: string; enTur
     setProc(false)
     if (error) { setError(mensajeError(error)); return }
     const oc = (data as any)?.ocupantes?.[0]
-    setResultado({ autorizado: false, motivo: oc?.motivo ?? null })
+    setResultado({ autorizado: false, motivo: oc?.motivo ?? null, movimiento: 'INGRESO' })
     setDesconocido(null)
     onDone()
   }
@@ -556,6 +562,7 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
         return {
           autorizado: r.autorizado,
           motivo: r.motivo,
+          movimiento: tipo_movimiento,
           persona: ocupante ? `${ocupante.persona.apellidos} ${ocupante.persona.nombres}` : undefined,
         }
       }),
@@ -578,9 +585,26 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
           <>
             <ResultadoPlacaPanel resultado={placa} onDescartar={() => setPlaca(null)} />
             {/* Para un externo el memorando ES el segundo factor, asi que el guardia tiene que
-                verlo aqui: de que empresa viene el coche, a que dependencia acude y hasta
+                verlo aquí: de qué empresa viene el coche, a qué dependencia acude y hasta
                 cuando vale el permiso. */}
             {placa.vehiculo?.id_vehiculo && <MemorandoDelVehiculo idVehiculo={placa.vehiculo.id_vehiculo} />}
+            {/* §D20: al externo lo identifica su cédula tecleada por el guardia. Hasta que la
+                escriba y coincida con la que ampara el memorando, no puede añadir a nadie. */}
+            {placa.vehiculo?.id_vehiculo && (
+              <OcupantesDelMemorando
+                idVehiculo={placa.vehiculo.id_vehiculo}
+                yaAnadido={yaEsta}
+                onAnadir={(p) =>
+                  anadir({
+                    id_persona: p.id_persona,
+                    nombres: p.nombres,
+                    apellidos: p.apellidos,
+                    cedula: p.cedula,
+                    tipo_persona: 'EXTERNA',
+                  })
+                }
+              />
+            )}
             {placa.personas.length > 0 && (
               <div className="mt-3">
                 <p className="mb-1 text-xs font-medium text-ink-soft">Personas asociadas a este vehículo</p>
@@ -591,16 +615,28 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
                         {p.apellidos} {p.nombres}
                         <span className="ml-2 text-xs text-ink-soft">{humanizar(p.tipo_relacion)}</span>
                       </span>
-                      <Button
-                        variant="secondary"
-                        onClick={() => anadir(p as unknown as PersonaLite)}
-                        disabled={yaEsta(p.id_persona)}
-                      >
-                        {yaEsta(p.id_persona) ? 'Añadido' : 'Añadir'}
-                      </Button>
+                      {/* Al personal interno NO se le puede añadir desde aquí. El botón lo metía
+                          de un clic, y eso deja sin efecto el reconocimiento facial, que es su
+                          única forma de identificarse (§D20) y el segundo factor que exige
+                          RNF-CA-005 a quien conduce. Se identifica con la cámara o no entra. */}
+                      {p.tipo_persona === 'INTERNA' ? (
+                        <span className="shrink-0 text-xs text-ink-soft">Se identifica por rostro</span>
+                      ) : (
+                        <span className="shrink-0 text-xs text-ink-soft">
+                          {yaEsta(p.id_persona) ? 'Añadido' : 'Verifique su cédula abajo'}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
+
+                {placa.personas.some((p) => p.tipo_persona === 'INTERNA') && (
+                  <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-ink-soft">
+                    <b className="text-navy">El personal interno se añade por reconocimiento facial.</b>{' '}
+                    Use "Añadir por rostro" en el panel de la derecha: la placa por sí sola no
+                    autoriza a nadie, y quien conduce necesita las dos comprobaciones.
+                  </div>
+                )}
               </div>
             )}
           </>
@@ -633,7 +669,9 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
             placeholder="Cédula del pasajero"
             aria-label="Cédula del pasajero"
           />
-          <Button variant="secondary" onClick={anadirPorCedula} loading={proc}><Search className="h-4 w-4" /></Button>
+          <Button variant="secondary" onClick={anadirPorCedula} loading={proc} aria-label="Buscar pasajero por cédula">
+            <Search className="h-4 w-4" />
+          </Button>
         </div>
 
         <div className="mt-3"><ErrorBanner message={error} /></div>
