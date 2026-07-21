@@ -454,7 +454,7 @@ export const cfgZona: ResourceConfig = {
     {
       name: 'numero_edificio', label: 'Número de edificio', type: 'number', required: true,
       visibleSi: (v) => v.tipo_zona === 'EDIFICIO',
-      placeholder: '20', hint: 'Único por edificio. Lo usan los puntos de control de ese edificio para resolver su zona.',
+      placeholder: '20', hint: 'Único por edificio. Al registrar una garita bastará con escribir este número.',
     },
     // Sin combo de Estado al registrar (feedback PCO): una zona nueva nace en servicio. Cambiarlo
     // es una decisión posterior, y para eso está la ficha —con Inactivar y Reactivar—.

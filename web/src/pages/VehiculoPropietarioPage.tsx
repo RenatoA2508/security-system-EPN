@@ -70,7 +70,7 @@ export function VehiculoPropietarioPage() {
     return (
       <div>
         <Breadcrumb items={[{ label: 'Panel Principal', to: '/' }, { label: 'Registrar vehículo' }]} />
-        <EmptyState title="No tiene permiso para registrar vehículos" hint="Se requiere el permiso de alta de vehículos (ADM, GPI o GPE)." />
+        <EmptyState title="No tiene permiso para registrar vehículos" hint="Pide acceso al administrador del sistema." />
       </div>
     )
   }

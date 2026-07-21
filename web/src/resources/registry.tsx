@@ -85,7 +85,7 @@ export const MODULOS: ModuloDef[] = [
       sub('zonas', 'Zonas', 'Campus, edificios y parqueaderos.', <LayoutGrid className="h-6 w-6" />, cfgZona),
       sub('puntos', 'Puntos de control', 'Garitas y accesos.', <Shield className="h-6 w-6" />, cfgPuntoControl),
       sub('dispositivos', 'Dispositivos', 'Cámaras, torniquetes y lectores.', <Cpu className="h-6 w-6" />, cfgDispositivo),
-      sub('asignaciones', 'Asignaciones de guardia', 'Guardia ↔ punto de control.', <UserCog className="h-6 w-6" />, cfgAsignacionGuardia),
+      sub('asignaciones', 'Asignaciones de guardia', 'Qué guardia cubre cada garita y en qué turno.', <UserCog className="h-6 w-6" />, cfgAsignacionGuardia),
     ],
   },
   {
@@ -132,7 +132,7 @@ export const MODULOS: ModuloDef[] = [
       // desde la misma vista". Las asociaciones se gestionan dentro del detalle del
       // vehículo, así que ADM ya no necesita una tarjeta aparte (GPI y GPE mantienen la
       // suya: ahí el alta de vínculos es parte de su flujo diario).
-      sub('vehiculos', 'Vehículos', 'Ciclo de vida de vehículos y sus personas asociadas.', <Car className="h-6 w-6" />, cfgVehiculo('ADM')),
+      sub('vehiculos', 'Vehículos', 'Vehículos registrados y quién los conduce.', <Car className="h-6 w-6" />, cfgVehiculo('ADM')),
       sub('bitacora', 'Auditoría', 'Quién hizo qué, sobre quién y cuándo.', <ScrollText className="h-6 w-6" />, cfgBitacora),
       sub('sesiones', 'Sesiones', 'Registro de sesiones.', <History className="h-6 w-6" />, cfgSesion),
     ],

@@ -437,7 +437,7 @@ function BiometriaGuardia({ idPunto, enTurno, onDone }: { idPunto: string; enTur
   return (
     <Card className="p-5">
       <h3 className="mb-1 flex items-center gap-2 text-base font-semibold text-navy"><ScanFace className="h-5 w-5" /> Identificar por rostro (interno)</h3>
-      <p className="mb-4 text-xs text-ink-soft">Solo personal interno. La identificación 1:N ocurre en el backend.</p>
+      <p className="mb-4 text-xs text-ink-soft">Solo para personal interno. El personal externo se identifica con su cédula.</p>
       <CameraPanel ref={camRef} />
       <Button className="mt-2 w-full" onClick={identificar} loading={proc}><ScanFace className="h-4 w-4" /> Capturar e identificar</Button>
       <div className="mt-3"><ErrorBanner message={error} /></div>
@@ -717,7 +717,7 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
                 </label>
                 {o.esConductor && o.confianza === undefined && o.persona.tipo_persona === 'INTERNA' && (
                   <p className="mt-1 text-xs text-amber-700">
-                    RNF-CA-005: el conductor necesita reconocimiento facial además de la placa. Añádalo por rostro.
+                    El conductor necesita reconocimiento facial además de la placa. Añádalo por rostro.
                   </p>
                 )}
                 {/* El externo no tiene rostro con el que contrastar: lo que lo autoriza a

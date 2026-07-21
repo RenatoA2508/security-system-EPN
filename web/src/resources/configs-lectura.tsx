@@ -102,7 +102,7 @@ function lugarAlmacenamiento(r: any): string {
  */
 export const cfgBiometriaADM: ResourceConfig = {
   tabla: 'registro_biometrico',
-  titulo: 'Biometría (metadatos)',
+  titulo: 'Biometría',
   singular: 'Registro biométrico',
   idField: 'id_registro',
   // `descriptor_facial` se pide solo para saber SI existe (lugarAlmacenamiento); el vector

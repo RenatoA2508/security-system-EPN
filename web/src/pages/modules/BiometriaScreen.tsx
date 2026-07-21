@@ -109,7 +109,7 @@ export function BiometriaScreen() {
       if (up.error) throw new Error('Storage: ' + up.error.message)
       const { data: listado, error: listError } = await supabase.storage.from(BUCKET).list(carpeta, { search: archivo })
       if (!listError && listado?.some((f) => f.name === archivo)) return
-      if (intento === 2) throw new Error('La foto no se confirmó en Storage tras 2 intentos. Vuelve a intentar el enrolamiento.')
+      if (intento === 2) throw new Error('No se pudo guardar la foto. Inténtalo de nuevo.')
     }
   }
 
@@ -232,8 +232,8 @@ export function BiometriaScreen() {
             </Button>
             {previewUrl && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2 text-center">
-                <img src={previewUrl} alt="Última foto enrolada" className="mx-auto h-24 rounded object-cover" />
-                <p className="mt-1 text-[11px] text-emerald-700">Foto confirmada en Storage.</p>
+                <img src={previewUrl} alt="Última foto registrada" className="mx-auto h-24 rounded object-cover" />
+                <p className="mt-1 text-[11px] text-emerald-700">Foto guardada correctamente.</p>
               </div>
             )}
           </div>
@@ -243,7 +243,7 @@ export function BiometriaScreen() {
       <Modal
         open={!!aBorrar}
         onClose={() => (borrando ? undefined : setABorrar(null))}
-        title="Borrar enrolamiento"
+        title="Borrar el rostro registrado"
         footer={
           <>
             <Button variant="ghost" onClick={() => setABorrar(null)} disabled={borrando}>Cancelar</Button>

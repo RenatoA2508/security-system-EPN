@@ -171,7 +171,7 @@ export function ResourceScreen({ config }: { config: ResourceConfig }) {
     return (
       <EmptyState
         title="No tienes acceso a esta sección"
-        hint="Tu rol no incluye el permiso de lectura requerido. Si crees que es un error, contacta al administrador."
+        hint="Pide acceso al administrador del sistema si crees que deberías verla."
       />
     )
   }
