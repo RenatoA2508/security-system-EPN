@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Car, DoorOpen, ShieldAlert, Timer } from 'lucide-react'
+import { AlertTriangle, Car, DoorOpen, ShieldAlert, Timer } from 'lucide-react'
 import { supabase, mensajeError } from '../../lib/supabase'
 import { fmtFechaHora } from '../../lib/format'
 import { formatearPlaca } from '../../lib/validacion'
+import { humanizar, MOTIVO_LEGIBLE } from '../../lib/catalogos'
 import { Badge, Card, CenterSpinner, EmptyState, ErrorBanner } from '../../components/ui'
 
 interface VehiculoDentro {
@@ -19,6 +20,7 @@ interface VehiculoDentro {
   fecha_ingreso: string | null
 }
 interface EventoReciente {
+  tipo: 'evento'
   id_evento: string
   fecha_hora: string
   tipo_movimiento: string
@@ -30,29 +32,54 @@ interface EventoReciente {
   punto?: { nombre_punto: string } | null
   vehiculo?: { placa: string } | null
 }
+/** Fallo técnico del reconocimiento (RF-CA-022: cámara caída, rostro no detectado en la
+ *  imagen, servicio no disponible...), no un intento de acceso. Antes solo se veía en la
+ *  pantalla dedicada de "Errores de reconocimiento"; aquí se mezcla con los eventos para que
+ *  el panel de monitoreo muestre TODO lo que pasó en una garita, no solo los accesos resueltos. */
+interface ErrorReciente {
+  tipo: 'error'
+  id_error: string
+  fecha_hora: string
+  tipo_reconocimiento: string
+  codigo_error: string
+  descripcion: string
+  punto?: { nombre_punto: string } | null
+}
+type Movimiento = EventoReciente | ErrorReciente
 
 export function MonitoreoView() {
   const [vehiculos, setVehiculos] = useState<VehiculoDentro[]>([])
-  const [eventos, setEventos] = useState<EventoReciente[]>([])
+  const [eventos, setEventos] = useState<Movimiento[]>([])
   const [alertasPend, setAlertasPend] = useState(0)
   const [cargando, setCargando] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [seleccionado, setSeleccionado] = useState<EventoReciente | null>(null)
+  const [seleccionado, setSeleccionado] = useState<Movimiento | null>(null)
 
   const cargar = async () => {
     setCargando(true)
-    const [veh, ev, al] = await Promise.all([
+    const [veh, ev, errRec, al] = await Promise.all([
       supabase.from('vista_vehiculos_dentro').select('*').order('horas_dentro', { ascending: false }),
       supabase
         .from('evento_acceso')
         .select('id_evento, fecha_hora, tipo_movimiento, resultado, motivo_resultado, origen_registro, es_conductor, persona:persona(nombres, apellidos, cedula), punto:punto_control(nombre_punto), vehiculo:vehiculo(placa)')
         .order('fecha_hora', { ascending: false })
         .limit(15),
+      supabase
+        .from('error_reconocimiento')
+        .select('id_error, fecha_hora, tipo_reconocimiento, codigo_error, descripcion, punto:punto_control(nombre_punto)')
+        .order('fecha_hora', { ascending: false })
+        .limit(15),
       supabase.from('alerta_seguridad').select('id_alerta', { count: 'exact', head: true }).eq('estado_alerta', 'PENDIENTE'),
     ])
     if (veh.error) setError(mensajeError(veh.error))
     setVehiculos((veh.data as VehiculoDentro[] | null) ?? [])
-    setEventos((ev.data as EventoReciente[] | null) ?? [])
+    const eventosData: Movimiento[] = ((ev.data ?? []) as any[]).map((e) => ({ tipo: 'evento', ...e }))
+    const erroresData: Movimiento[] = ((errRec.data ?? []) as any[]).map((e) => ({ tipo: 'error', ...e }))
+    setEventos(
+      [...eventosData, ...erroresData]
+        .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
+        .slice(0, 15),
+    )
     setAlertasPend(al.count ?? 0)
     setCargando(false)
   }
@@ -129,28 +156,62 @@ export function MonitoreoView() {
             <EmptyState title="Sin eventos recientes" />
           ) : (
             <ul className="divide-y divide-slate-100">
-              {eventos.map((e) => (
-                <li
-                  key={e.id_evento}
-                  onClick={() => setSeleccionado(e)}
-                  className={
-                    'flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 ' +
-                    (seleccionado?.id_evento === e.id_evento ? 'bg-slate-50' : '')
-                  }
-                >
-                  <div>
-                    <p className="font-medium text-navy">{e.persona ? `${e.persona.apellidos} ${e.persona.nombres}` : '—'}</p>
-                    <p className="text-xs text-ink-soft">{e.punto?.nombre_punto ?? '—'} · {fmtFechaHora(e.fecha_hora)}</p>
-                  </div>
-                  <div className="flex gap-1.5"><Badge value={e.tipo_movimiento} /><Badge value={e.resultado} /></div>
-                </li>
-              ))}
+              {eventos.map((e) => {
+                const clave = e.tipo === 'evento' ? e.id_evento : e.id_error
+                const activo = seleccionado != null && (seleccionado.tipo === 'evento' ? seleccionado.id_evento : seleccionado.id_error) === clave
+                if (e.tipo === 'error') {
+                  return (
+                    <li
+                      key={`error-${e.id_error}`}
+                      onClick={() => setSeleccionado(e)}
+                      className={'flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 ' + (activo ? 'bg-slate-50' : '')}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-amber-800">Error de reconocimiento {humanizar(e.tipo_reconocimiento).toLowerCase()}</p>
+                        <p className="truncate text-xs text-ink-soft">{e.punto?.nombre_punto ?? '—'} · {fmtFechaHora(e.fecha_hora)}</p>
+                        <p className="truncate text-xs text-amber-700">{humanizar(e.codigo_error)}</p>
+                      </div>
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                    </li>
+                  )
+                }
+                const codigo = (e.motivo_resultado ?? '').split(':')[0].trim()
+                return (
+                  <li
+                    key={e.id_evento}
+                    onClick={() => setSeleccionado(e)}
+                    className={'flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 ' + (activo ? 'bg-slate-50' : '')}
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-navy">{e.persona ? `${e.persona.apellidos} ${e.persona.nombres}` : '—'}</p>
+                      <p className="truncate text-xs text-ink-soft">{e.punto?.nombre_punto ?? '—'} · {fmtFechaHora(e.fecha_hora)}</p>
+                      {e.resultado === 'DENEGADO' && codigo && (
+                        <p className="truncate text-xs text-red">{MOTIVO_LEGIBLE[codigo] ?? humanizar(codigo)}</p>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 gap-1.5"><Badge value={e.tipo_movimiento} /><Badge value={e.resultado} /></div>
+                  </li>
+                )
+              })}
             </ul>
           )}
         </Card>
       </div>
 
-      {seleccionado && (
+      {seleccionado && seleccionado.tipo === 'error' && (
+        <Card className="mt-6 p-5">
+          <h3 className="mb-3 text-sm font-semibold text-navy">Detalle del error de reconocimiento</h3>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+            <div><dt className="text-xs text-ink-soft">Punto de control</dt><dd className="text-navy">{seleccionado.punto?.nombre_punto ?? '—'}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Fecha y hora</dt><dd className="text-navy">{fmtFechaHora(seleccionado.fecha_hora)}</dd></div>
+            <div><dt className="text-xs text-ink-soft">Reconocimiento</dt><dd><Badge value={seleccionado.tipo_reconocimiento} /></dd></div>
+            <div><dt className="text-xs text-ink-soft">Tipo de fallo</dt><dd className="text-navy">{humanizar(seleccionado.codigo_error)}</dd></div>
+            <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-ink-soft">Detalle</dt><dd className="text-navy">{seleccionado.descripcion}</dd></div>
+          </dl>
+        </Card>
+      )}
+
+      {seleccionado && seleccionado.tipo === 'evento' && (
         <Card className="mt-6 p-5">
           <h3 className="mb-3 text-sm font-semibold text-navy">Detalle del evento seleccionado</h3>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">

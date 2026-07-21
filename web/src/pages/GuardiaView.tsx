@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Car, Clock, DoorClosed, DoorOpen, Footprints, IdCard, LogIn, LogOut, ScanFace, Search,
-  UserPlus, Users, X,
+  AlertTriangle, Car, Clock, DoorClosed, DoorOpen, Footprints, IdCard, LogIn, LogOut, ScanFace,
+  Search, UserPlus, Users, X,
 } from 'lucide-react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
@@ -702,19 +702,41 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
   )
 }
 
-/* -------- Eventos recientes del punto (RF-CA-025; RLS filtra al punto asignado) -------- */
+/** Un movimiento real (evento_acceso) o un fallo técnico de reconocimiento (error_reconocimiento,
+ *  RF-CA-022: cámara caída, rostro no detectado en la imagen, servicio no disponible...). Antes
+ *  el guardia no veía estos últimos aquí — se guardaban en la base pero solo aparecían en la
+ *  pantalla dedicada de ADM/CAC — así que un fallo repetido en su propia garita pasaba
+ *  desapercibido para quien más lo necesita ver: quien está frente a la cámara ese momento. */
+type MovimientoPunto =
+  | { tipo: 'evento'; id: string; fecha_hora: string; tipo_movimiento: string; tipo_acceso: string; resultado: string; motivo_resultado: string | null; placa_detectada: string | null; persona: { nombres: string; apellidos: string; cedula: string } | null }
+  | { tipo: 'error'; id: string; fecha_hora: string; tipo_reconocimiento: string; codigo_error: string; descripcion: string }
+
+/* -------- Movimientos recientes del punto (RF-CA-025, RF-CA-022; RLS filtra al punto asignado) -------- */
 function EventosDelPunto({ idPunto, refrescar }: { idPunto: string; refrescar: number }) {
-  const [eventos, setEventos] = useState<any[]>([])
+  const [movimientos, setMovimientos] = useState<MovimientoPunto[]>([])
   const [cargando, setCargando] = useState(true)
 
   const cargar = async () => {
-    const { data } = await supabase
-      .from('evento_acceso')
-      .select('id_evento, fecha_hora, tipo_movimiento, tipo_acceso, resultado, motivo_resultado, placa_detectada, persona:persona(nombres, apellidos, cedula)')
-      .eq('id_punto_control', idPunto)
-      .order('fecha_hora', { ascending: false })
-      .limit(12)
-    setEventos(data ?? [])
+    const [ev, err] = await Promise.all([
+      supabase
+        .from('evento_acceso')
+        .select('id_evento, fecha_hora, tipo_movimiento, tipo_acceso, resultado, motivo_resultado, placa_detectada, persona:persona(nombres, apellidos, cedula)')
+        .eq('id_punto_control', idPunto)
+        .order('fecha_hora', { ascending: false })
+        .limit(12),
+      supabase
+        .from('error_reconocimiento')
+        .select('id_error, fecha_hora, tipo_reconocimiento, codigo_error, descripcion')
+        .eq('id_punto_control', idPunto)
+        .order('fecha_hora', { ascending: false })
+        .limit(12),
+    ])
+    const eventos: MovimientoPunto[] = ((ev.data ?? []) as any[]).map((e) => ({ tipo: 'evento', id: e.id_evento, ...e }))
+    const errores: MovimientoPunto[] = ((err.data ?? []) as any[]).map((e) => ({ tipo: 'error', id: e.id_error, ...e }))
+    const combinados = [...eventos, ...errores]
+      .sort((a, b) => new Date(b.fecha_hora).getTime() - new Date(a.fecha_hora).getTime())
+      .slice(0, 12)
+    setMovimientos(combinados)
     setCargando(false)
   }
   useEffect(() => { cargar(); const t = setInterval(cargar, 20000); return () => clearInterval(t) }, [idPunto, refrescar])
@@ -722,28 +744,40 @@ function EventosDelPunto({ idPunto, refrescar }: { idPunto: string; refrescar: n
   return (
     <Card className="overflow-hidden">
       <h3 className="flex items-center gap-2 border-b border-slate-200 px-4 py-3 text-sm font-semibold text-navy"><DoorOpen className="h-4 w-4" /> Movimientos recientes en el punto</h3>
-      {cargando ? <CenterSpinner /> : eventos.length === 0 ? <EmptyState title="Sin movimientos aún" /> : (
+      {cargando ? <CenterSpinner /> : movimientos.length === 0 ? <EmptyState title="Sin movimientos aún" /> : (
         <ul className="divide-y divide-slate-100">
-          {eventos.map((e) => {
-            const codigo = (e.motivo_resultado ?? '').split(':')[0].trim()
+          {movimientos.map((m) => {
+            if (m.tipo === 'error') {
+              return (
+                <li key={`error-${m.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-amber-800">Error de reconocimiento {humanizar(m.tipo_reconocimiento).toLowerCase()}</p>
+                    <p className="truncate text-xs text-ink-soft">{fmtFechaHora(m.fecha_hora)}</p>
+                    <p className="truncate text-xs text-amber-700">{humanizar(m.codigo_error)}{m.descripcion ? ` — ${m.descripcion}` : ''}</p>
+                  </div>
+                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                </li>
+              )
+            }
+            const codigo = (m.motivo_resultado ?? '').split(':')[0].trim()
             return (
-              <li key={e.id_evento} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+              <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-medium text-navy">
-                    {e.persona ? `${e.persona.apellidos} ${e.persona.nombres}` : 'Persona desconocida'}
+                    {m.persona ? `${m.persona.apellidos} ${m.persona.nombres}` : 'Persona desconocida'}
                   </p>
                   <p className="truncate text-xs text-ink-soft">
-                    {e.persona?.cedula ?? ''}
-                    {e.placa_detectada ? ` · ${e.placa_detectada}` : ''} · {fmtFechaHora(e.fecha_hora)}
+                    {m.persona?.cedula ?? ''}
+                    {m.placa_detectada ? ` · ${m.placa_detectada}` : ''} · {fmtFechaHora(m.fecha_hora)}
                   </p>
-                  {e.resultado === 'DENEGADO' && codigo && (
+                  {m.resultado === 'DENEGADO' && codigo && (
                     <p className="truncate text-xs text-red">{MOTIVO_LEGIBLE[codigo] ?? humanizar(codigo)}</p>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {e.tipo_acceso === 'VEHICULAR' ? <Car className="h-4 w-4 text-slate-500" /> : <Footprints className="h-4 w-4 text-slate-500" />}
-                  {e.tipo_movimiento === 'INGRESO' ? <DoorOpen className="h-4 w-4 text-emerald-600" /> : <DoorClosed className="h-4 w-4 text-slate-500" />}
-                  <Badge value={e.resultado} />
+                  {m.tipo_acceso === 'VEHICULAR' ? <Car className="h-4 w-4 text-slate-500" /> : <Footprints className="h-4 w-4 text-slate-500" />}
+                  {m.tipo_movimiento === 'INGRESO' ? <DoorOpen className="h-4 w-4 text-emerald-600" /> : <DoorClosed className="h-4 w-4 text-slate-500" />}
+                  <Badge value={m.resultado} />
                 </div>
               </li>
             )
