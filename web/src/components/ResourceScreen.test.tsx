@@ -3,6 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
+/** Adónde navegó la pantalla; lo usa la prueba del alta con ruta propia. */
+let navegadoA: string | null = null
+vi.mock('react-router-dom', async () => {
+  const real = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return { ...real, useNavigate: () => (ruta: string) => { navegadoA = ruta } }
+})
+
 /**
  * Comportamiento del motor de pantallas, con los tres cambios que pidieron GPE y GPI:
  *
@@ -120,6 +127,7 @@ function montar(config: Parameters<typeof ResourceScreen>[0]['config']) {
 
 beforeEach(() => {
   window.localStorage.clear()
+  navegadoA = null
   insertsHechos.length = 0
   updatesHechos.length = 0
   // La fecha se fija para que "vencido" signifique siempre lo mismo: el memorando de prueba
@@ -196,21 +204,19 @@ describe('estado del memorando (GPE §6)', () => {
     expect(estado).toBeDisabled()
   })
 
-  it('el número de memorando se teclea a mano y se valida', async () => {
+  it('el alta lleva a la pantalla propia, no al formulario genérico', async () => {
+    // Un memorando con vehículo son tres filas que nacen juntas (memorando, vehículo y su
+    // responsable). El formulario genérico solo sabe insertar en una tabla, así que el botón
+    // navega a /memorandos/nuevo. Que el número siga siendo tecleado a mano y validado se
+    // comprueba en validacion.test.ts y en la propia pantalla.
     const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     montar(cfgMemorando)
 
     await usuario.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
 
-    const numero = screen.getByRole('textbox', { name: /Número de memorando/i })
-    // Antes venía relleno por un generador y no se podía tocar.
-    expect(numero).toHaveValue('')
-    expect(numero).toBeEnabled()
-
-    await usuario.type(numero, 'MEMORANDO')
-    await usuario.click(screen.getByRole('button', { name: 'Registrar' }))
-
-    expect((await screen.findAllByText(/al menos un dígito/i)).length).toBeGreaterThan(0)
+    expect(navegadoA).toBe('/memorandos/nuevo')
+    // Y desde luego no se abrió el formulario de siempre.
+    expect(screen.queryByRole('button', { name: 'Registrar' })).not.toBeInTheDocument()
     expect(insertsHechos).toHaveLength(0)
   })
 })
@@ -258,25 +264,25 @@ describe('cambios en datos sensibles (GPE §5)', () => {
 describe('persistencia del formulario', () => {
   it('recupera lo escrito si se abandona el alta a medias', async () => {
     const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    const { unmount } = montar(cfgMemorando)
+    const { unmount } = montar(cfgPersonaInterna)
 
-    await usuario.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
-    await usuario.type(screen.getByRole('textbox', { name: /Número de memorando/i }), 'EPN-DA-2026-0099-M')
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Persona interna/i }))
+    await usuario.type(screen.getByRole('textbox', { name: /Cédula/i }), '1750000232')
 
     // El borrador se guarda con debounce; sin esperar, no habría llegado a localStorage.
     await waitFor(
-      () => expect(window.localStorage.getItem('epn.borrador:u-test:memorando:nuevo')).not.toBeNull(),
+      () => expect(window.localStorage.getItem('epn.borrador:u-test:persona:nuevo')).not.toBeNull(),
       { timeout: 2000 },
     )
     unmount()
 
     // Vuelve a entrar: la pantalla ofrece recuperar el registro sin terminar.
     const usuario2 = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    montar(cfgMemorando)
-    await usuario2.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
+    montar(cfgPersonaInterna)
+    await usuario2.click(await screen.findByRole('button', { name: /Registrar Persona interna/i }))
 
     await usuario2.click(await screen.findByRole('button', { name: /Recuperarlo/i }))
-    expect(screen.getByRole('textbox', { name: /Número de memorando/i })).toHaveValue('EPN-DA-2026-0099-M')
+    expect(screen.getByRole('textbox', { name: /Cédula/i })).toHaveValue('1750000232')
   })
 
   it('no guarda nada si el usuario solo abre el formulario y se va', async () => {
@@ -289,27 +295,27 @@ describe('persistencia del formulario', () => {
     await usuario.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
     await new Promise((r) => setTimeout(r, 1500))
 
-    expect(window.localStorage.getItem('epn.borrador:u-test:memorando:nuevo')).toBeNull()
+    expect(window.localStorage.getItem('epn.borrador:u-test:persona:nuevo')).toBeNull()
   })
 
   it('"Empezar de cero" descarta el borrador guardado', async () => {
     const usuario = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    const { unmount } = montar(cfgMemorando)
+    const { unmount } = montar(cfgPersonaInterna)
 
-    await usuario.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
-    await usuario.type(screen.getByRole('textbox', { name: /Número de memorando/i }), 'EPN-DA-2026-0099-M')
+    await usuario.click(await screen.findByRole('button', { name: /Registrar Persona interna/i }))
+    await usuario.type(screen.getByRole('textbox', { name: /Cédula/i }), '1750000232')
     await waitFor(
-      () => expect(window.localStorage.getItem('epn.borrador:u-test:memorando:nuevo')).not.toBeNull(),
+      () => expect(window.localStorage.getItem('epn.borrador:u-test:persona:nuevo')).not.toBeNull(),
       { timeout: 2000 },
     )
     unmount()
 
     const usuario2 = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    montar(cfgMemorando)
-    await usuario2.click(await screen.findByRole('button', { name: /Registrar Memorando/i }))
+    montar(cfgPersonaInterna)
+    await usuario2.click(await screen.findByRole('button', { name: /Registrar Persona interna/i }))
     await usuario2.click(await screen.findByRole('button', { name: /Empezar de cero/i }))
 
-    expect(window.localStorage.getItem('epn.borrador:u-test:memorando:nuevo')).toBeNull()
-    expect(screen.getByRole('textbox', { name: /Número de memorando/i })).toHaveValue('')
+    expect(window.localStorage.getItem('epn.borrador:u-test:persona:nuevo')).toBeNull()
+    expect(screen.getByRole('textbox', { name: /Cédula/i })).toHaveValue('')
   })
 })

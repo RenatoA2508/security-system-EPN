@@ -938,7 +938,7 @@ export const cfgMemorando: ResourceConfig = {
   titulo: 'Memorandos',
   singular: 'Memorando',
   idField: 'id_memorando',
-  select: '*, empresa:empresa(nombre)',
+  select: '*, empresa:empresa(nombre), vehiculos:memorando_vehiculo(id_memorando_vehiculo, vehiculo:vehiculo(id_vehiculo, placa, tipo_vehiculo, marca, modelo, color, estado_vehiculo))',
   orderBy: { columna: 'fecha_registro', ascendente: false },
   permisos: { select: ['GPE_MEMORANDO_SELECT'], insert: ['GPE_MEMORANDO_INSERT'], update: ['GPE_MEMORANDO_UPDATE'] },
   autoUsuarioRegistro: ['id_usuario_registro'],
@@ -948,6 +948,21 @@ export const cfgMemorando: ResourceConfig = {
     { key: 'empresa', label: 'Empresa', render: (r) => r.empresa?.nombre ?? '—' },
     { key: 'dependencia_autorizada', label: 'Dependencia' },
     { key: 'vigencia', label: 'Vigencia', render: (r) => `${fmtFecha(r.fecha_inicio)} → ${fmtFecha(r.fecha_fin)}` },
+    {
+      key: 'ingreso', label: 'Ingreso',
+      render: (r) => {
+        if (!r.permite_vehiculo) return <span className="text-xs text-ink-soft">A pie</span>
+        const placas = ((r.vehiculos ?? []) as { vehiculo?: { placa?: string } }[])
+          .map((v) => (v.vehiculo?.placa ? formatearPlaca(v.vehiculo.placa) : null))
+          .filter(Boolean)
+        return placas.length > 0
+          ? <span className="text-xs text-navy">{placas.join(', ')}</span>
+          : <span className="text-xs text-red">Vehículo sin placa registrada</span>
+      },
+      valorExport: (r) => (r.permite_vehiculo
+        ? ((r.vehiculos ?? []) as { vehiculo?: { placa?: string } }[]).map((v) => v.vehiculo?.placa ?? '').join(' ')
+        : 'A pie'),
+    },
     { key: 'estado_memorando', label: 'Estado', render: (r) => <Badge value={estadoMemorandoEfectivo(r)} /> },
   ],
   campoTituloDetalle: (r) => r.numero_memorando,
@@ -971,6 +986,45 @@ export const cfgMemorando: ResourceConfig = {
         if (estado === 'VENCIDO') return <span className="text-red">Venció el {fmtFecha(r.fecha_fin)}. Ya no autoriza el ingreso.</span>
         if (estado === 'PROGRAMADO') return <span>Todavía no empieza: autoriza el ingreso desde el {fmtFecha(r.fecha_inicio)}.</span>
         return <span className="text-emerald-700">Autoriza el ingreso hasta el {vigenteHastaTexto(r.fecha_fin)} inclusive.</span>
+      },
+    },
+    {
+      label: 'Forma de ingreso',
+      render: (r) => {
+        const vehiculos = (r.vehiculos ?? []) as { vehiculo?: any }[]
+        if (!r.permite_vehiculo) {
+          return <span>Solo a pie. Este memorando no autoriza el ingreso en vehículo.</span>
+        }
+        return (
+          <div className="space-y-1.5">
+            <p>
+              En vehículo{r.permite_acompanantes ? ', con acompañantes' : ', sin acompañantes declarados'}.
+            </p>
+            {vehiculos.length === 0 ? (
+              <p className="text-xs text-red">
+                Autoriza vehículo pero no tiene ninguna placa registrada: la garita no dejará
+                entrar el coche hasta que se registre.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {vehiculos.map((v, i) => (
+                  <li key={i} className="flex flex-wrap items-center gap-1.5 text-xs">
+                    <span className="font-medium text-navy">
+                      {v.vehiculo?.placa ? formatearPlaca(v.vehiculo.placa) : '—'}
+                    </span>
+                    <span className="text-ink-soft">
+                      {humanizar(v.vehiculo?.tipo_vehiculo)}
+                      {v.vehiculo?.marca ? ` · ${v.vehiculo.marca}` : ''}
+                      {v.vehiculo?.modelo ? ` ${v.vehiculo.modelo}` : ''}
+                      {v.vehiculo?.color ? ` · ${v.vehiculo.color}` : ''}
+                    </span>
+                    <Badge value={v.vehiculo?.estado_vehiculo} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )
       },
     },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
@@ -1003,6 +1057,11 @@ export const cfgMemorando: ResourceConfig = {
     // vigente." El estado no es una elección: sale de las fechas. Se muestra en gris con el
     // valor real, y para anularlo antes de tiempo está el botón del pie de la ficha.
     {
+      name: 'permite_vehiculo', label: '¿Ingresa con vehículo?', type: 'checkbox',
+      hint: 'Sin esto, la garita solo autoriza el ingreso a pie.',
+    },
+    { name: 'permite_acompanantes', label: '¿Ingresa con acompañantes?', type: 'checkbox' },
+    {
       name: 'estado_memorando', label: 'Estado', soloLectura: true, hideOnInsert: true,
       valorCalculado: (v) => humanizar(estadoMemorandoEfectivo(v as any)),
       hint: 'Lo calculan las fechas de vigencia. Para retirar la autorización antes de tiempo, usa "Anular memorando".',
@@ -1011,7 +1070,11 @@ export const cfgMemorando: ResourceConfig = {
   campoEstado: 'estado_memorando',
   // Cambiar las fechas de vigencia o la empresa altera quién puede entrar al campus y hasta
   // cuándo (GPE §5).
-  camposSensibles: ['fecha_inicio', 'fecha_fin', 'id_empresa'],
+  camposSensibles: ['fecha_inicio', 'fecha_fin', 'id_empresa', 'permite_vehiculo'],
+  // Un memorando con vehículo son tres filas que nacen juntas (memorando, vehículo y su
+  // responsable), así que el alta no puede ser el formulario genérico. Mismo motivo que en
+  // vehículos, y misma solución.
+  altaRuta: '/memorandos/nuevo',
   accionDetalle: (r, ctx) => <AnularMemorando memorando={r} {...ctx} />,
 }
 
