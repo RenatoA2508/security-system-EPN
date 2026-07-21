@@ -18,7 +18,7 @@ import { MemoryRouter } from 'react-router-dom'
  *  - Los motivos se muestran en castellano (RNF-CA-004).
  */
 
-const { supabase, invocaciones } = vi.hoisted(() => {
+const { supabase, invocaciones, filasPorTabla } = vi.hoisted(() => {
   const invocaciones: { funcion: string; body: any }[] = []
 
   const PERSONAS: Record<string, any> = {
@@ -66,6 +66,7 @@ const { supabase, invocaciones } = vi.hoisted(() => {
 
   return {
     invocaciones,
+    filasPorTabla,
     supabase: {
       from: (t: string) => cadena(t),
       rpc: (nombre: string) =>
@@ -181,6 +182,7 @@ function montar() {
 beforeEach(() => {
   window.localStorage.clear()
   invocaciones.length = 0
+  filasPorTabla.error_reconocimiento = []
 })
 
 describe('navegación entre los dos tipos de ingreso', () => {
@@ -315,5 +317,24 @@ describe('movimientos recientes (RF-CA-025)', () => {
 
     await usuario.click(screen.getByRole('tab', { name: /Ingreso vehicular/i }))
     expect(await screen.findByText(/Movimientos recientes en el punto/i)).toBeInTheDocument()
+  })
+
+  // RF-CA-022: antes un fallo técnico del reconocimiento (cámara caída, ningún rostro en la
+  // imagen...) se guardaba en error_reconocimiento pero el guardia nunca lo veía en su propia
+  // pantalla — solo aparecía en la pantalla dedicada de ADM/CAC. Se mezcla aquí, en el mismo
+  // punto de control donde ocurrió.
+  it('muestra los errores de reconocimiento del propio punto, no solo los eventos', async () => {
+    filasPorTabla.error_reconocimiento = [{
+      id_error: 'err-1',
+      fecha_hora: '2026-07-20T12:00:00Z',
+      tipo_reconocimiento: 'FACIAL',
+      codigo_error: 'ROSTRO_NO_DETECTADO',
+      descripcion: 'Identificación facial en la garita: no se detectó ningún rostro en la imagen.',
+      id_punto_control: 'p-1',
+    }]
+    montar()
+
+    expect(await screen.findByText(/Error de reconocimiento facial/i)).toBeInTheDocument()
+    expect(screen.getByText(/Rostro no detectado/i)).toBeInTheDocument()
   })
 })
