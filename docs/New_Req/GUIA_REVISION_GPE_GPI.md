@@ -80,11 +80,14 @@ Contraseña de las 8 cuentas de prueba: `admin1234`.
 
 **Personal Interno → Datos internos → Registrar**
 
-- [ ] Elige un **docente**: "Contrato" es un desplegable con **Fijo / Temporal** (antes texto
-      libre; había un docente con contrato "Si"). Aparecen también Unidad, Cargo y Escalafón.
-- [ ] Elige un **administrativo**: también tiene Contrato.
-- [ ] Elige un **estudiante**: aparece **Unidad** (EPN / CEC) — antes no la tenía — más Carrera
-      y Curso, y no aparece Cargo.
+- [ ] Elige un **docente**: "Contrato" es un desplegable con **Fijo / Temporal** y el dato
+      académico se etiqueta **Categoría**. No aparecen Cargo ni Nombramiento.
+- [ ] Elige un **administrativo**: tiene Contrato y Cargo, pero no Nombramiento.
+- [ ] Elige un **trabajador**: tiene Cargo, pero no Nombramiento.
+- [ ] Elige una persona de **Empresas de servicio**: no aparece Nombramiento.
+- [ ] Elige un **estudiante** y Unidad **CEC**: Curso queda habilitado y Carrera bloqueada.
+- [ ] Cambia la Unidad a **EPN**: Carrera queda habilitada, Curso bloqueado y se limpian los
+      valores académicos incompatibles con la unidad anterior.
 
 ## 6. Vehículos y asociaciones (GPE §9, GPI)
 
@@ -94,6 +97,8 @@ Contraseña de las 8 cuentas de prueba: `admin1234`.
       "Vincular persona", igual que en Administración.
 - [ ] Desde **Personal Interno**, intenta vincular la cédula de una persona **externa** →
       debe avisar de que esa sección trabaja con personal interno. Y al revés desde GPE.
+- [ ] Al crear un vehículo con propietario o vincular otra persona, **Fecha de fin** es
+      obligatoria y debe ser posterior a Fecha de inicio.
 
 ## 7. Textos (GPE §4, §7 y GPI anglicismos)
 
