@@ -907,3 +907,35 @@ el mismo patrón — solo `ADMINISTRADOR_SISTEMA` puede volver a `ACTIVO` una cu
 la RLS ya lo permite sin trigger adicional. Con esta corrección, ese comportamiento es coherente
 con la decisión tomada aquí (quien tiene el permiso de `UPDATE` puede mover el estado en cualquier
 dirección) y no un descuido — se cierra sin cambios.
+## V43 — ¿Un acompañante externo con visita diaria puede entrar en el coche?
+
+La regla implementada (§D84) exige **memorando vigente a todo ocupante externo** de un vehículo,
+no solo al conductor. Sale de cómo se formuló el encargo: *"no se permite el ingreso vehicular
+de personal externo sin un memorando asignado, para ese tipo de personal externo solamente se
+permite el ingreso a pie."*
+
+Eso estrecha RF-CA-017, que dice que los pasajeros cumplen las reglas del ingreso peatonal. Bajo
+esa regla, un externo con autorización de visita diaria podía entrar de pasajero; ahora tiene
+que bajarse y entrar a pie.
+
+Se implementó así por ser lo que dice el encargo y lo más restrictivo de las dos lecturas —ante
+la duda, en control de accesos conviene equivocarse hacia el lado que no deja entrar a nadie de
+más—. **Si el equipo prefiere lo contrario**, es cambiar una condición en la Edge Function: que
+la exigencia de memorando se aplique solo cuando `es_conductor` sea cierto.
+
+Lo que no cambiaría en ningún caso: el **conductor** externo siempre necesita memorando, y ese
+memorando tiene que amparar la placa concreta.
+
+## V44 — `permite_acompanantes` es informativo, no una barrera
+
+La casilla "ingresa con acompañantes" del memorando se guarda y se muestra al guardia, pero **no
+deniega nada por sí sola**: un acompañante entra o no según su propia vigencia, que es como
+funciona todo el sistema (cada ocupante se valida por separado).
+
+Se dejó así a propósito, en vez de convertirla en una restricción dura: un memorando que ampara
+a cinco personas y que alguien olvidó marcar como "con acompañantes" dejaría a cuatro de ellas
+fuera por un descuido administrativo, cuando el oficio las nombra. La casilla sirve para que la
+garita sepa qué esperar, no para decidir.
+
+**Si el equipo quiere que sea una barrera**, hay que decidir antes qué pasa con los memorandos
+ya registrados que no la tienen marcada.

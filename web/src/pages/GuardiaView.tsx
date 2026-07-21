@@ -11,6 +11,7 @@ import { humanizar, MOTIVO_LEGIBLE } from '../lib/catalogos'
 import { CameraPanel, type CameraHandle } from '../components/Camera'
 import { LectorPlaca, ResultadoPlacaPanel, type ResultadoPlaca } from '../components/LectorPlaca'
 import { FichaMemorando } from '../components/FichaMemorando'
+import { MemorandoDelVehiculo } from '../components/MemorandoDelVehiculo'
 import { AutorizarVisita } from '../components/AutorizarVisita'
 import { TopBar, PageContainer } from '../components/layout/Shell'
 import {
@@ -576,6 +577,10 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
         {placa ? (
           <>
             <ResultadoPlacaPanel resultado={placa} onDescartar={() => setPlaca(null)} />
+            {/* Para un externo el memorando ES el segundo factor, asi que el guardia tiene que
+                verlo aqui: de que empresa viene el coche, a que dependencia acude y hasta
+                cuando vale el permiso. */}
+            {placa.vehiculo?.id_vehiculo && <MemorandoDelVehiculo idVehiculo={placa.vehiculo.id_vehiculo} />}
             {placa.personas.length > 0 && (
               <div className="mt-3">
                 <p className="mb-1 text-xs font-medium text-ink-soft">Personas asociadas a este vehículo</p>
@@ -609,7 +614,8 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
           <Users className="h-5 w-5" /> 2. Conductor y pasajeros
         </h3>
         <p className="mb-4 text-xs text-ink-soft">
-          Cada ocupante se valida por separado (RF-CA-017). El conductor debe identificarse por rostro.
+          Cada ocupante se valida por separado. Si conduce personal interno, se identifica por
+          rostro; si es personal externo, lo autoriza su memorando, que debe amparar esta placa.
         </p>
 
         <div className="mb-3">
@@ -675,6 +681,12 @@ function AccesoVehicular({ idPunto, enTurno, onDone }: { idPunto: string; enTurn
                   <p className="mt-1 text-xs text-amber-700">
                     RNF-CA-005: el conductor necesita reconocimiento facial además de la placa. Añádalo por rostro.
                   </p>
+                )}
+                {/* El externo no tiene rostro con el que contrastar: lo que lo autoriza a
+                    circular es su memorando, y el guardia debe poder leerlo antes de decidir
+                    (RF-CA-011). Si no aparece ninguno, ese ocupante solo puede entrar a pie. */}
+                {o.persona.tipo_persona !== 'INTERNA' && (
+                  <FichaMemorando idPersona={o.persona.id_persona} />
                 )}
               </li>
             ))}
