@@ -1410,3 +1410,29 @@ anterior (§V25): seis de los puntos sembrados —las garitas de entrada, "Acces
 "Garita Principal"— sí cuelgan del campus, y con CAMPUS fuera del alta quedaban a medio gestionar.
 Un acceso perimetral pertenece al campus y a ningún edificio: es un caso legítimo, no una
 excepción que hubiera que tolerar.
+
+# Últimos cambios GPI (2026-07-21) — `Ultimos_Cambios_GPI.pdf`
+
+## §D83 — Los datos internos expresan el perfil real y toda relación vehicular tiene fin
+
+La última revisión de GPI precisa qué campos aplican a cada categoría:
+
+- **Docente:** conserva Unidad, Categoría académica y Contrato; no usa Cargo ni Nombramiento.
+- **Administrativo:** usa Cargo y Contrato; no usa Nombramiento.
+- **Trabajador:** usa Cargo y Contrato; no usa Nombramiento.
+- **Empresas de servicio:** usa Contrato; no usa Nombramiento. Su etiqueta visible pasa al
+  plural solicitado: “Empresas de servicio”.
+- **Estudiante CEC:** registra Curso y Carrera queda bloqueada.
+- **Estudiante EPN:** registra Carrera y Curso queda bloqueado.
+
+Los campos incompatibles permanecen visibles y grises para el estudiante, porque el documento
+habla de bloquearlos y así queda claro por qué no se pueden rellenar. Cambiar la Unidad limpia
+Carrera y Curso antes de habilitar el que corresponde, evitando guardar un dato escondido de la
+selección anterior. El backend replica las reglas para nuevas escrituras, pero no borra valores
+históricos que ya existían antes de esta decisión.
+
+La relación persona–vehículo exige ahora **Fecha de fin** tanto al crear el vehículo con su
+propietario como al vincular otra persona desde la ficha. La RPC atómica recibe `p_fecha_fin`
+como argumento obligatorio y la tabla rechaza nuevas relaciones sin esa fecha. Las filas
+históricas abiertas se conservan hasta que se corrijan expresamente; asignarles una fecha
+inventada habría falseado el registro.
