@@ -885,7 +885,7 @@ campus, quitar el ejemplo "Laboratorio Alan Turing" del placeholder, "ESTADO ACT
    autogenerada, BIO-0001/LPR-0001), no como borrar el dato de la MAC real de un aparato ya
    inventariado. `codigo_mac` pasó a ser opcional (`NOT NULL` retirado) y ya no aparece en el
    formulario ni en el listado, pero se conserva en la fila por si hace falta consultarlo.
-## V43 — ¿DIRECTOR_ADMINISTRATIVO también queda protegido de GPI/GPE, o solo los RESPONSABLE_*?
+## V47 — ¿DIRECTOR_ADMINISTRATIVO también queda protegido de GPI/GPE, o solo los RESPONSABLE_*?
 
 Reportado en pruebas (Sebastián, 20/07): una cuenta con solo `GPI_PERSONA_UPDATE` dio de baja a
 Carlos Chávez (cédula `1750000141`), que tiene la cuenta `carlos.chavez03` con el rol
@@ -943,7 +943,7 @@ el mismo patrón — solo `ADMINISTRADOR_SISTEMA` puede volver a `ACTIVO` una cu
 la RLS ya lo permite sin trigger adicional. Con esta corrección, ese comportamiento es coherente
 con la decisión tomada aquí (quien tiene el permiso de `UPDATE` puede mover el estado en cualquier
 dirección) y no un descuido — se cierra sin cambios.
-## V43 — ¿Un acompañante externo con visita diaria puede entrar en el coche?
+## V45 — ¿Un acompañante externo con visita diaria puede entrar en el coche?
 
 La regla implementada (§D84) exige **memorando vigente a todo ocupante externo** de un vehículo,
 no solo al conductor. Sale de cómo se formuló el encargo: *"no se permite el ingreso vehicular
@@ -962,7 +962,7 @@ la exigencia de memorando se aplique solo cuando `es_conductor` sea cierto.
 Lo que no cambiaría en ningún caso: el **conductor** externo siempre necesita memorando, y ese
 memorando tiene que amparar la placa concreta.
 
-## V44 — `permite_acompanantes` es informativo, no una barrera
+## V46 — `permite_acompanantes` es informativo, no una barrera
 
 La casilla "ingresa con acompañantes" del memorando se guarda y se muestra al guardia, pero **no
 deniega nada por sí sola**: un acompañante entra o no según su propia vigencia, que es como

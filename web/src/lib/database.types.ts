@@ -369,11 +369,13 @@ export type Database = {
           es_conductor: boolean
           fecha_hora: string
           id_autorizacion_visita: string | null
+          id_dispositivo: string | null
           id_evento: string
           id_evento_ingreso: string | null
           id_persona: string | null
           id_punto_control: string
           id_regla_acceso: string | null
+          id_usuario_registro: string | null
           id_vehiculo: string | null
           motivo_resultado: string | null
           origen_registro: string
@@ -388,11 +390,13 @@ export type Database = {
           es_conductor?: boolean
           fecha_hora?: string
           id_autorizacion_visita?: string | null
+          id_dispositivo?: string | null
           id_evento?: string
           id_evento_ingreso?: string | null
           id_persona?: string | null
           id_punto_control: string
           id_regla_acceso?: string | null
+          id_usuario_registro?: string | null
           id_vehiculo?: string | null
           motivo_resultado?: string | null
           origen_registro: string
@@ -407,11 +411,13 @@ export type Database = {
           es_conductor?: boolean
           fecha_hora?: string
           id_autorizacion_visita?: string | null
+          id_dispositivo?: string | null
           id_evento?: string
           id_evento_ingreso?: string | null
           id_persona?: string | null
           id_punto_control?: string
           id_regla_acceso?: string | null
+          id_usuario_registro?: string | null
           id_vehiculo?: string | null
           motivo_resultado?: string | null
           origen_registro?: string
@@ -427,6 +433,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "autorizacion_visita_diaria"
             referencedColumns: ["id_autorizacion"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_dispositivo_fkey"
+            columns: ["id_dispositivo"]
+            isOneToOne: false
+            referencedRelation: "dispositivo"
+            referencedColumns: ["id_dispositivo"]
           },
           {
             foreignKeyName: "evento_acceso_id_evento_ingreso_fkey"
@@ -462,6 +475,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "regla_acceso"
             referencedColumns: ["id_regla_acceso"]
+          },
+          {
+            foreignKeyName: "evento_acceso_id_usuario_registro_fkey"
+            columns: ["id_usuario_registro"]
+            isOneToOne: false
+            referencedRelation: "usuario_sistema"
+            referencedColumns: ["id_usuario"]
           },
           {
             foreignKeyName: "evento_acceso_id_vehiculo_fkey"
@@ -1684,6 +1704,7 @@ export type Database = {
         Returns: undefined
       }
       detalle_cambio: { Args: { anterior: Json; nuevo: Json }; Returns: Json }
+      detalle_evento_acceso: { Args: { p_id_evento: string }; Returns: Json }
       duracion_turno_min: {
         Args: { p_fin: string; p_inicio: string }
         Returns: number
@@ -1746,6 +1767,15 @@ export type Database = {
       etiqueta_entidad: { Args: { entidad: string }; Returns: string }
       expirar_sesiones_vencidas: { Args: never; Returns: number }
       formatear_placa: { Args: { p_placa: string }; Returns: string }
+      guardia_de_turno_en: {
+        Args: { p_id_punto_control: string; p_momento: string }
+        Returns: {
+          correo_electronico: string
+          id_usuario: string
+          nombre_usuario: string
+          turno: string
+        }[]
+      }
       guardias_disponibles: {
         Args: never
         Returns: {

@@ -1460,7 +1460,7 @@ figure como propietario, que es justo lo que el oficio no dice.
 **Esto es más estricto que RF-CA-017**, que dice que los pasajeros cumplen las reglas del
 ingreso peatonal. Aquella decisión se tomó para no dejar fuera a quien llega en el coche de un
 compañero, y se pensó para personal interno. La regla nueva la estrecha solo para externos. Ver
-§V43: si el equipo prefiere que un acompañante externo con visita diaria pueda entrar en el
+§V45: si el equipo prefiere que un acompañante externo con visita diaria pueda entrar en el
 coche, es cambiar una condición.
 
 ### D85 — El vehículo se cuelga del memorando, no de la persona
@@ -1491,3 +1491,29 @@ sigue libre.
 
 Eso obliga a salir del formulario genérico, que solo sabe insertar en una tabla. Se reutiliza
 `ResourceConfig.altaRuta`, el mismo mecanismo que ya usaba el alta de vehículo con propietario.
+
+### D87 — Un evento de acceso tiene que poder explicarse solo
+
+Al revisar el panel de monitoreo se vio que una fila decía quién, dónde y con qué resultado, pero
+no respondía lo que se pregunta quien audita: **por dónde salió** quien entró por otra garita,
+**qué aparato** hizo la lectura y **quién respondía** de ese punto a esa hora.
+
+Dos de esas tres cosas ni siquiera se guardaban:
+
+- **El dispositivo.** La Edge Function comprueba la MAC y la IP del lector antes de aceptar un
+  registro automático, pero después no anotaba cuál era. Si una cámara empezara a autorizar lo
+  que no debe, el histórico no permitía señalarla.
+- **El guardia.** En un registro manual quedaba una fila en la bitácora con los ids de evento
+  concatenados por comas. Servía para rastrear a mano, no para responder desde la pantalla.
+
+Ahora `evento_acceso` guarda `id_dispositivo` y `id_usuario_registro`, y `detalle_evento_acceso()`
+devuelve el evento entero —persona, garita y zona, aparato, quién lo registró, quién estaba de
+turno, el ingreso emparejado con las horas dentro, la regla aplicada y el documento que lo
+amparó— en una sola consulta.
+
+Se resuelve en SQL y no en el navegador por dos razones: serían seis consultas encadenadas, y
+"quién estaba de turno" no se puede contestar sin repetir la lógica de los turnos que cruzan la
+medianoche, que ya se equivocó tres veces en este proyecto (§D59, §D69, §D83).
+
+La ficha se muestra en el panel de monitoreo y en el historial de accesos de CAC, que son las dos
+pantallas desde las que se audita.

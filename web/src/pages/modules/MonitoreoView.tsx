@@ -5,6 +5,7 @@ import { fmtFechaHora } from '../../lib/format'
 import { formatearPlaca } from '../../lib/validacion'
 import { humanizar, MOTIVO_LEGIBLE } from '../../lib/catalogos'
 import { Badge, Card, CenterSpinner, EmptyState, ErrorBanner } from '../../components/ui'
+import { DetalleEvento } from '../../components/DetalleEvento'
 
 interface VehiculoDentro {
   id_vehiculo: string
@@ -213,21 +214,11 @@ export function MonitoreoView() {
 
       {seleccionado && seleccionado.tipo === 'evento' && (
         <Card className="mt-6 p-5">
-          <h3 className="mb-3 text-sm font-semibold text-navy">Detalle del evento seleccionado</h3>
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
-            <div><dt className="text-xs text-ink-soft">Persona</dt><dd className="text-navy">{seleccionado.persona ? `${seleccionado.persona.apellidos} ${seleccionado.persona.nombres}` : '—'}</dd></div>
-            <div><dt className="text-xs text-ink-soft">Cédula</dt><dd className="text-navy">{seleccionado.persona?.cedula ?? '—'}</dd></div>
-            <div><dt className="text-xs text-ink-soft">Punto de control</dt><dd className="text-navy">{seleccionado.punto?.nombre_punto ?? '—'}</dd></div>
-            <div><dt className="text-xs text-ink-soft">Fecha y hora</dt><dd className="text-navy">{fmtFechaHora(seleccionado.fecha_hora)}</dd></div>
-            <div><dt className="text-xs text-ink-soft">Movimiento</dt><dd><Badge value={seleccionado.tipo_movimiento} /></dd></div>
-            <div><dt className="text-xs text-ink-soft">Resultado</dt><dd><Badge value={seleccionado.resultado} /></dd></div>
-            <div><dt className="text-xs text-ink-soft">Origen de registro</dt><dd><Badge value={seleccionado.origen_registro} /></dd></div>
-            <div><dt className="text-xs text-ink-soft">Vehículo</dt><dd className="text-navy">{seleccionado.vehiculo?.placa ? formatearPlaca(seleccionado.vehiculo.placa) : '— (peatonal)'}</dd></div>
-            {seleccionado.vehiculo && <div><dt className="text-xs text-ink-soft">Es conductor</dt><dd className="text-navy">{seleccionado.es_conductor ? 'Sí' : 'No'}</dd></div>}
-            {seleccionado.motivo_resultado && <div className="col-span-2 sm:col-span-4"><dt className="text-xs text-ink-soft">Motivo</dt><dd className="text-navy">{seleccionado.motivo_resultado}</dd></div>}
-          </dl>
+          <h3 className="mb-3 text-sm font-semibold text-navy">Detalle del movimiento</h3>
+          <DetalleEvento idEvento={seleccionado.id_evento} />
         </Card>
       )}
+
       <p className="mt-3 text-xs text-slate-400">Se actualiza automáticamente cada 30 segundos.</p>
     </div>
   )

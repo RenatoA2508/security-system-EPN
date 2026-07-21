@@ -576,6 +576,11 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   );
 
+  // Se comprueba la identidad del lector antes de aceptar nada, pero hasta ahora no se anotaba
+  // CUAL era. Si una camara empieza a autorizar lo que no debe, el historico tiene que poder
+  // decir que aparato lo hizo.
+  let idDispositivo: string | null = null;
+
   // ---- Autenticacion del llamador (docs/01_AUTENTICACION_Y_ROLES.md §4) ----
   if (origen_registro === 'AUTOMATICA') {
     if (!body.codigo_mac || !body.direccion_ip) {
@@ -590,6 +595,8 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     if (dispError) return errorResponse(dispError.message, 500);
+
+    idDispositivo = dispositivo?.id_dispositivo ?? null;
 
     if (!dispositivo || dispositivo.estado_dispositivo !== 'OPERATIVO') {
       // Sin evento real que referenciar todavia: se deja constancia en bitacora_sistema
@@ -742,6 +749,11 @@ Deno.serve(async (req) => {
         placa_detectada: placaDetectada,
         confianza_placa: typeof body.confianza_placa === 'number' ? body.confianza_placa : null,
         confianza_biometria: typeof ocupante.confidence === 'number' ? ocupante.confidence : null,
+        // La atribucion vive en el evento y no solo en una fila suelta de la bitacora con los
+        // ids concatenados por comas: asi "quien dejo entrar a esta persona" se responde desde
+        // la pantalla y no rastreando a mano.
+        id_dispositivo: idDispositivo,
+        id_usuario_registro: idUsuarioGuardia,
       })
       .select('id_evento')
       .single();
