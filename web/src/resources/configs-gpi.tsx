@@ -102,7 +102,7 @@ export const cfgPersonaInterna: ResourceConfig = {
     { label: 'Dirección', render: (r) => d(r.direccion_domicilio) },
     { label: 'Categoría', render: (r) => humanizar(r.categoria?.codigo_categoria) },
     { label: 'Empresa', render: (r) => d(r.empresa?.nombre) },
-    { label: 'Biometría', render: (r) => (r.biometria?.some?.((b: any) => b.vigente) ? 'Enrolada' : 'Sin enrolar — usa la sección Biometría') },
+    { label: 'Biometría', render: (r) => (r.biometria?.some?.((b: any) => b.vigente) ? 'Enrolada' : 'Sin rostro registrado — regístralo en la sección Biometría') },
     { label: 'Registro', render: (r) => fmtFecha(r.fecha_registro) },
   ],
   campos: [

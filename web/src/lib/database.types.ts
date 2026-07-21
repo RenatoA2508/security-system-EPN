@@ -1668,7 +1668,6 @@ export type Database = {
       crear_vehiculo_con_propietario: {
         Args: {
           p_color?: string
-          p_fecha_fin: string
           p_fecha_inicio?: string
           p_id_persona: string
           p_marca?: string
@@ -1810,6 +1809,16 @@ export type Database = {
       persona_tiene_rol_privilegiado: {
         Args: { p_id_persona: string }
         Returns: boolean
+      }
+      personas_amparadas_por_vehiculo: {
+        Args: { p_id_vehiculo: string }
+        Returns: {
+          apellidos: string
+          cedula: string
+          id_persona: string
+          nombres: string
+          numero_memorando: string
+        }[]
       }
       prefijo_tecnologia_dispositivo: {
         Args: { p_tipo: string }
