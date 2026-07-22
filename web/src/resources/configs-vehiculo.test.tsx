@@ -20,8 +20,13 @@ vi.mock('react-router-dom', async (orig) => ({
   useNavigate: () => mockNavigate,
 }))
 
-const { supabase, insertsPersonaVehiculo } = vi.hoisted(() => {
+const { supabase, insertsPersonaVehiculo, rpc, filas } = vi.hoisted(() => {
   const insertsPersonaVehiculo: Record<string, unknown>[] = []
+  // Por defecto, la persona elegida no tiene ningún memorando que ampare el vehículo.
+  const rpc = vi.fn(
+    (): Promise<{ data: Record<string, unknown>[]; error: null }> =>
+      Promise.resolve({ data: [], error: null }),
+  )
   const filas: Record<string, Record<string, unknown>[]> = {
     vehiculo: [
       {
@@ -48,7 +53,9 @@ const { supabase, insertsPersonaVehiculo } = vi.hoisted(() => {
   }
   return {
     insertsPersonaVehiculo,
-    supabase: { from: (t: string) => cadena(t), rpc: () => Promise.resolve({ data: [], error: null }) },
+    rpc,
+    filas,
+    supabase: { from: (t: string) => cadena(t), rpc },
   }
 })
 
@@ -83,6 +90,8 @@ beforeEach(() => {
   window.localStorage.clear()
   mockNavigate.mockClear()
   insertsPersonaVehiculo.length = 0
+  filas.persona_vehiculo = []
+  rpc.mockImplementation(() => Promise.resolve({ data: [], error: null }))
 })
 afterEach(() => vi.clearAllMocks())
 
@@ -94,7 +103,8 @@ describe('vehículos: el alta exige propietario (RF-CA-018)', () => {
     await usuario.click(await screen.findByRole('button', { name: /Registrar Veh/i }))
 
     // Navega a la pantalla atómica de alta con propietario en vez de abrir el formulario genérico.
-    expect(mockNavigate).toHaveBeenCalledWith('/vehiculos/nuevo')
+    // El módulo viaja en la ruta: decide entre qué población se busca al propietario.
+    expect(mockNavigate).toHaveBeenCalledWith('/vehiculos/nuevo?modulo=ADM')
     // El formulario genérico no llegó a abrirse: su campo "Marca" no está en pantalla.
     expect(screen.queryByLabelText(/Marca/i)).not.toBeInTheDocument()
   })
@@ -123,5 +133,72 @@ describe('vehículos: vincular una persona (vigencia e id_usuario_registro)', ()
       fecha_fin: '2026-12-31',
       id_usuario_registro: 'u-adm-777',
     })
+  })
+})
+
+describe('GPE: la vigencia de la asociación la manda el memorando', () => {
+  it('rellena y bloquea las fechas con las del memorando que ampara a la persona con ese vehículo', async () => {
+    const usuario = userEvent.setup()
+    rpc.mockImplementation(() =>
+      Promise.resolve({
+        data: [{
+          id_memorando: 'm-1',
+          numero_memorando: 'EPN-DA-2026-002-M',
+          fecha_inicio: '2026-07-21',
+          fecha_fin: '2026-07-22',
+        }],
+        error: null,
+      }),
+    )
+
+    envolver(<AsociacionesVehiculo idVehiculo="v-1" onCambio={async () => {}} modulo="GPE" />)
+    await usuario.click(await screen.findByRole('button', { name: /Vincular persona/i }))
+    await usuario.click(await screen.findByRole('button', { name: /elegir persona/i }))
+
+    // La pantalla dice de dónde salen las fechas: sin eso, unos campos bloqueados sin
+    // explicación parecen un fallo.
+    expect(await screen.findByText(/entra amparado por el memorando/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/EPN-DA-2026-002-M/).length).toBeGreaterThan(0)
+
+    const inicio = screen.getByLabelText(/Fecha de inicio/i) as HTMLInputElement
+    const fin = screen.getByLabelText(/Fecha de fin/i) as HTMLInputElement
+    await waitFor(() => expect(inicio.value).toBe('2026-07-21'))
+    expect(fin.value).toBe('2026-07-22')
+    expect(inicio).toBeDisabled()
+    expect(fin).toBeDisabled()
+
+    await usuario.click(screen.getByRole('button', { name: /^Vincular$/i }))
+
+    await waitFor(() => expect(insertsPersonaVehiculo.length).toBe(1))
+    expect(insertsPersonaVehiculo[0]).toMatchObject({
+      fecha_inicio: '2026-07-21',
+      fecha_fin: '2026-07-22',
+    })
+  })
+
+  it('sin memorando que ampare al par persona-vehículo, las fechas se siguen tecleando', async () => {
+    const usuario = userEvent.setup()
+    envolver(<AsociacionesVehiculo idVehiculo="v-1" onCambio={async () => {}} modulo="GPE" />)
+
+    await usuario.click(await screen.findByRole('button', { name: /Vincular persona/i }))
+    await usuario.click(await screen.findByRole('button', { name: /elegir persona/i }))
+
+    await waitFor(() => expect(screen.getByLabelText(/Fecha de fin/i)).not.toBeDisabled())
+    expect(screen.queryByText(/amparado por el memorando/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('cada módulo asocia vehículos a su propia población', () => {
+  it('GPE no ofrece vincular en un vehículo que ya es de personal interno', async () => {
+    filas.persona_vehiculo = [{
+      id_persona_vehiculo: 'pv-1', tipo_relacion: 'PROPIETARIO', estado_relacion: 'ACTIVA',
+      fecha_inicio: '2026-07-20', fecha_fin: '2026-12-31', es_responsable_tramite: false,
+      persona: { nombres: 'Cecilia', apellidos: 'Jaramillo', cedula: '1756814032', tipo_persona: 'INTERNA' },
+    }]
+
+    envolver(<AsociacionesVehiculo idVehiculo="v-1" onCambio={async () => {}} modulo="GPE" />)
+
+    expect(await screen.findByText(/se gestionan desde Personal Interno/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Vincular persona/i })).not.toBeInTheDocument()
   })
 })

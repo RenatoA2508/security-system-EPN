@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Car, RotateCcw } from 'lucide-react'
 import { supabase, mensajeError } from '../lib/supabase'
 import { useAuth } from '../auth/AuthProvider'
@@ -47,8 +47,25 @@ export function VehiculoPropietarioPage() {
   const { perfil, tiene } = useAuth()
   const toast = useToast()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+
+  // Desde qué módulo se llegó (lo pone `altaRuta` de la pantalla de vehículos). Si falta —por
+  // ejemplo si alguien teclea la URL— se deduce del permiso que sí tiene el usuario, y solo se
+  // trabaja sin restricción cuando de verdad es ADM.
+  const moduloParam = params.get('modulo')
+  const modulo: 'ADM' | 'GPI' | 'GPE' =
+    moduloParam === 'GPI' || moduloParam === 'GPE' || moduloParam === 'ADM' ? moduloParam
+    : tiene('ADM_VEHICULO_INSERT') ? 'ADM'
+    : tiene('GPI_VEHICULO_INSERT') ? 'GPI'
+    : 'GPE'
+  // GPI registra vehículos de docentes, estudiantes y empleados; GPE, de visitantes,
+  // proveedores y contratistas. La base lo exige igualmente (trigger
+  // validar_ambito_persona_vehiculo): esto es solo para no dejar que el usuario llegue hasta
+  // el final del formulario para descubrirlo.
+  const soloTipo = modulo === 'GPI' ? 'INTERNA' : modulo === 'GPE' ? 'EXTERNA' : undefined
 
   const puede =
+    tiene(`${modulo}_VEHICULO_INSERT`) ||
     tiene('ADM_VEHICULO_INSERT') || tiene('GPI_VEHICULO_INSERT') || tiene('GPE_VEHICULO_INSERT')
 
   const [persona, setPersona] = useState<PersonaCedula | null>(null)
@@ -87,8 +104,8 @@ export function VehiculoPropietarioPage() {
     }
     if (!form.fecha_inicio) { setError('Ingrese la fecha de inicio de la relación.'); return }
     if (!form.fecha_fin) { setError('Ingrese la fecha de fin de la relación.'); return }
-    if (form.fecha_fin <= form.fecha_inicio) {
-      setError('La fecha de fin debe ser posterior a la fecha de inicio.'); return
+    if (form.fecha_fin < form.fecha_inicio) {
+      setError('La fecha de fin no puede ser anterior a la fecha de inicio.'); return
     }
 
     setGuardando(true)
@@ -120,6 +137,13 @@ export function VehiculoPropietarioPage() {
     <div>
       <Breadcrumb items={[{ label: 'Panel Principal', to: '/' }, { label: 'Registrar vehículo' }]} />
       <h1 className="mb-1 flex items-center gap-2 text-xl font-bold text-navy"><Car className="h-6 w-6" /> Registrar vehículo y propietario</h1>
+      {soloTipo && (
+        <p className="mb-3 text-sm text-ink-soft">
+          {soloTipo === 'INTERNA'
+            ? 'Vehículos del personal interno: docentes, estudiantes, administrativos y trabajadores.'
+            : 'Vehículos del personal externo: visitantes, proveedores y contratistas.'}
+        </p>
+      )}
 
       {ofreceBorrador && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -139,7 +163,17 @@ export function VehiculoPropietarioPage() {
       <form onSubmit={guardar} className="grid gap-6 lg:grid-cols-2">
         <Card className="space-y-4 p-5">
           <h3 className="text-base font-semibold text-navy">1. Propietario</h3>
-          <BuscarPersonaPorCedula onSelect={setPersona} soloActivas label="Cédula del propietario" autoFocus />
+          <BuscarPersonaPorCedula
+            onSelect={setPersona}
+            soloActivas
+            soloTipo={soloTipo}
+            label={
+              soloTipo === 'INTERNA' ? 'Cédula del propietario (personal interno)'
+              : soloTipo === 'EXTERNA' ? 'Cédula del propietario (personal externo)'
+              : 'Cédula del propietario'
+            }
+            autoFocus
+          />
         </Card>
 
         <Card className="space-y-4 p-5">

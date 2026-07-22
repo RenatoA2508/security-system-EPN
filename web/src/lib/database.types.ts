@@ -1610,6 +1610,7 @@ export type Database = {
     }
     Functions: {
       acentuar_texto: { Args: { texto: string }; Returns: string }
+      ambito_persona_vehiculo: { Args: never; Returns: string }
       allowed_modules: { Args: never; Returns: string[] }
       asignar_rol_unico: {
         Args: { p_id_rol: string; p_id_usuario: string; p_observacion?: string }
@@ -1688,6 +1689,7 @@ export type Database = {
       crear_vehiculo_con_propietario: {
         Args: {
           p_color?: string
+          p_fecha_fin: string
           p_fecha_inicio?: string
           p_id_persona: string
           p_marca?: string
@@ -1813,6 +1815,15 @@ export type Database = {
         }[]
       }
       marcar_password_cambiada: { Args: never; Returns: undefined }
+      memorandos_de_persona_y_vehiculo: {
+        Args: { p_id_persona: string; p_id_vehiculo: string }
+        Returns: {
+          fecha_fin: string
+          fecha_inicio: string
+          id_memorando: string
+          numero_memorando: string
+        }[]
+      }
       memorandos_vigentes_de_vehiculo: {
         Args: { p_id_vehiculo: string }
         Returns: {
