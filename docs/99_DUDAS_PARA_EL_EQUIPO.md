@@ -885,7 +885,7 @@ campus, quitar el ejemplo "Laboratorio Alan Turing" del placeholder, "ESTADO ACT
    autogenerada, BIO-0001/LPR-0001), no como borrar el dato de la MAC real de un aparato ya
    inventariado. `codigo_mac` pasó a ser opcional (`NOT NULL` retirado) y ya no aparece en el
    formulario ni en el listado, pero se conserva en la fila por si hace falta consultarlo.
-## V43 — ¿DIRECTOR_ADMINISTRATIVO también queda protegido de GPI/GPE, o solo los RESPONSABLE_*?
+## V47 — ¿DIRECTOR_ADMINISTRATIVO también queda protegido de GPI/GPE, o solo los RESPONSABLE_*?
 
 Reportado en pruebas (Sebastián, 20/07): una cuenta con solo `GPI_PERSONA_UPDATE` dio de baja a
 Carlos Chávez (cédula `1750000141`), que tiene la cuenta `carlos.chavez03` con el rol
@@ -943,7 +943,7 @@ el mismo patrón — solo `ADMINISTRADOR_SISTEMA` puede volver a `ACTIVO` una cu
 la RLS ya lo permite sin trigger adicional. Con esta corrección, ese comportamiento es coherente
 con la decisión tomada aquí (quien tiene el permiso de `UPDATE` puede mover el estado en cualquier
 dirección) y no un descuido — se cierra sin cambios.
-## V43 — ¿Un acompañante externo con visita diaria puede entrar en el coche?
+## V45 — ¿Un acompañante externo con visita diaria puede entrar en el coche?
 
 La regla implementada (§D84) exige **memorando vigente a todo ocupante externo** de un vehículo,
 no solo al conductor. Sale de cómo se formuló el encargo: *"no se permite el ingreso vehicular
@@ -962,7 +962,7 @@ la exigencia de memorando se aplique solo cuando `es_conductor` sea cierto.
 Lo que no cambiaría en ningún caso: el **conductor** externo siempre necesita memorando, y ese
 memorando tiene que amparar la placa concreta.
 
-## V44 — `permite_acompanantes` es informativo, no una barrera
+## V46 — `permite_acompanantes` es informativo, no una barrera
 
 La casilla "ingresa con acompañantes" del memorando se guarda y se muestra al guardia, pero **no
 deniega nada por sí sola**: un acompañante entra o no según su propia vigencia, que es como
@@ -975,3 +975,31 @@ garita sepa qué esperar, no para decidir.
 
 **Si el equipo quiere que sea una barrera**, hay que decidir antes qué pasa con los memorandos
 ya registrados que no la tienen marcada.
+
+## V47 — Qué se cambió en los datos antes de la entrega, y qué conviene revisar
+
+El saneamiento previo a la presentación (migraciones `20260722002000`, `003000` y `004000`) tocó
+datos que el equipo puede reconocer de sesiones anteriores. Se listan aquí para que nadie busque
+un registro que ya no está con el nombre que recordaba:
+
+- **Personas de prueba borradas:** "Impostor Uno", "Impostor Dos" y "TuRostro Muestra Dos", con su
+  evento de acceso, su alerta y su asociación a vehículo. Se usaron para calibrar el umbral
+  biométrico; el resultado de esa calibración vive en `parametro_sistema`, no en ellas.
+- **Personas de prueba convertidas en personas reales**, para no dejar sin historial la garita:
+  "Docente Demo" → Patricia Elena Rosero Guerrero; "Visitante Demo" → Andrea Carolina Suárez Mena;
+  "Guardia Demo" → Marco Andrés Villacís Ponce (su cuenta `guardia_demo` y su contraseña **no** se
+  tocaron); "Administrador del Sistema" → Diego Fernando Salazar Núñez (cuenta `admin` intacta).
+- **DILIPA:** "Rick Sanchez" y "Morty Smith" pasaron a llamarse Ricardo Javier Sánchez Peñafiel y
+  Mateo Andrés Salgado Mena. Conservan cédula, memorando, vehículo e historial: son los mismos
+  registros, con nombre verosímil.
+- **Vehículo duplicado:** PCR-1234 y PCZ-1234 eran el mismo camión registrado dos veces. Los
+  eventos de PCR-1234 se trasladaron a PCZ-1234 —el que ampara el memorando vigente— y el
+  duplicado se borró, junto con el memorando anulado que lo amparaba (EPN-DL-2026-002).
+- **Memorandos borrados:** dos vencidos que no autorizaban a ninguna persona
+  (EPN-DA-2026-0002-M, EPN-DA-2026-0003-M) y uno de prueba anulado (EPN-PRB-2026-0451).
+- **Memorando de DILIPA ampliado** hasta el 31/08/2026: vencía el 22/07 y es el caso que se
+  demuestra. Si la presentación se pasa de esa fecha, hay que volver a ampliarlo.
+- **Cédulas:** todas las de relleno (1750000xxx) se sustituyeron por cédulas que pasan el
+  algoritmo del Registro Civil. La de Carlos Chávez es la real facilitada por él; **las demás son
+  inventadas** y habría que sustituirlas si alguna de estas personas es real y va a usar el
+  sistema.

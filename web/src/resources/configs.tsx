@@ -274,7 +274,11 @@ export function cfgVehiculo(modulo: 'ADM' | 'GPI' | 'GPE'): ResourceConfig {
     // registra vehículo y propietario en una sola transacción (RPC crear_vehiculo_con_propietario),
     // en vez del formulario genérico, que insertaba la fila suelta y dejaba vehículos huérfanos.
     // La restricción diferida de la base lo respalda para cualquier otra vía.
-    altaRuta: '/vehiculos/nuevo',
+    // El módulo viaja en la ruta para que el alta unificada sepa con qué población trabaja:
+    // GPI registra vehículos de personal interno y GPE de personal externo. Sin esto, la
+    // pantalla de alta buscaba al propietario entre TODAS las personas y se colaban vehículos
+    // de un docente dados de alta desde GPE (y al revés).
+    altaRuta: `/vehiculos/nuevo?modulo=${modulo}`,
     buscarEn: ['placa', 'marca', 'modelo', 'color', 'relaciones.persona.apellidos', 'relaciones.persona.cedula'],
     columnas: [
       { key: 'placa', label: 'Placa', render: (r) => (r.placa ? formatearPlaca(r.placa) : '—'), valorExport: (r) => (r.placa ? formatearPlaca(r.placa) : '') },
